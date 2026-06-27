@@ -13,7 +13,7 @@ arch:
 host_network: true
 
 ingress: true
-ingress_port: 8099
+ingress_port: 28199
 ingress_stream: true
 panel_icon: mdi:console
 panel_title: WinoMC Console
@@ -149,5 +149,5 @@ map:
 
 environment:
   EULA: "TRUE"
-  WINOMC_CONSOLE_PORT: "8099"
+  WINOMC_CONSOLE_PORT: "28199"
   WINOMC_CONSOLE_ALLOWED_PROXIES: "172.30.32.2,127.0.0.1,::1"
