@@ -5,6 +5,10 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.4.1
+
+Fehlerbehebungen
+
 ### 1.4.0
 
 * Docker-Basis von `itzg/minecraft-bedrock-server` auf eine eigene Ubuntu-basierte WinoMC-Runtime umgestellt
