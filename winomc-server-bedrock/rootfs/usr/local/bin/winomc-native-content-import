@@ -1,0 +1,239 @@
+#!/bin/sh
+set -eu
+
+SERVER_DATA_DIR="${SERVER_DATA_DIR:-/config}"
+IMPORT_DIR="${IMPORT_DIR:-/share/winomc/import}"
+MC_PACK="${MC_PACK:-}"
+LEVEL_NAME="${LEVEL_NAME:-world}"
+FORCE_WORLD_COPY="${FORCE_WORLD_COPY:-false}"
+FORCE_PACK_COPY="${FORCE_PACK_COPY:-false}"
+
+WORLDS_DIR="${SERVER_DATA_DIR}/worlds"
+BEHAVIOR_PACKS_DIR="${SERVER_DATA_DIR}/behavior_packs"
+RESOURCE_PACKS_DIR="${SERVER_DATA_DIR}/resource_packs"
+WORLD_TEMPLATES_DIR="${SERVER_DATA_DIR}/world_templates"
+
+is_true() {
+  case "$(printf '%s' "${1:-false}" | tr '[:upper:]' '[:lower:]')" in
+    true|on|1|yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+safe_name() {
+  basename "$1" \
+    | sed 's/\.[^.]*$//' \
+    | tr ' /\\:*?"<>|' '__________'
+}
+
+copy_dir_to_target() {
+  source_dir="$1"
+  target_dir="$2"
+  force="$3"
+  label="$4"
+
+  if [ -e "${target_dir}" ]; then
+    if is_true "${force}"; then
+      echo "WinoMC native import: replacing existing ${label}: ${target_dir}"
+      rm -rf "${target_dir}"
+    else
+      echo "WinoMC native import: ${label} already exists, skipping: ${target_dir}"
+      return 0
+    fi
+  fi
+
+  mkdir -p "${target_dir}"
+  cp -a "${source_dir}/." "${target_dir}/"
+  echo "WinoMC native import: imported ${label}: ${target_dir}"
+}
+
+detect_pack_type() {
+  dir="$1"
+
+  if [ -f "${dir}/level.dat" ]; then
+    echo "world"
+    return 0
+  fi
+
+  if [ -f "${dir}/manifest.json" ]; then
+    if jq -e '.modules[]? | select(.type == "resources")' "${dir}/manifest.json" >/dev/null 2>&1; then
+      echo "resource"
+      return 0
+    fi
+
+    if jq -e '.modules[]? | select(.type == "data")' "${dir}/manifest.json" >/dev/null 2>&1; then
+      echo "behavior"
+      return 0
+    fi
+
+    echo "unknown-pack"
+    return 0
+  fi
+
+  echo "unknown"
+}
+
+import_unpacked_dir() {
+  unpacked_dir="$1"
+  original_name="$2"
+  explicit_kind="${3:-auto}"
+
+  # .mcaddon kann mehrere verschachtelte Packs enthalten.
+  nested_found="false"
+
+  find "${unpacked_dir}" -maxdepth 2 -type f \( \
+      -iname "*.mcpack" -o \
+      -iname "*.mcaddon" -o \
+      -iname "*.mcworld" -o \
+      -iname "*.mctemplate" -o \
+      -iname "*.zip" \
+    \) | while IFS= read -r nested_file; do
+      echo "WinoMC native import: found nested package: ${nested_file}"
+      /usr/local/bin/winomc-native-content-import-one "${nested_file}" || exit 1
+    done
+
+  if find "${unpacked_dir}" -maxdepth 2 -type f \( \
+      -iname "*.mcpack" -o \
+      -iname "*.mcaddon" -o \
+      -iname "*.mcworld" -o \
+      -iname "*.mctemplate" -o \
+      -iname "*.zip" \
+    \) | grep -q .; then
+    nested_found="true"
+  fi
+
+  if [ "${nested_found}" = "true" ]; then
+    return 0
+  fi
+
+  kind="${explicit_kind}"
+
+  if [ "${kind}" = "auto" ]; then
+    kind="$(detect_pack_type "${unpacked_dir}")"
+  fi
+
+  name="$(safe_name "${original_name}")"
+
+  case "${kind}" in
+    world)
+      copy_dir_to_target "${unpacked_dir}" "${WORLDS_DIR}/${LEVEL_NAME}" "${FORCE_WORLD_COPY}" "world"
+      ;;
+    template)
+      copy_dir_to_target "${unpacked_dir}" "${WORLD_TEMPLATES_DIR}/${name}" "${FORCE_WORLD_COPY}" "world template"
+      ;;
+    resource)
+      copy_dir_to_target "${unpacked_dir}" "${RESOURCE_PACKS_DIR}/${name}" "${FORCE_PACK_COPY}" "resource pack"
+      ;;
+    behavior)
+      copy_dir_to_target "${unpacked_dir}" "${BEHAVIOR_PACKS_DIR}/${name}" "${FORCE_PACK_COPY}" "behavior pack"
+      ;;
+    unknown-pack)
+      echo "WinoMC native import: manifest found but pack type is unknown, importing as resource pack: ${original_name}"
+      copy_dir_to_target "${unpacked_dir}" "${RESOURCE_PACKS_DIR}/${name}" "${FORCE_PACK_COPY}" "resource pack"
+      ;;
+    *)
+      echo "WARN: WinoMC native import: could not detect package type for ${original_name}, skipping" >&2
+      ;;
+  esac
+}
+
+import_file() {
+  source_file="$1"
+
+  if [ ! -f "${source_file}" ]; then
+    echo "WARN: WinoMC native import: file not found: ${source_file}" >&2
+    return 0
+  fi
+
+  lower_name="$(basename "${source_file}" | tr '[:upper:]' '[:lower:]')"
+  tmp_dir="$(mktemp -d)"
+
+  case "${lower_name}" in
+    *.mcworld)
+      unzip -oq "${source_file}" -d "${tmp_dir}"
+      import_unpacked_dir "${tmp_dir}" "${source_file}" "world"
+      ;;
+    *.mctemplate)
+      unzip -oq "${source_file}" -d "${tmp_dir}"
+      import_unpacked_dir "${tmp_dir}" "${source_file}" "template"
+      ;;
+    *.mcpack|*.mcaddon|*.zip)
+      unzip -oq "${source_file}" -d "${tmp_dir}"
+      import_unpacked_dir "${tmp_dir}" "${source_file}" "auto"
+      ;;
+    *)
+      echo "WARN: WinoMC native import: unsupported package file: ${source_file}" >&2
+      ;;
+  esac
+
+  rm -rf "${tmp_dir}"
+}
+
+resolve_source() {
+  value="$1"
+
+  if [ -z "${value}" ]; then
+    return 1
+  fi
+
+  if printf '%s' "${value}" | grep -Eq '^https?://'; then
+    tmp_download="$(mktemp -d)"
+    filename="$(basename "${value%%\?*}")"
+
+    if [ -z "${filename}" ] || [ "${filename}" = "/" ]; then
+      filename="mc-pack-download.zip"
+    fi
+
+    echo "WinoMC native import: downloading MC_PACK: ${value}" >&2
+    curl -fL --retry 3 --retry-delay 3 -o "${tmp_download}/${filename}" "${value}"
+    echo "${tmp_download}/${filename}"
+    return 0
+  fi
+
+  if [ -e "${value}" ]; then
+    echo "${value}"
+    return 0
+  fi
+
+  if [ -e "${IMPORT_DIR}/${value}" ]; then
+    echo "${IMPORT_DIR}/${value}"
+    return 0
+  fi
+
+  return 1
+}
+
+main() {
+  if [ -z "${MC_PACK}" ]; then
+    echo "WinoMC native import: MC_PACK empty, skipping"
+    exit 0
+  fi
+
+  mkdir -p "${WORLDS_DIR}" "${BEHAVIOR_PACKS_DIR}" "${RESOURCE_PACKS_DIR}" "${WORLD_TEMPLATES_DIR}"
+
+  source="$(resolve_source "${MC_PACK}" || true)"
+
+  if [ -z "${source}" ]; then
+    echo "WARN: WinoMC native import: MC_PACK source not found: ${MC_PACK}" >&2
+    exit 0
+  fi
+
+  if [ -d "${source}" ]; then
+    echo "WinoMC native import: importing package directory: ${source}"
+
+    find "${source}" -maxdepth 1 -type f \( \
+        -iname "*.mcpack" -o \
+        -iname "*.mcaddon" -o \
+        -iname "*.mcworld" -o \
+        -iname "*.mctemplate" -o \
+        -iname "*.zip" \
+      \) | while IFS= read -r package_file; do
+        import_file "${package_file}"
+      done
+  else
+    echo "WinoMC native import: importing package file: ${source}"
+    import_file "${source}"
+  fi
+}
+
+main "$@"

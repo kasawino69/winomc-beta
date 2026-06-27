@@ -5,6 +5,7 @@ SERVER_DATA_DIR="${SERVER_DATA_DIR:-/config}"
 VERSION="${VERSION:-LATEST}"
 BDS_DIRECT_DOWNLOAD_URL="${BDS_DIRECT_DOWNLOAD_URL:-${DIRECT_DOWNLOAD_URL:-}}"
 BDS_AUTO_UPDATE="${BDS_AUTO_UPDATE:-true}"
+PACKAGE_BACKUP_KEEP="${PACKAGE_BACKUP_KEEP:-2}"
 
 DOWNLOAD_LINKS_URL="${DOWNLOAD_LINKS_URL:-https://net.web.minecraft-services.net/api/v1.0/download/links}"
 DOWNLOAD_SECONDARY_LINKS_URL="${DOWNLOAD_SECONDARY_LINKS_URL:-https://net.web.minecraft-services.net/api/v1.0/download/links}"
@@ -242,6 +243,99 @@ write_access_files() {
   write_permissions
 }
 
+backup_add_if_exists() {
+  item="$1"
+  list_file="$2"
+
+  if [ -e "${item}" ]; then
+    printf '%s\n' "${item}" >> "${list_file}"
+  fi
+}
+
+prune_package_backups() {
+  keep="${PACKAGE_BACKUP_KEEP:-2}"
+  backup_dir="${BDS_STATE_DIR}/package-backups"
+
+  case "${keep}" in
+    ''|*[!0-9]*)
+      keep="2"
+      ;;
+  esac
+
+  if [ ! -d "${backup_dir}" ]; then
+    return 0
+  fi
+
+  if [ "${keep}" = "0" ]; then
+    rm -f "${backup_dir}"/*.tar.gz 2>/dev/null || true
+    echo "WinoMC native package backups pruned: keep=0"
+    return 0
+  fi
+
+  count="0"
+
+  ls -1t "${backup_dir}"/*.tar.gz 2>/dev/null | while IFS= read -r backup_file; do
+    count=$((count + 1))
+
+    if [ "${count}" -gt "${keep}" ]; then
+      rm -f "${backup_file}"
+      echo "WinoMC native package backup removed: ${backup_file}"
+    fi
+  done
+}
+
+create_package_backup() {
+  keep="${PACKAGE_BACKUP_KEEP:-2}"
+
+  case "${keep}" in
+    ''|*[!0-9]*)
+      keep="2"
+      ;;
+  esac
+
+  if [ "${keep}" = "0" ]; then
+    echo "WinoMC native package backup disabled: PACKAGE_BACKUP_KEEP=0"
+    return 0
+  fi
+
+  if [ ! -x "${SERVER_DATA_DIR}/bedrock_server" ]; then
+    echo "WinoMC native package backup: no existing BDS found, skipping"
+    return 0
+  fi
+
+  mkdir -p "${BDS_STATE_DIR}/package-backups"
+
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+  installed_version="$(cat "${BDS_VERSION_FILE}" 2>/dev/null || echo unknown)"
+  backup_file="${BDS_STATE_DIR}/package-backups/bds-package-${installed_version}-${timestamp}.tar.gz"
+  list_file="$(mktemp)"
+
+  cd "${SERVER_DATA_DIR}"
+
+  backup_add_if_exists "bedrock_server" "${list_file}"
+  backup_add_if_exists "release-notes.txt" "${list_file}"
+  backup_add_if_exists "bedrock_server_how_to.html" "${list_file}"
+  backup_add_if_exists "valid_known_packs.json" "${list_file}"
+  backup_add_if_exists "server.properties" "${list_file}"
+
+  find . -maxdepth 1 -type f -name "*.so" -printf '%P\n' >> "${list_file}" 2>/dev/null || true
+  find behavior_packs -maxdepth 1 -type d \( -name "vanilla*" -o -name "chemistry*" -o -name "experimental*" \) -printf '%P\n' 2>/dev/null | sed 's#^#behavior_packs/#' >> "${list_file}" || true
+  find resource_packs -maxdepth 1 -type d \( -name "vanilla*" -o -name "chemistry*" -o -name "editor*" \) -printf '%P\n' 2>/dev/null | sed 's#^#resource_packs/#' >> "${list_file}" || true
+
+  if [ ! -s "${list_file}" ]; then
+    echo "WinoMC native package backup: nothing to backup"
+    rm -f "${list_file}"
+    return 0
+  fi
+
+  echo "WinoMC native package backup creating: ${backup_file}"
+  tar -czf "${backup_file}" -T "${list_file}"
+
+  rm -f "${list_file}"
+
+  prune_package_backups
+}
+
 cleanup_old_bds_files() {
   echo "Cleaning old Bedrock runtime files"
 
@@ -265,6 +359,7 @@ install_bds() {
 
   echo "WinoMC native BDS install version: ${version}"
 
+  create_package_backup
   cleanup_old_bds_files
 
   unzip -oq "${zip_file}" -d "${SERVER_DATA_DIR}"
@@ -294,6 +389,7 @@ if [ "${version_mode}" = "EXISTING" ]; then
   fi
 
   echo "Using existing Bedrock Dedicated Server"
+  /usr/local/bin/winomc-native-content-import
   write_access_files
   /usr/local/bin/winomc-write-server-properties
   echo "Starting native Bedrock Dedicated Server"
@@ -303,6 +399,7 @@ fi
 
 if [ -x "${SERVER_DATA_DIR}/bedrock_server" ] && ! is_true "${BDS_AUTO_UPDATE}" && [ -z "${BDS_DIRECT_DOWNLOAD_URL}" ]; then
   echo "BDS_AUTO_UPDATE=false and existing server found. Skipping lookup and download."
+  /usr/local/bin/winomc-native-content-import
   write_access_files
   /usr/local/bin/winomc-write-server-properties
   echo "Starting native Bedrock Dedicated Server"
@@ -357,6 +454,7 @@ else
   echo "BDS already installed. Skipping download."
 fi
 
+/usr/local/bin/winomc-native-content-import
 write_access_files
 /usr/local/bin/winomc-write-server-properties
 

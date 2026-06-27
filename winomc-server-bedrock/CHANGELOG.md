@@ -5,6 +5,18 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.4.4
+
+* Native `MC_PACK`-Importlogik ergänzt
+* Unterstützung für `.mcpack`, `.mcaddon`, `.mcworld`, `.mctemplate` und `.zip` ergänzt
+* `MC_PACK` kann auf eine Datei, einen Ordner unter `/share/winomc/import` oder eine HTTP/HTTPS-URL zeigen
+* `FORCE_WORLD_COPY` nativ umgesetzt
+* `FORCE_PACK_COPY` nativ umgesetzt
+* Native Paket-Backups vor BDS-Updates ergänzt
+* `PACKAGE_BACKUP_KEEP` zur Begrenzung alter Paket-Backups nativ umgesetzt
+* Weitere itzg-Komfortfunktionen in die native WinoMC Runtime übernommen
+
+
 ### 1.4.3
 
 * Native Runtime weiter bereinigt

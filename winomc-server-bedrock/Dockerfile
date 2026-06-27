@@ -20,6 +20,8 @@ RUN apt-get update \
         /usr/local/bin/winomc-bedrock-entrypoint \
         /usr/local/bin/winomc-console-server \
         /usr/local/bin/winomc-native-start \
+        /usr/local/bin/winomc-native-content-import \
+        /usr/local/bin/winomc-native-content-import-one \
         /usr/local/bin/winomc-write-server-properties
 
 WORKDIR /config

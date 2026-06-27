@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+MC_PACK="$1"
+export MC_PACK
+
+exec /usr/local/bin/winomc-native-content-import
