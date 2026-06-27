@@ -5,6 +5,15 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.4.3
+
+* Native Runtime weiter bereinigt
+* `VERSION=EXISTING` schreibt jetzt auch `allowlist.json` und `permissions.json`, bevor der vorhandene Bedrock Server gestartet wird
+* Fehlerzweig für `VERSION=EXISTING` vereinfacht
+* Doppelte Log-Ausgabe bei `BDS_AUTO_UPDATE=false` entfernt
+* Doppelte Erstellung von `server.properties` bei `BDS_AUTO_UPDATE=false` entfernt
+* Kleine Stabilitäts- und Wartbarkeitsverbesserungen an `winomc-native-start`
+
 ### 1.4.2
 
 Bereinigung
