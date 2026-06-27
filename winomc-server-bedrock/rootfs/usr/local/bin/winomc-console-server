@@ -38,6 +38,8 @@ WORLD_TEMPLATES_DIR = os.environ.get("WINOMC_WORLD_TEMPLATES_DIR", os.path.join(
 IMPORT_DIR = os.environ.get("WINOMC_IMPORT_DIR", "/share/winomc/import")
 EXPORT_DIR = os.environ.get("WINOMC_EXPORT_DIR", "/share/winomc/export")
 FILE_BACKUP_DIR = os.environ.get("WINOMC_FILE_BACKUP_DIR", os.path.join(DATA_DIR, ".winomc", "file_backups"))
+TRASH_DIR = os.environ.get("WINOMC_TRASH_DIR", os.path.join(DATA_DIR, ".winomc", "trash"))
+TRASH_RETENTION_DAYS = int(os.environ.get("WINOMC_TRASH_RETENTION_DAYS", "7"))
 
 MAX_TEXT_FILE_BYTES = int(os.environ.get("WINOMC_FILE_EDITOR_MAX_BYTES", str(2 * 1024 * 1024)))
 MAX_UPLOAD_BYTES = int(os.environ.get("WINOMC_FILE_UPLOAD_MAX_BYTES", str(512 * 1024 * 1024)))
@@ -52,6 +54,7 @@ FILE_ROOTS = {
     "world_templates": {"label": "World Templates", "path": WORLD_TEMPLATES_DIR, "description": "Weltvorlagen"},
     "import": {"label": "Import", "path": IMPORT_DIR, "description": "Importordner unter /share/winomc/import"},
     "export": {"label": "Export", "path": EXPORT_DIR, "description": "Exportordner unter /share/winomc/export"},
+    "trash": {"label": "Papierkorb", "path": TRASH_DIR, "description": "Gelöschte Dateien, automatische Bereinigung nach einigen Tagen"},
 }
 
 EDITABLE_TEXT_EXTENSIONS = {
@@ -65,7 +68,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Desktop Workbench</title>
+  <title>WinoMC Desktop Workbench 1.5.5</title>
   <style>
     :root {
       color-scheme: dark;
@@ -621,6 +624,71 @@ INDEX_HTML = r"""<!doctype html>
       width: 82px;
     }
 
+
+
+    /* v1.5.5 UX polish */
+    html, body { overflow-x: hidden; }
+    body { background-attachment: fixed; background-repeat: no-repeat; }
+    body.hide-hero:not(.desktop-mode) .hero { display: none; }
+    nav { overflow-x: hidden; }
+    body.sidebar-collapsed nav {
+      width: 78px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+    body.sidebar-collapsed nav::-webkit-scrollbar { width: 0; height: 0; }
+    body.sidebar-collapsed .sidebar-toggle,
+    body.sidebar-collapsed .tab-button {
+      width: 48px;
+      min-width: 48px;
+      height: 48px;
+      margin: 5px auto;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      overflow: visible;
+      position: relative;
+    }
+    body.sidebar-collapsed .tab-button .icon { font-size: 24px; }
+    body.sidebar-collapsed .tab-button.active { box-shadow: inset 0 0 0 1px rgba(34, 197, 94, .25); }
+    .hero.compact-hero { padding: 12px 14px; }
+    .hero.compact-hero h2 { font-size: 16px; }
+    .hero.compact-hero p { font-size: 13px; }
+    .hero-actions button, .actions button, .pill-group button, .file-toolbar button, .file-row-actions button { align-self: center; }
+    .card-header { align-items: flex-start; }
+    .card-header > div { min-width: 0; }
+    .card-header p { margin-top: 3px; }
+    .card > .actions, .editor-actions, .pill-group { margin-top: 10px; }
+    .dashboard-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); gap: 14px; align-items: start; }
+    .dashboard-sidebar { display: grid; gap: 12px; }
+    .dashboard-empty { padding: 18px; border: 1px dashed rgba(148,163,184,.35); border-radius: 14px; color: var(--muted); background: rgba(15,23,42,.45); }
+    .picker-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .picker-section { display: grid; gap: 10px; margin-top: 10px; }
+    .picker-section-title { color: #dbeafe; font-weight: 850; padding: 4px 2px; }
+    .picker-item.is-added { display: none; }
+    .editor-actions { position: sticky; top: 0; z-index: 4; padding: 10px 0; background: linear-gradient(180deg, rgba(15,23,42,.98), rgba(15,23,42,.86)); backdrop-filter: blur(8px); }
+    .editor-panel.editor-fullscreen { inset: 12px 12px calc(var(--console-height) + 14px) 12px; display: grid; grid-template-rows: auto auto auto auto minmax(0,1fr) auto; }
+    .editor-panel.editor-fullscreen .editor-box { min-height: 0; height: 100%; }
+    .editor-panel.editor-fullscreen .editor-actions { order: 4; }
+    .editor-panel.editor-fullscreen .editor-box { order: 5; }
+    .editor-panel.editor-fullscreen .info { order: 6; }
+    body.console-hidden .editor-panel.editor-fullscreen { inset-bottom: 12px; }
+    .file-row-actions { flex-wrap: wrap; }
+    .file-row-actions .danger { padding-inline: 9px; }
+    body.desktop-mode .console-dock { touch-action: auto; }
+    body.desktop-mode.console-collapsed .console-dock { height: 150px !important; min-height: 150px; }
+    body.desktop-mode.console-collapsed #log,
+    body.desktop-mode.console-collapsed .command-row { display: none; }
+    body.desktop-mode.console-collapsed .console-inner { grid-template-rows: auto; align-content: start; }
+    body.desktop-mode .console-head { align-items: flex-start; }
+    body.desktop-mode .console-controls { margin-left: auto; justify-content: flex-end; }
+    .console-window-actions { display: none; gap: 6px; align-items: center; }
+    body.desktop-mode .console-window-actions { display: inline-flex; }
+    body.desktop-mode .console-window-actions button { width: 32px; min-width: 32px; height: 28px; padding: 0; border-radius: 9px; display: grid; place-items: center; }
+    .console-secondary-controls { display: contents; }
+    body.desktop-mode .console-secondary-controls { display: none; }
+
     @media (max-width: 850px) {
       body.desktop-mode {
         overflow: hidden;
@@ -715,7 +783,7 @@ INDEX_HTML = r"""<!doctype html>
 
 
     @media (max-width: 1050px) { .layout { grid-template-columns: 1fr; padding: 10px; } body.sidebar-collapsed { --sidebar-width: 255px; } nav { position: static; height: auto; min-height: 0; display: flex; overflow-x: auto; gap: 6px; padding: 8px; border-radius: 12px; } .sidebar-toggle, .nav-title { display: none; } .tab-button { width: auto; min-width: max-content; } .grid, .grid-3, .file-manager-grid { grid-template-columns: 1fr; } .split-resizer { display: none; } .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); } }
-    @media (max-width: 720px) { :root { --console-height: 310px; } body.console-compact { --console-height: 220px; } body.console-large { --console-height: 70vh; } body.console-maximized { --console-height: 82vh; } header { padding: 10px 12px; } .layout { padding: 8px; gap: 10px; } .hero, .card { padding: 12px; border-radius: 12px; } .hero-actions button, .command-row button, .file-toolbar button, .file-toolbar input, .file-toolbar select { width: 100%; } .file-row-actions { flex-wrap: wrap; } .file-table th, .file-table td { padding: 8px; } .split-actions { grid-template-columns: 1fr; } .command-row { flex-direction: column; } .console-controls button { padding: 7px 9px; font-size: 12px; } .console-head { gap: 6px; } .console-head h3 { font-size: 14px; } .console-head p { display: none; } #log { font-size: 12px; } .editor-panel.editor-fullscreen { inset: 8px; } .card.maximized { inset: 8px; } }
+    @media (max-width: 720px) { :root { --console-height: 310px; } body.console-compact { --console-height: 220px; } body.console-large { --console-height: 70vh; } body.console-maximized { --console-height: 82vh; } header { padding: 10px 12px; } .layout { padding: 8px; gap: 10px; } .hero, .card { padding: 12px; border-radius: 12px; } .hero-actions button, .command-row button, .file-toolbar button, .file-toolbar input, .file-toolbar select { width: 100%; } .file-row-actions { flex-wrap: wrap; } .file-table th, .file-table td { padding: 8px; } .split-actions { grid-template-columns: 1fr; } .command-row { flex-direction: column; } .console-controls button { padding: 7px 9px; font-size: 12px; } .console-head { gap: 6px; } .console-head h3 { font-size: 14px; } .console-head p { display: none; } #log { font-size: 12px; } .editor-panel.editor-fullscreen { inset: 8px 8px calc(var(--console-height) + 10px) 8px; } .card.maximized { inset: 8px; } .dashboard-layout { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -745,6 +813,7 @@ INDEX_HTML = r"""<!doctype html>
         <div class="desktop-icon-grid" id="desktopIconGrid">
           <button type="button" class="desktop-icon" data-open-window="overview"><span class="desktop-icon-symbol">🏠</span><span class="desktop-icon-label">Übersicht</span></button>
           <button type="button" class="desktop-icon" data-open-window="files"><span class="desktop-icon-symbol">📁</span><span class="desktop-icon-label">Dateien</span></button>
+          <button type="button" class="desktop-icon" data-open-root="trash"><span class="desktop-icon-symbol">🗑️</span><span class="desktop-icon-label">Papierkorb</span></button>
           <button type="button" class="desktop-icon" data-open-window="console"><span class="desktop-icon-symbol">💻</span><span class="desktop-icon-label">Konsole</span></button>
           <button type="button" class="desktop-icon" data-open-window="backups"><span class="desktop-icon-symbol">💾</span><span class="desktop-icon-label">Backups</span></button>
           <button type="button" class="desktop-icon" data-open-window="server"><span class="desktop-icon-symbol">🌍</span><span class="desktop-icon-label">Server</span></button>
@@ -754,7 +823,7 @@ INDEX_HTML = r"""<!doctype html>
           <button type="button" class="desktop-icon" data-open-window="expert"><span class="desktop-icon-symbol">🧰</span><span class="desktop-icon-label">Experten</span></button>
         </div>
       </div>
-      <section class="hero">
+      <section class="hero compact-hero">
         <div class="hero-top">
           <div>
             <h2>Serversteuerung</h2>
@@ -764,7 +833,6 @@ INDEX_HTML = r"""<!doctype html>
             <button data-action-id="list">Spieler anzeigen</button>
             <button data-action-id="say">Nachricht</button>
             <button type="button" class="primary" id="desktopModeToggle">Desktop-Modus</button><button type="button" class="soft" id="resetWorkbenchLayout">Layout zurücksetzen</button>
-            <button class="danger" data-action-id="stop">Server stoppen</button>
           </div>
         </div>
       </section>
@@ -796,15 +864,20 @@ INDEX_HTML = r"""<!doctype html>
       <section class="tab-panel" data-panel="dashboard">
         <div class="card">
           <div class="dashboard-toolbar">
-            <div><h2>Mein Dashboard</h2><p>Stelle dir eigene Kacheln zusammen. Die Auswahl wird im Browser gespeichert.</p></div>
+            <div><h2>Mein Dashboard</h2><p>Deine Favoriten links, neue Aktionen rechts nach Kategorien. Bereits hinzugefügte Aktionen werden ausgeblendet.</p></div>
             <div class="actions">
               <label class="status">Layout <select id="dashboardColumns" aria-label="Dashboard Layout"><option value="auto">Auto</option><option value="2">2 Spalten</option><option value="3">3 Spalten</option><option value="4">4 Spalten</option></select></label>
               <button class="soft" id="resetDashboard" type="button">Standard wiederherstellen</button>
             </div>
           </div>
         </div>
-        <div id="dashboardGrid" class="dashboard-grid auto" aria-live="polite"></div>
-        <details class="card" open><summary>Aktionen hinzufügen</summary><p style="margin-top:8px">Füge nur hinzu, was du wirklich brauchst. Kritische Aktionen bleiben markiert.</p><div id="actionPicker" class="picker-grid"></div></details>
+        <div class="dashboard-layout">
+          <div>
+            <div class="card"><div class="card-header"><div><h3>Aktive Kacheln</h3><p>Diese Aktionen sind in deinem Dashboard. Sortiere sie mit den Pfeilen oder entferne sie.</p></div></div></div>
+            <div id="dashboardGrid" class="dashboard-grid auto" aria-live="polite"></div>
+          </div>
+          <details class="card" open><summary>Aktionen hinzufügen</summary><p style="margin-top:8px">Nur noch nicht hinzugefügte Aktionen. Kritische Aktionen bleiben markiert.</p><div id="actionPicker" class="picker-grid"></div></details>
+        </div>
       </section>
 
       <section class="tab-panel" data-panel="console">
@@ -854,6 +927,7 @@ INDEX_HTML = r"""<!doctype html>
             <input id="filePathInput" aria-label="Pfad" placeholder="/worlds/world/db">
             <button type="button" id="fileOpenPath">Pfad öffnen</button>
             <button type="button" id="fileRefresh">Aktualisieren</button>
+            <button type="button" class="soft" id="fileOpenTrash">🗑️ Papierkorb</button>
             <button type="button" id="fileParent">Nach oben</button>
             <button type="button" id="fileZipCurrent">Ordner als ZIP</button>
             <button type="button" id="fileZipExportCurrent">ZIP nach Export</button>
@@ -863,9 +937,9 @@ INDEX_HTML = r"""<!doctype html>
           <div class="breadcrumb" id="fileBreadcrumb"></div>
         </div>
         <div class="file-manager-grid" id="fileManagerGrid">
-          <div class="card file-explorer-panel" data-card-id="files-explorer"><div class="card-header"><div><h3>Explorer</h3><p>Ordner öffnen, Dateien downloaden, ZIPs erstellen oder ZIPs sicher entpacken.</p></div></div><div class="drop-zone" id="fileDropZone">Dateien hierher ziehen oder klicken zum Hochladen<input type="file" id="fileUploadInput" hidden multiple></div><div style="height:12px"></div><div class="file-table-wrap"><table class="file-table"><thead><tr><th>Name</th><th>Typ</th><th>Größe</th><th>Geändert</th><th>Aktionen</th></tr></thead><tbody id="fileTableBody"><tr><td colspan="5">Dateimanager wird geladen...</td></tr></tbody></table></div></div>
+          <div class="card file-explorer-panel" data-card-id="files-explorer"><div class="card-header"><div><h3>Explorer</h3><p>Ordner öffnen, Dateien downloaden, ZIPs erstellen, löschen oder ZIPs sicher entpacken.</p></div><div class="actions"><button type="button" class="soft" id="fileRefreshExplorer">Aktualisieren</button><button type="button" class="soft" id="fileOpenTrashExplorer">🗑️ Papierkorb</button><button type="button" class="danger" id="fileEmptyTrash">Papierkorb leeren</button></div></div><div class="drop-zone" id="fileDropZone">Dateien hierher ziehen oder klicken zum Hochladen<input type="file" id="fileUploadInput" hidden multiple></div><div style="height:12px"></div><div class="file-table-wrap"><table class="file-table"><thead><tr><th>Name</th><th>Typ</th><th>Größe</th><th>Geändert</th><th>Aktionen</th></tr></thead><tbody id="fileTableBody"><tr><td colspan="5">Dateimanager wird geladen...</td></tr></tbody></table></div></div>
           <div class="split-resizer" id="filesSplitHandle" title="Explorer und Editor verschieben"></div>
-          <div class="card editor-panel" id="editorPanel" data-card-id="files-editor"><div class="card-header"><div><h3>Editor</h3><p>Textdateien bearbeiten. JSON wird vor dem Speichern geprüft, vorher wird automatisch ein Backup erstellt.</p></div></div><div class="file-path" id="editorPath">Keine Datei geöffnet</div><div class="file-meta"><span id="editorMeta">Bereit</span></div><div style="height:10px"></div><textarea id="fileEditor" class="editor-box" spellcheck="false" placeholder="Wähle links eine Textdatei aus."></textarea><div class="actions" style="margin-top:10px"><button type="button" class="primary" id="fileSave">Speichern</button><button type="button" class="soft" id="fileCloseEditor">Editor leeren</button><button type="button" class="soft" id="editorFullscreen">Editor Vollbild</button><button type="button" class="soft" id="editorWrapToggle">Umbruch aus</button><button type="button" class="soft" id="editorFontPlus">A+</button><button type="button" class="soft" id="editorFontMinus">A-</button></div><div class="info warning-box" style="margin-top:12px">Änderungen an server.properties, Packs oder Weltdateien brauchen je nach Datei einen Server-Neustart. Fehlerhaftes JSON wird blockiert.</div></div>
+          <div class="card editor-panel" id="editorPanel" data-card-id="files-editor"><div class="card-header"><div><h3>Editor</h3><p>Textdateien bearbeiten. JSON wird vor dem Speichern geprüft, vorher wird automatisch ein Backup erstellt.</p></div></div><div class="file-path" id="editorPath">Keine Datei geöffnet</div><div class="file-meta"><span id="editorMeta">Bereit</span></div><div class="actions editor-actions"><button type="button" class="primary" id="fileSave">Speichern</button><button type="button" class="soft" id="fileCloseEditor">Editor leeren</button><button type="button" class="soft" id="editorFullscreen">Editor Vollbild</button><button type="button" class="soft" id="editorWrapToggle">Umbruch aus</button><button type="button" class="soft" id="editorFontPlus">A+</button><button type="button" class="soft" id="editorFontMinus">A-</button></div><textarea id="fileEditor" class="editor-box" spellcheck="false" placeholder="Wähle links eine Textdatei aus."></textarea><div class="info warning-box" style="margin-top:12px">Änderungen an server.properties, Packs oder Weltdateien brauchen je nach Datei einen Server-Neustart. Fehlerhaftes JSON wird blockiert.</div></div>
         </div>
       </section>
 
@@ -891,7 +965,7 @@ INDEX_HTML = r"""<!doctype html>
   <section class="console-dock" aria-label="Live Console" id="consoleDock">
     <div class="console-resize-handle" id="consoleResizeHandle" title="Konsole größer oder kleiner ziehen"></div>
     <div class="console-inner">
-      <div class="console-head"><div><h3>Live Console</h3><p>Serverausgabe und freie Befehle bleiben immer erreichbar.</p></div><div class="console-controls"><button class="soft" type="button" data-console-size="compact">Kompakt</button><button class="soft" type="button" data-console-size="normal">Normal</button><button class="soft" type="button" data-console-size="large">Groß</button><button class="soft" type="button" id="consoleCollapse">Einklappen</button><button class="soft" type="button" id="consoleMinimize">Minimieren</button><button class="soft" type="button" id="consoleMaximize">Max</button><button class="ghost" type="button" id="clearLog">Anzeige leeren</button></div></div>
+      <div class="console-head"><div><h3>Live Console</h3><p>Serverausgabe und freie Befehle bleiben immer erreichbar.</p></div><div class="console-controls"><span class="console-secondary-controls"><button class="soft" type="button" data-console-size="compact">Kompakt</button><button class="soft" type="button" data-console-size="normal">Normal</button><button class="soft" type="button" data-console-size="large">Groß</button><button class="soft" type="button" id="consoleCollapse">Einklappen</button><button class="ghost" type="button" id="clearLog">Anzeige leeren</button></span><span class="console-window-actions" aria-label="Fenstersteuerung"><button class="soft" type="button" id="consoleMinimize" title="Minimieren">–</button><button class="soft" type="button" id="consoleMaximize" title="Maximieren">□</button><button class="danger" type="button" id="consoleDesktopClose" title="Schließen">×</button></span></div></div>
       <div id="log" aria-live="polite"></div>
       <form id="commandForm" autocomplete="off" class="command-row"><input id="command" name="command" placeholder="Freien Befehl eingeben, z. B. list, say Hallo, gamerule keepinventory true" autofocus><button type="submit" class="primary">Senden</button></form>
     </div>
@@ -921,6 +995,10 @@ INDEX_HTML = r"""<!doctype html>
     const filePathInput = document.getElementById('filePathInput');
     const fileOpenPath = document.getElementById('fileOpenPath');
     const fileRefresh = document.getElementById('fileRefresh');
+    const fileRefreshExplorer = document.getElementById('fileRefreshExplorer');
+    const fileOpenTrash = document.getElementById('fileOpenTrash');
+    const fileOpenTrashExplorer = document.getElementById('fileOpenTrashExplorer');
+    const fileEmptyTrash = document.getElementById('fileEmptyTrash');
     const fileParent = document.getElementById('fileParent');
     const fileZipCurrent = document.getElementById('fileZipCurrent');
     const fileZipExportCurrent = document.getElementById('fileZipExportCurrent');
@@ -952,6 +1030,7 @@ INDEX_HTML = r"""<!doctype html>
     const consoleCollapse = document.getElementById('consoleCollapse');
     const consoleMinimize = document.getElementById('consoleMinimize');
     const consoleMaximize = document.getElementById('consoleMaximize');
+    const consoleDesktopClose = document.getElementById('consoleDesktopClose');
     const desktopModeToggle = document.getElementById('desktopModeToggle');
     const desktopLayer = document.getElementById('desktopLayer');
     const desktopStartButton = document.getElementById('desktopStartButton');
@@ -960,7 +1039,7 @@ INDEX_HTML = r"""<!doctype html>
     const desktopExitButton = document.getElementById('desktopExitButton');
     const desktopClock = document.getElementById('desktopClock');
 
-    const STORE_DASHBOARD = 'winomcDashboardActionsV2';
+    const STORE_DASHBOARD = 'winomcDashboardActionsV3';
     const STORE_COLUMNS = 'winomcDashboardColumnsV1';
     const STORE_CONSOLE_SIZE = 'winomcConsoleSizeV1';
     const STORE_CONSOLE_HEIGHT = 'winomcConsoleHeightV1';
@@ -1008,7 +1087,7 @@ INDEX_HTML = r"""<!doctype html>
     ];
 
     const ACTION_BY_ID = Object.fromEntries(ACTIONS.map(action => [action.id, action]));
-    const DEFAULT_DASHBOARD = ['list', 'say', 'time-day', 'weather-clear', 'coordinates-on', 'keepinventory-on', 'sleep-50', 'difficulty-normal', 'stop'];
+    const DEFAULT_DASHBOARD = ['list', 'say', 'time-day', 'weather-clear', 'save-query'];
     let history = JSON.parse(localStorage.getItem('winomcCommandHistory') || '[]');
     let historyIndex = history.length;
     let pendingTemplate = null;
@@ -1029,8 +1108,117 @@ INDEX_HTML = r"""<!doctype html>
     function loadDashboard() { try { const saved = JSON.parse(localStorage.getItem(STORE_DASHBOARD) || 'null'); if (Array.isArray(saved) && saved.length) return saved.filter(id => ACTION_BY_ID[id]); } catch (_) {} return [...DEFAULT_DASHBOARD]; }
     function saveDashboard() { localStorage.setItem(STORE_DASHBOARD, JSON.stringify(dashboardActions)); }
     function createButtonForAction(action, label) { const button = document.createElement('button'); button.type = 'button'; button.textContent = label || action.label; if (action.variant) button.classList.add(action.variant); button.addEventListener('click', () => runAction(action)); return button; }
-    function renderDashboard() { dashboardGrid.innerHTML = ''; const columns = localStorage.getItem(STORE_COLUMNS) || 'auto'; dashboardColumns.value = columns; dashboardGrid.classList.toggle('auto', columns === 'auto'); if (columns === 'auto') dashboardGrid.style.removeProperty('--dashboard-columns'); else dashboardGrid.style.setProperty('--dashboard-columns', columns); dashboardActions.forEach((id, index) => { const action = ACTION_BY_ID[id]; if (!action) return; const tile = document.createElement('article'); tile.className = 'tile'; const top = document.createElement('div'); top.className = 'tile-top'; const text = document.createElement('div'); const title = document.createElement('div'); title.className = 'tile-title'; title.textContent = action.label; const desc = document.createElement('div'); desc.className = 'tile-desc'; desc.textContent = action.description || ''; text.append(title, desc); const tag = document.createElement('span'); tag.className = 'category-label'; tag.textContent = action.category; top.append(text, tag); const actionButton = createButtonForAction(action, action.template ? 'Ausführen…' : 'Ausführen'); const controls = document.createElement('div'); controls.className = 'tile-actions'; const up = document.createElement('button'); up.type = 'button'; up.textContent = '↑'; up.disabled = index === 0; up.addEventListener('click', () => moveDashboardAction(index, -1)); const down = document.createElement('button'); down.type = 'button'; down.textContent = '↓'; down.disabled = index === dashboardActions.length - 1; down.addEventListener('click', () => moveDashboardAction(index, 1)); const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Entfernen'; remove.className = 'ghost'; remove.addEventListener('click', () => removeDashboardAction(id)); controls.append(up, down, remove); tile.append(top, actionButton, controls); dashboardGrid.appendChild(tile); }); renderActionPicker(); }
-    function renderActionPicker() { actionPicker.innerHTML = ''; ACTIONS.forEach(action => { const item = document.createElement('div'); item.className = 'picker-item'; const meta = document.createElement('div'); meta.className = 'picker-meta'; const title = document.createElement('strong'); title.textContent = action.label; const cat = document.createElement('span'); cat.className = 'category-label'; cat.textContent = action.category; meta.append(title, cat); const desc = document.createElement('div'); desc.className = 'tile-desc'; desc.textContent = action.description || ''; const add = document.createElement('button'); add.type = 'button'; add.textContent = dashboardActions.includes(action.id) ? 'Bereits im Dashboard' : 'Hinzufügen'; add.disabled = dashboardActions.includes(action.id); add.addEventListener('click', () => addDashboardAction(action.id)); item.append(meta, desc, add); actionPicker.appendChild(item); }); }
+    function renderDashboard() {
+      dashboardGrid.innerHTML = '';
+      const columns = localStorage.getItem(STORE_COLUMNS) || 'auto';
+      dashboardColumns.value = columns;
+      dashboardGrid.classList.toggle('auto', columns === 'auto');
+      if (columns === 'auto') dashboardGrid.style.removeProperty('--dashboard-columns');
+      else dashboardGrid.style.setProperty('--dashboard-columns', columns);
+
+      if (!dashboardActions.length) {
+        const empty = document.createElement('div');
+        empty.className = 'dashboard-empty';
+        empty.textContent = 'Noch keine Kacheln ausgewählt. Füge rechts die Aktionen hinzu, die du wirklich brauchst.';
+        dashboardGrid.appendChild(empty);
+      }
+
+      dashboardActions.forEach((id, index) => {
+        const action = ACTION_BY_ID[id];
+        if (!action) return;
+        const tile = document.createElement('article');
+        tile.className = 'tile';
+        const top = document.createElement('div');
+        top.className = 'tile-top';
+        const text = document.createElement('div');
+        const title = document.createElement('div');
+        title.className = 'tile-title';
+        title.textContent = action.label;
+        const desc = document.createElement('div');
+        desc.className = 'tile-desc';
+        desc.textContent = action.description || '';
+        text.append(title, desc);
+        const tag = document.createElement('span');
+        tag.className = 'category-label';
+        tag.textContent = action.category;
+        top.append(text, tag);
+        const actionButton = createButtonForAction(action, action.template ? 'Ausführen…' : 'Ausführen');
+        const controls = document.createElement('div');
+        controls.className = 'tile-actions';
+        const up = document.createElement('button');
+        up.type = 'button';
+        up.textContent = '↑';
+        up.title = 'Nach oben';
+        up.disabled = index === 0;
+        up.addEventListener('click', () => moveDashboardAction(index, -1));
+        const down = document.createElement('button');
+        down.type = 'button';
+        down.textContent = '↓';
+        down.title = 'Nach unten';
+        down.disabled = index === dashboardActions.length - 1;
+        down.addEventListener('click', () => moveDashboardAction(index, 1));
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = 'Entfernen';
+        remove.className = 'ghost';
+        remove.addEventListener('click', () => removeDashboardAction(id));
+        controls.append(up, down, remove);
+        tile.append(top, actionButton, controls);
+        dashboardGrid.appendChild(tile);
+      });
+      renderActionPicker();
+    }
+
+    function renderActionPicker() {
+      actionPicker.innerHTML = '';
+      const available = ACTIONS.filter(action => !dashboardActions.includes(action.id));
+      if (!available.length) {
+        const empty = document.createElement('div');
+        empty.className = 'dashboard-empty';
+        empty.textContent = 'Alle verfügbaren Aktionen sind bereits im Dashboard.';
+        actionPicker.appendChild(empty);
+        return;
+      }
+
+      const groups = new Map();
+      available.forEach(action => {
+        if (!groups.has(action.category)) groups.set(action.category, []);
+        groups.get(action.category).push(action);
+      });
+
+      groups.forEach((items, category) => {
+        const section = document.createElement('section');
+        section.className = 'picker-section';
+        const title = document.createElement('div');
+        title.className = 'picker-section-title';
+        title.textContent = category;
+        section.appendChild(title);
+        items.forEach(action => {
+          const item = document.createElement('div');
+          item.className = 'picker-item';
+          const meta = document.createElement('div');
+          meta.className = 'picker-meta';
+          const name = document.createElement('strong');
+          name.textContent = action.label;
+          const cat = document.createElement('span');
+          cat.className = 'category-label';
+          cat.textContent = action.variant === 'danger' ? 'Kritisch' : category;
+          meta.append(name, cat);
+          const desc = document.createElement('div');
+          desc.className = 'tile-desc';
+          desc.textContent = action.description || '';
+          const add = document.createElement('button');
+          add.type = 'button';
+          add.textContent = 'Hinzufügen';
+          if (action.variant) add.classList.add(action.variant);
+          add.addEventListener('click', () => addDashboardAction(action.id));
+          item.append(meta, desc, add);
+          section.appendChild(item);
+        });
+        actionPicker.appendChild(section);
+      });
+    }
+
     function addDashboardAction(id) { if (!ACTION_BY_ID[id] || dashboardActions.includes(id)) return; dashboardActions.push(id); saveDashboard(); renderDashboard(); }
     function removeDashboardAction(id) { dashboardActions = dashboardActions.filter(item => item !== id); saveDashboard(); renderDashboard(); }
     function moveDashboardAction(index, direction) { const next = index + direction; if (next < 0 || next >= dashboardActions.length) return; [dashboardActions[index], dashboardActions[next]] = [dashboardActions[next], dashboardActions[index]]; saveDashboard(); renderDashboard(); }
@@ -1044,7 +1232,7 @@ INDEX_HTML = r"""<!doctype html>
     function normalizeUiPath(path) { path = String(path || '/').replaceAll('\\', '/'); if (!path.startsWith('/')) path = '/' + path; path = path.replace(/\/+/g, '/'); return path || '/'; }
     function parentUiPath(path) { path = normalizeUiPath(path); if (path === '/') return '/'; const parts = path.split('/').filter(Boolean); parts.pop(); return '/' + parts.join('/'); }
     function escapeHtml(value) { return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;'); }
-    function activateTab(tab) { if (document.body.classList.contains('desktop-mode')) { openDesktopWindow(tab); return; } document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); }
+    function activateTab(tab) { if (document.body.classList.contains('desktop-mode')) { openDesktopWindow(tab); return; } document.body.classList.toggle('hide-hero', tab !== 'overview'); document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); }
     function openRoot(root, path = '/') { activateTab('files'); setTimeout(async () => { await initFileManager(); currentFileRoot = root; fileRootSelect.value = root; await loadFileList(path); }, 0); }
 
     async function loadStatus() { try { const data = await fetchJson('/api/status'); latestStatus = data; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
@@ -1052,10 +1240,96 @@ INDEX_HTML = r"""<!doctype html>
     async function initFileManager() { if (filesInitialized) { await loadFileList(); return; } filesInitialized = true; try { setFilesStatus('Lade Bereiche...', 'warn'); const data = await fetchJson('/api/files/roots'); fileRootSelect.innerHTML = ''; data.roots.forEach(root => { const option = document.createElement('option'); option.value = root.key; option.textContent = root.label + (root.exists ? '' : ' (fehlt)'); option.disabled = !root.exists || !root.readable; fileRootSelect.appendChild(option); }); const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled); if (![...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) currentFileRoot = firstEnabled ? firstEnabled.value : 'config'; fileRootSelect.value = currentFileRoot; await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
     async function loadFileList(path) { if (path !== undefined) currentFilePath = normalizeUiPath(path); currentFileRoot = fileRootSelect.value || currentFileRoot; try { setFilesStatus('Lade...', 'warn'); updatePathDisplay(); const data = await fetchJson('/api/files/list', { root: currentFileRoot, path: currentFilePath }); currentFilePath = data.path || '/'; fileParent.disabled = currentFilePath === '/'; updatePathDisplay(); renderFileEntries(data.entries || []); setFilesStatus('Bereit', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
     function updatePathDisplay() { const full = currentFileRoot + ':' + currentFilePath; fileCurrentPath.textContent = full; filePathInput.value = currentFilePath; fileBreadcrumb.innerHTML = ''; const rootButton = document.createElement('button'); rootButton.type = 'button'; rootButton.textContent = currentFileRoot + ':/'; rootButton.addEventListener('click', () => loadFileList('/')); fileBreadcrumb.appendChild(rootButton); let current = ''; currentFilePath.split('/').filter(Boolean).forEach(part => { current += '/' + part; const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = part; const target = current; btn.addEventListener('click', () => loadFileList(target)); fileBreadcrumb.appendChild(btn); }); }
-    function renderFileEntries(entries) { if (!entries.length) { fileTableBody.innerHTML = '<tr><td colspan="5">Dieser Ordner ist leer.</td></tr>'; return; } fileTableBody.innerHTML = ''; entries.forEach(entry => { const tr = document.createElement('tr'); const nameTd = document.createElement('td'); const nameButton = document.createElement('button'); nameButton.type = 'button'; nameButton.className = 'file-name-button'; nameButton.textContent = (entry.type === 'directory' ? '📁 ' : '📄 ') + entry.name; nameButton.addEventListener('click', () => entry.type === 'directory' ? loadFileList(entry.path) : openFileInEditor(entry.path)); nameTd.appendChild(nameButton); const typeTd = document.createElement('td'); typeTd.textContent = entry.type === 'directory' ? 'Ordner' : 'Datei'; const sizeTd = document.createElement('td'); sizeTd.textContent = entry.type === 'directory' ? '-' : formatBytes(entry.size); const modifiedTd = document.createElement('td'); modifiedTd.textContent = formatUnixTime(entry.modified); const actionsTd = document.createElement('td'); const actions = document.createElement('div'); actions.className = 'file-row-actions'; if (entry.type === 'directory') { const open = document.createElement('button'); open.type = 'button'; open.textContent = 'Öffnen'; open.addEventListener('click', () => loadFileList(entry.path)); const zip = document.createElement('button'); zip.type = 'button'; zip.textContent = 'ZIP'; zip.addEventListener('click', () => downloadZip(entry.path)); const exportZip = document.createElement('button'); exportZip.type = 'button'; exportZip.textContent = 'Export'; exportZip.addEventListener('click', () => saveZipToExport(entry.path)); actions.append(open, zip, exportZip); } else { const download = document.createElement('button'); download.type = 'button'; download.textContent = 'Download'; download.addEventListener('click', () => downloadFile(entry.path)); const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'Editor'; edit.addEventListener('click', () => openFileInEditor(entry.path)); actions.append(download, edit); if (['.zip', '.mcpack', '.mcaddon', '.mcworld', '.mctemplate'].some(ext => entry.name.toLowerCase().endsWith(ext))) { const unzip = document.createElement('button'); unzip.type = 'button'; unzip.textContent = 'Entpacken'; unzip.addEventListener('click', () => unzipFile(entry.path)); actions.appendChild(unzip); } } actionsTd.appendChild(actions); tr.append(nameTd, typeTd, sizeTd, modifiedTd, actionsTd); fileTableBody.appendChild(tr); }); }
+    function renderFileEntries(entries) {
+      const inTrash = currentFileRoot === 'trash';
+      if (fileEmptyTrash) fileEmptyTrash.style.display = inTrash ? '' : 'none';
+      if (!entries.length) {
+        fileTableBody.innerHTML = '<tr><td colspan="5">Dieser Ordner ist leer.</td></tr>';
+        return;
+      }
+      fileTableBody.innerHTML = '';
+
+      entries.forEach(entry => {
+        const tr = document.createElement('tr');
+        const nameTd = document.createElement('td');
+        const nameButton = document.createElement('button');
+        nameButton.type = 'button';
+        nameButton.className = 'file-name-button';
+        nameButton.textContent = (entry.type === 'directory' ? '📁 ' : '📄 ') + entry.name;
+        nameButton.addEventListener('click', () => entry.type === 'directory' ? loadFileList(entry.path) : openFileInEditor(entry.path));
+        nameTd.appendChild(nameButton);
+
+        const typeTd = document.createElement('td');
+        typeTd.textContent = entry.type === 'directory' ? 'Ordner' : 'Datei';
+        const sizeTd = document.createElement('td');
+        sizeTd.textContent = entry.type === 'directory' ? '-' : formatBytes(entry.size);
+        const modifiedTd = document.createElement('td');
+        modifiedTd.textContent = inTrash && entry.original_path ? ('Gelöscht: ' + (entry.deleted_at || '-') + ' · Quelle: ' + entry.original_root + ':' + entry.original_path) : formatUnixTime(entry.modified);
+        const actionsTd = document.createElement('td');
+        const actions = document.createElement('div');
+        actions.className = 'file-row-actions';
+
+        if (entry.type === 'directory') {
+          const open = document.createElement('button');
+          open.type = 'button';
+          open.textContent = 'Öffnen';
+          open.addEventListener('click', () => loadFileList(entry.path));
+          const zip = document.createElement('button');
+          zip.type = 'button';
+          zip.textContent = 'ZIP';
+          zip.addEventListener('click', () => downloadZip(entry.path));
+          const exportZip = document.createElement('button');
+          exportZip.type = 'button';
+          exportZip.textContent = 'Export';
+          exportZip.addEventListener('click', () => saveZipToExport(entry.path));
+          actions.append(open, zip, exportZip);
+        } else {
+          const download = document.createElement('button');
+          download.type = 'button';
+          download.textContent = 'Download';
+          download.addEventListener('click', () => downloadFile(entry.path));
+          const edit = document.createElement('button');
+          edit.type = 'button';
+          edit.textContent = 'Editor';
+          edit.addEventListener('click', () => openFileInEditor(entry.path));
+          actions.append(download, edit);
+          if (['.zip', '.mcpack', '.mcaddon', '.mcworld', '.mctemplate'].some(ext => entry.name.toLowerCase().endsWith(ext))) {
+            const unzip = document.createElement('button');
+            unzip.type = 'button';
+            unzip.textContent = 'Entpacken';
+            unzip.addEventListener('click', () => unzipFile(entry.path));
+            actions.appendChild(unzip);
+          }
+        }
+
+        if (inTrash && entry.path !== '/') {
+          const restore = document.createElement('button');
+          restore.type = 'button';
+          restore.textContent = 'Wiederherstellen';
+          restore.className = 'primary';
+          restore.title = entry.original_path ? ('Zurück nach ' + entry.original_root + ':' + entry.original_path) : 'Aus Papierkorb wiederherstellen';
+          restore.addEventListener('click', () => restoreFileEntry(entry.path, entry.name));
+          actions.appendChild(restore);
+        }
+
+        if (entry.path !== '/') {
+          const del = document.createElement('button');
+          del.type = 'button';
+          del.textContent = inTrash ? 'Endgültig' : 'Löschen';
+          del.className = 'danger';
+          del.addEventListener('click', () => deleteFileEntry(entry.path, entry.name, inTrash));
+          actions.appendChild(del);
+        }
+
+        actionsTd.appendChild(actions);
+        tr.append(nameTd, typeTd, sizeTd, modifiedTd, actionsTd);
+        fileTableBody.appendChild(tr);
+      });
+    }
+
     function downloadFile(path) { window.location.href = apiUrl('/api/files/download', { root: currentFileRoot, path }); }
     function downloadZip(path) { window.location.href = apiUrl('/api/files/zip', { root: currentFileRoot, path }); }
-    async function saveZipToExport(path) { try { setFilesStatus('Erstelle ZIP...', 'warn'); const data = await postJson('/api/files/zip', { root: currentFileRoot, paths: [path], save_to_export: true }); appendLine('[WinoMC Dateien] ZIP exportiert: ' + data.filename, 'ok'); setFilesStatus('ZIP exportiert', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] ZIP-Fehler: ' + err.message, 'error'); alert(err.message); } }
+    async function saveZipToExport(path) { try { setFilesStatus('Erstelle ZIP...', 'warn'); const data = await postJson('/api/files/zip', { root: currentFileRoot, paths: [path], save_to_export: true }); appendLine('[WinoMC Dateien] ZIP exportiert: ' + data.filename, 'ok'); setFilesStatus('ZIP exportiert', ''); if (currentFileRoot === 'export') await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] ZIP-Fehler: ' + err.message, 'error'); alert(err.message); } }
     async function openFileInEditor(path) { try { setFilesStatus('Öffne Datei...', 'warn'); const data = await fetchJson('/api/files/read', { root: currentFileRoot, path }); currentEditorFile = { root: data.root, path: data.path }; editorPath.textContent = data.root + ':' + data.path; editorMeta.textContent = formatBytes(data.size) + ' · geändert: ' + formatUnixTime(data.modified) + (data.json ? ' · JSON-Prüfung aktiv' : ''); fileEditor.value = data.content || ''; setFilesStatus('Datei geöffnet', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Editor-Fehler: ' + err.message, 'error'); alert(err.message); } }
     async function saveEditorFile() { if (!currentEditorFile) { alert('Keine Datei geöffnet.'); return; } try { setFilesStatus('Speichere...', 'warn'); const data = await postJson('/api/files/write', { root: currentEditorFile.root, path: currentEditorFile.path, content: fileEditor.value }); appendLine('[WinoMC Dateien] Datei gespeichert: ' + currentEditorFile.path, 'ok'); if (data.backup_created) appendLine('[WinoMC Dateien] Backup erstellt: ' + data.backup_path, 'ok'); setFilesStatus('Gespeichert', ''); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Speichern fehlgeschlagen: ' + err.message, 'error'); alert(err.message); } }
     function clearEditor() { currentEditorFile = null; editorPath.textContent = 'Keine Datei geöffnet'; editorMeta.textContent = 'Bereit'; fileEditor.value = ''; }
@@ -1064,6 +1338,57 @@ INDEX_HTML = r"""<!doctype html>
     function readFileAsBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '').split(',', 2)[1] || ''); reader.onerror = () => reject(reader.error || new Error('Datei konnte nicht gelesen werden.')); reader.readAsDataURL(file); }); }
     async function uploadFileJson(file) { const base64 = await readFileAsBase64(file); return postJson('/api/files/upload-json', { root: currentFileRoot, path: currentFilePath, filename: file.name, overwrite: false, content_base64: base64 }); }
     async function unzipFile(path) { const destination = window.prompt('In welchen Ordner entpacken?', currentFilePath || '/'); if (destination === null) return; const overwrite = window.confirm('Vorhandene Dateien überschreiben?'); try { setFilesStatus('Entpacke ZIP...', 'warn'); const data = await postJson('/api/files/unzip', { root: currentFileRoot, path, destination, overwrite }); appendLine('[WinoMC Dateien] Entpackt: ' + data.files + ' Dateien, ' + data.directories + ' Ordner', 'ok'); setFilesStatus('ZIP entpackt', ''); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Entpacken fehlgeschlagen: ' + err.message, 'error'); alert(err.message); } }
+    async function deleteFileEntry(path, name, permanent) {
+      const label = permanent ? 'endgültig löschen' : 'in den Papierkorb verschieben';
+      if (!window.confirm('„' + name + '“ wirklich ' + label + '?')) return;
+      try {
+        setFilesStatus('Lösche...', 'warn');
+        const data = await postJson('/api/files/delete', { root: currentFileRoot, path, permanent: Boolean(permanent) });
+        appendLine('[WinoMC Dateien] ' + (data.message || 'Gelöscht: ' + path), 'ok');
+        setFilesStatus('Gelöscht', '');
+        await loadFileList(currentFilePath);
+      } catch (err) {
+        setFilesStatus('Fehler', 'warn');
+        appendLine('[WinoMC Dateien] Löschen fehlgeschlagen: ' + err.message, 'error');
+        alert(err.message);
+      }
+    }
+
+    async function restoreFileEntry(path, name, overwrite = false) {
+      if (!overwrite && !window.confirm('„' + name + '“ aus dem Papierkorb wiederherstellen?')) return;
+      try {
+        setFilesStatus('Stelle wieder her...', 'warn');
+        const data = await postJson('/api/files/trash/restore', { path, overwrite: Boolean(overwrite) });
+        appendLine('[WinoMC Dateien] ' + (data.message || 'Wiederhergestellt: ' + path), 'ok');
+        setFilesStatus('Wiederhergestellt', '');
+        await loadFileList(currentFilePath);
+      } catch (err) {
+        const message = String(err.message || '');
+        if (!overwrite && message.includes('Ziel existiert bereits') && window.confirm('Ziel existiert bereits. Überschreiben und wiederherstellen?')) {
+          await restoreFileEntry(path, name, true);
+          return;
+        }
+        setFilesStatus('Fehler', 'warn');
+        appendLine('[WinoMC Dateien] Wiederherstellen fehlgeschlagen: ' + err.message, 'error');
+        alert(err.message);
+      }
+    }
+
+    async function emptyTrash() {
+      if (!window.confirm('Papierkorb wirklich endgültig leeren?')) return;
+      try {
+        setFilesStatus('Leere Papierkorb...', 'warn');
+        const data = await postJson('/api/files/trash/empty', {});
+        appendLine('[WinoMC Dateien] Papierkorb geleert: ' + data.removed + ' Einträge', 'ok');
+        setFilesStatus('Papierkorb geleert', '');
+        await loadFileList(currentFilePath);
+      } catch (err) {
+        setFilesStatus('Fehler', 'warn');
+        appendLine('[WinoMC Dateien] Papierkorb konnte nicht geleert werden: ' + err.message, 'error');
+        alert(err.message);
+      }
+    }
+
     async function runSafeWorldExport() { const defaultWorld = latestStatus && latestStatus.env && latestStatus.env.LEVEL_NAME ? '/' + latestStatus.env.LEVEL_NAME : '/world'; const worldPath = window.prompt('Welche Welt sicher exportieren?', defaultWorld); if (!worldPath) return; if (!window.confirm('Sicheren Welt-Export starten?\n\nAblauf: save hold → save query → ZIP → save resume')) return; try { setFilesStatus('Welt-Export läuft...', 'warn'); const data = await postJson('/api/worlds/export-safe', { path: worldPath, save_to_export: true }); appendLine('[WinoMC Dateien] Sicherer Welt-Export erstellt: ' + data.filename, 'ok'); setFilesStatus('Welt exportiert', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Welt-Export fehlgeschlagen: ' + err.message, 'error'); alert(err.message); } }
 
     form.addEventListener('submit', event => { event.preventDefault(); sendCommand(input.value); });
@@ -1072,9 +1397,10 @@ INDEX_HTML = r"""<!doctype html>
     document.querySelectorAll('[data-console-size]').forEach(button => button.addEventListener('click', () => applyConsoleSize(button.dataset.consoleSize)));
     sidebarToggle.addEventListener('click', toggleSidebar);
     resetWorkbenchLayout.addEventListener('click', resetWorkbench);
-    consoleCollapse.addEventListener('click', () => setConsoleMode(document.body.classList.contains('console-collapsed') ? 'normal' : 'collapsed'));
+    if (consoleCollapse) consoleCollapse.addEventListener('click', () => setConsoleMode(document.body.classList.contains('console-collapsed') ? 'normal' : 'collapsed'));
+    if (consoleDesktopClose) consoleDesktopClose.addEventListener('click', () => minimizeDesktopWindow('console'));
     if (consoleMinimize) consoleMinimize.addEventListener('click', () => minimizeDesktopWindow('console'));
-    consoleMaximize.addEventListener('click', () => setConsoleMode(document.body.classList.contains('console-maximized') ? 'normal' : 'maximized'));
+    if (consoleMaximize) consoleMaximize.addEventListener('click', () => setConsoleMode(document.body.classList.contains('console-maximized') ? 'normal' : 'maximized'));
     editorFullscreen.addEventListener('click', toggleEditorFullscreen);
     editorWrapToggle.addEventListener('click', toggleEditorWrap);
     editorFontPlus.addEventListener('click', () => changeEditorFont(1));
@@ -1089,6 +1415,10 @@ INDEX_HTML = r"""<!doctype html>
     fileOpenPath.addEventListener('click', () => loadFileList(filePathInput.value));
     filePathInput.addEventListener('keydown', event => { if (event.key === 'Enter') loadFileList(filePathInput.value); });
     fileRefresh.addEventListener('click', () => loadFileList(currentFilePath));
+    if (fileRefreshExplorer) fileRefreshExplorer.addEventListener('click', () => loadFileList(currentFilePath));
+    if (fileOpenTrash) fileOpenTrash.addEventListener('click', () => openRoot('trash', '/'));
+    if (fileOpenTrashExplorer) fileOpenTrashExplorer.addEventListener('click', () => openRoot('trash', '/'));
+    if (fileEmptyTrash) fileEmptyTrash.addEventListener('click', emptyTrash);
     fileParent.addEventListener('click', () => loadFileList(parentUiPath(currentFilePath)));
     fileZipCurrent.addEventListener('click', () => downloadZip(currentFilePath));
     fileZipExportCurrent.addEventListener('click', () => saveZipToExport(currentFilePath));
@@ -1139,8 +1469,8 @@ INDEX_HTML = r"""<!doctype html>
       }
 
       if (consoleCollapse) consoleCollapse.textContent = mode === 'collapsed' ? 'Ausklappen' : 'Einklappen';
-      if (consoleMaximize) consoleMaximize.textContent = mode === 'maximized' ? 'Normal' : 'Max';
-      if (consoleMinimize) consoleMinimize.textContent = mode === 'hidden' ? 'Einblenden' : 'Minimieren';
+      if (consoleMaximize) consoleMaximize.textContent = document.body.classList.contains('desktop-mode') ? (mode === 'maximized' ? '❐' : '□') : (mode === 'maximized' ? 'Normal' : 'Max');
+      if (consoleMinimize) consoleMinimize.textContent = document.body.classList.contains('desktop-mode') ? '–' : (mode === 'hidden' ? 'Einblenden' : 'Minimieren');
       updateDesktopTaskbar();
     }
 
@@ -1679,6 +2009,7 @@ INDEX_HTML = r"""<!doctype html>
       document.body.classList.toggle('desktop-mode', enabled);
       localStorage.setItem(STORE_DESKTOP_MODE, enabled ? 'true' : 'false');
       if (desktopModeToggle) desktopModeToggle.textContent = enabled ? 'Klassische Ansicht' : 'Desktop-Modus';
+      setConsoleMode(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal');
       if (enabled) {
         renderDesktopStartMenu();
         ensureDesktopConsoleRect();
@@ -1735,7 +2066,7 @@ INDEX_HTML = r"""<!doctype html>
 
 
 def ensure_directories():
-    for path in (DATA_DIR, WORLDS_DIR, RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR, WORLD_TEMPLATES_DIR, IMPORT_DIR, EXPORT_DIR, FILE_BACKUP_DIR):
+    for path in (DATA_DIR, WORLDS_DIR, RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR, WORLD_TEMPLATES_DIR, IMPORT_DIR, EXPORT_DIR, FILE_BACKUP_DIR, TRASH_DIR):
         try:
             os.makedirs(path, exist_ok=True)
         except Exception:
@@ -1869,6 +2200,7 @@ def make_file_backup(file_path, root_key, rel_path):
 
 
 def list_file_roots():
+    cleanup_trash()
     roots = []
     for key, info in FILE_ROOTS.items():
         path = os.path.realpath(info["path"])
@@ -1885,6 +2217,8 @@ def list_directory(root_key, rel_path="/"):
     root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
     entries = []
     for name in sorted(os.listdir(full_path), key=lambda item: item.lower()):
+        if root_key == "trash" and name.endswith(".winomc-trash.json"):
+            continue
         child_path = os.path.join(full_path, name)
         if os.path.islink(child_path):
             continue
@@ -1896,7 +2230,19 @@ def list_directory(root_key, rel_path="/"):
             continue
         is_dir = os.path.isdir(child_path)
         child_rel_path = normalize_rel_path(posixpath.join(rel_path, name))
-        entries.append({"name": name, "path": child_rel_path, "type": "directory" if is_dir else "file", "size": stat.st_size, "modified": int(stat.st_mtime), "downloadable": not is_dir, "zipable": True, "editable": (not is_dir and is_editable_text_file(child_path)), "extractable": (not is_dir and file_extension(child_path) in ZIP_EXTENSIONS)})
+        entry = {"name": name, "path": child_rel_path, "type": "directory" if is_dir else "file", "size": stat.st_size, "modified": int(stat.st_mtime), "downloadable": not is_dir, "zipable": True, "editable": (not is_dir and is_editable_text_file(child_path)), "extractable": (not is_dir and file_extension(child_path) in ZIP_EXTENSIONS)}
+        if root_key == "trash":
+            meta_path = child_path + ".winomc-trash.json"
+            try:
+                with open(meta_path, "r", encoding="utf-8") as handle:
+                    meta = json.load(handle)
+                entry["trash_meta"] = meta
+                entry["original_root"] = meta.get("original_root", "")
+                entry["original_path"] = meta.get("original_path", "")
+                entry["deleted_at"] = meta.get("deleted_at", "")
+            except Exception:
+                entry["trash_meta"] = None
+        entries.append(entry)
     entries.sort(key=lambda item: (item["type"] != "directory", item["name"].lower()))
     parent = None if rel_path == "/" else normalize_rel_path(posixpath.dirname(rel_path))
     return {"ok": True, "root": root_key, "path": rel_path, "parent": parent, "entries": entries}
@@ -2069,13 +2415,134 @@ def create_safe_world_export(world_rel_path="/world", save_to_export=True):
                 append_console_note("WARNUNG: save resume konnte nicht automatisch ausgeführt werden: %s" % exc)
 
 
+
+
+def remove_path(path):
+    if os.path.isdir(path) and not os.path.islink(path):
+        shutil.rmtree(path)
+    else:
+        os.remove(path)
+
+
+def cleanup_trash():
+    os.makedirs(TRASH_DIR, exist_ok=True)
+    if TRASH_RETENTION_DAYS <= 0:
+        return 0
+    cutoff = time.time() - (TRASH_RETENTION_DAYS * 86400)
+    removed = 0
+    for name in os.listdir(TRASH_DIR):
+        path = os.path.join(TRASH_DIR, name)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                remove_path(path)
+                removed += 1
+        except FileNotFoundError:
+            pass
+        except Exception as exc:
+            append_console_note("Papierkorb-Bereinigung übersprungen: %s" % exc)
+    return removed
+
+
+def delete_or_trash_path(root_key, rel_path, permanent=False):
+    full_path, rel_path = resolve_safe_path(root_key, rel_path)
+    if rel_path == "/":
+        raise ValueError("Der Wurzelordner kann nicht gelöscht werden.")
+    if not os.path.exists(full_path):
+        raise FileNotFoundError("Datei oder Ordner wurde nicht gefunden.")
+    if root_key == "config" and rel_path.startswith("/.winomc"):
+        raise ValueError("Interne WinoMC-Verzeichnisse können hier nicht gelöscht werden. Öffne bei Bedarf den Papierkorb direkt.")
+
+    if permanent or root_key == "trash":
+        remove_path(full_path)
+        meta_path = full_path + ".winomc-trash.json"
+        if os.path.exists(meta_path):
+            try:
+                os.remove(meta_path)
+            except OSError:
+                pass
+        return {"ok": True, "permanent": True, "path": rel_path, "message": "Endgültig gelöscht: %s" % rel_path}
+
+    cleanup_trash()
+    os.makedirs(TRASH_DIR, exist_ok=True)
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    trash_name = safe_download_name("%s-%s-%s" % (timestamp, root_key, rel_path.replace("/", "__")), "winomc-trash")
+    target_path = os.path.join(TRASH_DIR, trash_name)
+    counter = 1
+    while os.path.exists(target_path):
+        target_path = os.path.join(TRASH_DIR, "%s-%s" % (trash_name, counter))
+        counter += 1
+    shutil.move(full_path, target_path)
+    meta = {"original_root": root_key, "original_path": rel_path, "deleted_at": timestamp, "trash_name": os.path.basename(target_path)}
+    try:
+        with open(target_path + ".winomc-trash.json", "w", encoding="utf-8") as handle:
+            json.dump(meta, handle, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+    return {"ok": True, "permanent": False, "path": rel_path, "trash_path": target_path, "message": "In den Papierkorb verschoben: %s" % rel_path}
+
+
+
+def restore_from_trash(trash_rel_path, overwrite=False, destination_root=None, destination_path=None):
+    trash_path, trash_rel_path = resolve_safe_path("trash", trash_rel_path)
+    if not os.path.exists(trash_path):
+        raise FileNotFoundError("Papierkorb-Eintrag wurde nicht gefunden.")
+    if trash_rel_path == "/":
+        raise ValueError("Der Papierkorb-Wurzelordner kann nicht wiederhergestellt werden.")
+
+    meta_path = trash_path + ".winomc-trash.json"
+    if os.path.exists(meta_path):
+        with open(meta_path, "r", encoding="utf-8") as handle:
+            meta = json.load(handle)
+    else:
+        meta = {"original_root": "config", "original_path": "/" + os.path.basename(trash_path)}
+
+    target_root = str(destination_root or meta.get("original_root") or "config")
+    target_rel = normalize_rel_path(str(destination_path or meta.get("original_path") or ("/" + os.path.basename(trash_path))))
+    target_path, target_rel = resolve_safe_path(target_root, target_rel)
+
+    if target_rel == "/":
+        raise ValueError("Ein Papierkorb-Eintrag kann nicht direkt auf einen Wurzelordner wiederhergestellt werden.")
+
+    parent = os.path.dirname(target_path)
+    if not os.path.isdir(parent):
+        os.makedirs(parent, exist_ok=True)
+
+    if os.path.exists(target_path):
+        if not overwrite:
+            raise FileExistsError("Ziel existiert bereits. Wiederherstellen mit Überschreiben bestätigen.")
+        backup_path = make_file_backup(target_path, target_root, target_rel) if os.path.isfile(target_path) else None
+        remove_path(target_path)
+    else:
+        backup_path = None
+
+    shutil.move(trash_path, target_path)
+    if os.path.exists(meta_path):
+        try:
+            os.remove(meta_path)
+        except OSError:
+            pass
+
+    return {"ok": True, "root": target_root, "path": target_rel, "backup_created": bool(backup_path), "backup_path": backup_path, "message": "Wiederhergestellt nach %s:%s" % (target_root, target_rel)}
+
+def empty_trash():
+    os.makedirs(TRASH_DIR, exist_ok=True)
+    removed = 0
+    for name in list(os.listdir(TRASH_DIR)):
+        path = os.path.join(TRASH_DIR, name)
+        try:
+            remove_path(path)
+            removed += 1
+        except FileNotFoundError:
+            pass
+    return {"ok": True, "removed": removed, "message": "Papierkorb geleert."}
+
 def status_payload():
     env_keys = ["SERVER_NAME", "LEVEL_NAME", "VERSION", "BDS_AUTO_UPDATE", "SERVER_PORT", "SERVER_PORT_V6", "ENABLE_LAN_VISIBILITY", "ENABLE_BDS_V6BIND_FIX", "GAMEMODE", "DIFFICULTY", "ALLOW_CHEATS", "ALLOW_LIST", "MAX_PLAYERS", "TEXTUREPACK_REQUIRED", "PACKAGE_BACKUP_KEEP"]
     return {"ok": True, "fifo_exists": os.path.exists(FIFO_PATH), "log_exists": os.path.exists(LOG_PATH), "env": {key: os.environ.get(key, "") for key in env_keys}, "roots": list_file_roots()}
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCConsole/1.5.1"
+    server_version = "WinoMCConsole/1.5.5"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
@@ -2350,6 +2817,33 @@ class Handler(BaseHTTPRequestHandler):
                 body = self._read_request_body(max_bytes=65536)
                 payload = json.loads(body or "{}")
                 self._send_json(200, extract_zip_file(str(payload.get("root", "import")), str(payload.get("path", "/")), destination_rel_path=str(payload.get("destination", "/")), overwrite=bool(payload.get("overwrite", False))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/files/delete") or path == "/api/files/delete":
+            try:
+                body = self._read_request_body(max_bytes=65536)
+                payload = json.loads(body or "{}")
+                self._send_json(200, delete_or_trash_path(str(payload.get("root", "config")), str(payload.get("path", "/")), permanent=bool(payload.get("permanent", False))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/files/trash/restore") or path == "/api/files/trash/restore":
+            try:
+                body = self._read_request_body(max_bytes=65536)
+                payload = json.loads(body or "{}")
+                self._send_json(200, restore_from_trash(
+                    str(payload.get("path", "/")),
+                    overwrite=bool(payload.get("overwrite", False)),
+                    destination_root=payload.get("destination_root"),
+                    destination_path=payload.get("destination_path"),
+                ))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/files/trash/empty") or path == "/api/files/trash/empty":
+            try:
+                self._send_json(200, empty_trash())
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return

@@ -5,6 +5,28 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.5
+
+* Klassische Ansicht weiter bereinigt und die Serversteuerung auf die Übersicht beschränkt
+* Eingeklappte Navigation verbessert: echter Icon-only-Modus ohne horizontales Wegscrollen
+* Live Console im Desktop-Modus vereinfacht: Fenstersteuerung über Minimieren, Maximieren und Schließen; Einklappen im Desktop-Modus entfernt
+* Fehler behoben, bei dem die Desktop-Konsole zu klein wurde und nicht mehr sinnvoll bedienbar war
+* Editor-Vollbild verbessert: Bedienleiste bleibt oben erreichbar und wird nicht mehr von der Live Console verdeckt
+* Dateimanager erweitert: Löschen in einen WinoMC-Papierkorb ergänzt
+* Papierkorb-Bereich ergänzt und automatisches Bereinigen alter Papierkorb-Inhalte vorbereitet
+* Papierkorb kann über die Web Console geleert werden
+* Wiederherstellen aus dem Papierkorb ergänzt
+* Konfliktbehandlung beim Wiederherstellen ergänzt, falls am Originalpfad bereits wieder eine Datei oder ein Ordner existiert
+* Papierkorb-Icon im Desktop-Modus ergänzt
+* Direkter Papierkorb-Zugriff im klassischen Dateimanager ergänzt
+* Explorer um zusätzlichen Aktualisieren-Button im Explorer-Bereich ergänzt
+* Dateiliste wird nach relevanten Dateiaktionen zuverlässiger aktualisiert
+* Persönliches Dashboard neu strukturiert: aktive Kacheln und verfügbare Aktionen sind getrennt
+* Bereits hinzugefügte Dashboard-Aktionen werden im Hinzufügen-Bereich ausgeblendet
+* Standard-Dashboard entschlackt und kritische Aktionen nicht mehr vorausgewählt
+* Abstände, Button-Ausrichtung und Informationsblöcke in der Web Console vereinheitlicht
+* Hintergrund- und Scrollverhalten in der klassischen Ansicht verbessert
+
 ### 1.5.4
 
 * Desktop-Workbench-Konsole überarbeitet
