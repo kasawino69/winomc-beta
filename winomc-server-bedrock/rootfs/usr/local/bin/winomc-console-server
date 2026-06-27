@@ -65,7 +65,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Console</title>
+  <title>WinoMC Dynamic Workbench</title>
   <style>
     :root {
       color-scheme: dark;
@@ -88,6 +88,9 @@ INDEX_HTML = r"""<!doctype html>
       --blue: #60a5fa;
       --blue-soft: rgba(96, 165, 250, .10);
       --console-height: 330px;
+      --sidebar-width: 255px;
+      --files-left-width: 52%;
+      --workbench-radius: 14px;
     }
     * { box-sizing: border-box; }
     body {
@@ -103,6 +106,9 @@ INDEX_HTML = r"""<!doctype html>
     }
     body.console-compact { --console-height: 245px; }
     body.console-large { --console-height: 440px; }
+    body.console-collapsed { --console-height: 58px; }
+    body.console-hidden { --console-height: 0px; }
+    body.console-maximized { --console-height: min(84vh, 820px); }
     header {
       padding: 14px 18px;
       background: rgba(15, 23, 42, .92);
@@ -124,15 +130,16 @@ INDEX_HTML = r"""<!doctype html>
     .status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
     .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 4px rgba(245, 158, 11, .12); }
     .dot.ok { background: var(--accent); box-shadow: 0 0 0 4px rgba(34, 197, 94, .14); }
-    .layout { display: grid; grid-template-columns: 255px minmax(0, 1fr); gap: 14px; max-width: 1500px; margin: 0 auto; padding: 14px; }
-    nav { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 14px; padding: 10px; height: calc(100vh - var(--console-height) - 92px); min-height: 320px; position: sticky; top: 74px; overflow: auto; }
+    .layout { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); gap: 14px; max-width: 1500px; margin: 0 auto; padding: 14px; transition: grid-template-columns .18s ease; }
+    nav { background: var(--panel); border: 1px solid var(--border-soft); border-radius: var(--workbench-radius); padding: 10px; height: calc(100vh - var(--console-height) - 92px); min-height: 320px; position: sticky; top: 74px; overflow: auto; transition: width .18s ease, padding .18s ease; }
     .nav-title { padding: 10px 10px 12px; color: var(--muted-2); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
     .tab-button { width: 100%; border: 1px solid transparent; background: transparent; color: var(--text); border-radius: 10px; padding: 11px 12px; cursor: pointer; text-align: left; display: flex; gap: 10px; align-items: center; font-weight: 680; }
     .tab-button:hover { background: rgba(148, 163, 184, .10); }
     .tab-button.active { background: var(--accent-soft); border-color: rgba(34, 197, 94, .38); color: #dcfce7; }
     .tab-button .icon { width: 24px; text-align: center; }
     .content { min-width: 0; display: grid; gap: 14px; align-content: start; }
-    .hero, .card { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 14px; padding: 14px; min-width: 0; }
+    .hero, .card { background: var(--panel); border: 1px solid var(--border-soft); border-radius: var(--workbench-radius); padding: 14px; min-width: 0; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+    .card:hover { border-color: rgba(96, 165, 250, .26); }
     .hero { display: grid; gap: 14px; }
     .hero-top, .card-header, .dashboard-toolbar { display: flex; gap: 12px; align-items: start; justify-content: space-between; flex-wrap: wrap; }
     .hero-actions, .actions, .pill-group, .file-toolbar, .breadcrumb, .module-jump { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -183,7 +190,7 @@ INDEX_HTML = r"""<!doctype html>
     .picker-meta { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
     .stat-value { font-size: 22px; font-weight: 800; color: #f8fafc; }
     .stat-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
-    .file-manager-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(340px, .88fr); gap: 14px; }
+    .file-manager-grid { display: grid; grid-template-columns: minmax(280px, var(--files-left-width)) 10px minmax(280px, 1fr); gap: 10px; align-items: stretch; }
     .file-toolbar select, .file-toolbar input { min-width: 180px; }
     .file-toolbar input { flex: 1 1 300px; }
     .file-path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #cbd5e1; background: rgba(15, 23, 42, .72); border: 1px solid rgba(51, 65, 85, .70); border-radius: 10px; padding: 10px 12px; overflow: auto; white-space: nowrap; }
@@ -202,7 +209,10 @@ INDEX_HTML = r"""<!doctype html>
     .file-row-actions button { padding: 6px 8px; font-size: 12px; }
     .editor-box { width: 100%; min-height: 390px; resize: vertical; border: 1px solid var(--border); background: #020617; color: #e5e7eb; border-radius: 12px; padding: 12px; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; outline: none; }
     .file-meta { display: flex; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 8px; }
-    .console-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; height: var(--console-height); background: rgba(2, 6, 23, .96); border-top: 1px solid var(--border); box-shadow: 0 -20px 55px rgba(0, 0, 0, .42); backdrop-filter: blur(12px); }
+    .console-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; height: var(--console-height); background: rgba(2, 6, 23, .96); border-top: 1px solid var(--border); box-shadow: 0 -20px 55px rgba(0, 0, 0, .42); backdrop-filter: blur(12px); transition: height .16s ease, transform .16s ease; }
+    body.console-hidden .console-dock { transform: translateY(calc(100% - 42px)); height: 42px; }
+    body.console-collapsed #log, body.console-collapsed .command-row, body.console-hidden #log, body.console-hidden .command-row { display: none; }
+    body.console-hidden .console-head p { display: none; }
     .console-inner { max-width: 1500px; height: 100%; margin: 0 auto; padding: 10px 14px 12px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; }
     .console-head { display: flex; gap: 10px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
     .console-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -219,19 +229,49 @@ INDEX_HTML = r"""<!doctype html>
     .modal h2 { margin-bottom: 8px; }
     .modal .modal-actions { margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
     .modal input { width: 100%; margin-top: 12px; }
-    @media (max-width: 1050px) { .layout { grid-template-columns: 1fr; } nav { position: static; height: auto; min-height: 0; display: flex; overflow-x: auto; gap: 6px; } .nav-title { display: none; } .tab-button { width: auto; min-width: max-content; } .grid, .grid-3, .file-manager-grid { grid-template-columns: 1fr; } .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); } }
-    @media (max-width: 720px) { body { --console-height: 310px; } body.console-compact { --console-height: 235px; } body.console-large { --console-height: 390px; } .hero-actions button, .command-row button { width: 100%; } .split-actions { grid-template-columns: 1fr; } .command-row { flex-direction: column; } .console-controls button { padding: 8px 10px; } }
+
+    .sidebar-toggle { width: 100%; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    body.sidebar-collapsed { --sidebar-width: 78px; }
+    body.sidebar-collapsed nav { padding: 8px; }
+    body.sidebar-collapsed .nav-title { text-align: center; font-size: 0; padding: 8px 0; }
+    body.sidebar-collapsed .nav-title::after { content: "MENÜ"; font-size: 10px; }
+    body.sidebar-collapsed .tab-button { justify-content: center; padding: 12px 8px; }
+    body.sidebar-collapsed .tab-button .icon { width: auto; font-size: 17px; }
+    body.sidebar-collapsed .tab-button span:not(.icon) { display: none; }
+    body.sidebar-collapsed .sidebar-toggle .toggle-label { display: none; }
+    .workbench-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .card-header { position: relative; }
+    .card-tools { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+    .card-tools button { padding: 5px 8px; min-width: 30px; font-size: 12px; border-radius: 8px; }
+    .card.collapsed > *:not(.card-header) { display: none !important; }
+    .card.maximized { position: fixed; inset: 16px; z-index: 45; overflow: auto; box-shadow: 0 28px 90px rgba(0,0,0,.65); background: rgba(15,23,42,.98); }
+    body.has-maximized-card::after { content: ""; position: fixed; inset: 0; z-index: 44; background: rgba(2,6,23,.65); backdrop-filter: blur(8px); }
+    .split-resizer { border: 1px solid rgba(51,65,85,.72); border-radius: 999px; background: linear-gradient(180deg, rgba(34,197,94,.42), rgba(96,165,250,.26)); cursor: col-resize; min-height: 100%; position: relative; touch-action: none; }
+    .split-resizer::after { content: ""; position: absolute; top: 50%; left: 50%; width: 3px; height: 46px; transform: translate(-50%, -50%); border-left: 1px solid rgba(255,255,255,.5); border-right: 1px solid rgba(255,255,255,.28); }
+    .split-resizer:hover, .split-resizer.dragging { box-shadow: 0 0 0 4px rgba(34,197,94,.13); border-color: rgba(34,197,94,.55); }
+    .editor-panel.editor-fullscreen { position: fixed; inset: 14px; z-index: 50; overflow: auto; background: rgba(15,23,42,.98); box-shadow: 0 28px 90px rgba(0,0,0,.70); }
+    .editor-panel.editor-fullscreen .editor-box { min-height: calc(100vh - 245px); }
+    .editor-box.nowrap { white-space: pre; overflow-wrap: normal; overflow-x: auto; }
+    .console-resize-handle { position: absolute; top: 0; left: 0; right: 0; height: 12px; cursor: ns-resize; touch-action: none; display: flex; align-items: center; justify-content: center; }
+    .console-resize-handle::after { content: ""; width: 96px; height: 4px; border-radius: 999px; background: rgba(148,163,184,.48); box-shadow: 0 0 0 1px rgba(255,255,255,.08); }
+    .console-resize-handle:hover::after, .console-resize-handle.dragging::after { background: rgba(34,197,94,.75); }
+    .console-inner { padding-top: 16px; }
+    .mobile-quickbar { display: none; }
+
+    @media (max-width: 1050px) { .layout { grid-template-columns: 1fr; padding: 10px; } body.sidebar-collapsed { --sidebar-width: 255px; } nav { position: static; height: auto; min-height: 0; display: flex; overflow-x: auto; gap: 6px; padding: 8px; border-radius: 12px; } .sidebar-toggle, .nav-title { display: none; } .tab-button { width: auto; min-width: max-content; } .grid, .grid-3, .file-manager-grid { grid-template-columns: 1fr; } .split-resizer { display: none; } .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); } }
+    @media (max-width: 720px) { :root { --console-height: 310px; } body.console-compact { --console-height: 220px; } body.console-large { --console-height: 70vh; } body.console-maximized { --console-height: 82vh; } header { padding: 10px 12px; } .layout { padding: 8px; gap: 10px; } .hero, .card { padding: 12px; border-radius: 12px; } .hero-actions button, .command-row button, .file-toolbar button, .file-toolbar input, .file-toolbar select { width: 100%; } .file-row-actions { flex-wrap: wrap; } .file-table th, .file-table td { padding: 8px; } .split-actions { grid-template-columns: 1fr; } .command-row { flex-direction: column; } .console-controls button { padding: 7px 9px; font-size: 12px; } .console-head { gap: 6px; } .console-head h3 { font-size: 14px; } .console-head p { display: none; } #log { font-size: 12px; } .editor-panel.editor-fullscreen { inset: 8px; } .card.maximized { inset: 8px; } }
   </style>
 </head>
 <body>
   <header>
-    <h1>WinoMC Bedrock Control Center</h1>
+    <h1>WinoMC Dynamic Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
   </header>
 
   <div class="layout">
     <nav aria-label="WinoMC Menü">
       <div class="nav-title">Menü</div>
+      <button class="sidebar-toggle soft" type="button" id="sidebarToggle"><span>⇔</span><span class="toggle-label">Navigation</span></button>
       <button class="tab-button active" data-tab="overview"><span class="icon">🏠</span> Übersicht</button>
       <button class="tab-button" data-tab="dashboard"><span class="icon">🧩</span> Mein Dashboard</button>
       <button class="tab-button" data-tab="console"><span class="icon">💻</span> Konsole</button>
@@ -253,6 +293,7 @@ INDEX_HTML = r"""<!doctype html>
           <div class="hero-actions">
             <button data-action-id="list">Spieler anzeigen</button>
             <button data-action-id="say">Nachricht</button>
+            <button type="button" class="soft" id="resetWorkbenchLayout">Layout zurücksetzen</button>
             <button class="danger" data-action-id="stop">Server stoppen</button>
           </div>
         </div>
@@ -336,7 +377,7 @@ INDEX_HTML = r"""<!doctype html>
       </section>
 
       <section class="tab-panel" data-panel="files">
-        <div class="card">
+        <div class="card" data-card-id="files-toolbar">
           <div class="card-header"><div><h2>Dateimanager</h2><p>Dateien in erlaubten WinoMC-Ordnern verwalten, herunterladen, hochladen, bearbeiten, entpacken und exportieren.</p></div><span class="badge warn" id="filesStatus">Noch nicht geladen</span></div>
           <div class="file-toolbar">
             <label class="status">Bereich <select id="fileRootSelect" aria-label="Dateibereich"></select></label>
@@ -351,9 +392,10 @@ INDEX_HTML = r"""<!doctype html>
           <div class="file-path" id="fileCurrentPath">config:/</div>
           <div class="breadcrumb" id="fileBreadcrumb"></div>
         </div>
-        <div class="file-manager-grid">
-          <div class="card"><div class="card-header"><div><h3>Explorer</h3><p>Ordner öffnen, Dateien downloaden, ZIPs erstellen oder ZIPs sicher entpacken.</p></div></div><div class="drop-zone" id="fileDropZone">Dateien hierher ziehen oder klicken zum Hochladen<input type="file" id="fileUploadInput" hidden multiple></div><div style="height:12px"></div><div class="file-table-wrap"><table class="file-table"><thead><tr><th>Name</th><th>Typ</th><th>Größe</th><th>Geändert</th><th>Aktionen</th></tr></thead><tbody id="fileTableBody"><tr><td colspan="5">Dateimanager wird geladen...</td></tr></tbody></table></div></div>
-          <div class="card"><div class="card-header"><div><h3>Editor</h3><p>Textdateien bearbeiten. JSON wird vor dem Speichern geprüft, vorher wird automatisch ein Backup erstellt.</p></div></div><div class="file-path" id="editorPath">Keine Datei geöffnet</div><div class="file-meta"><span id="editorMeta">Bereit</span></div><div style="height:10px"></div><textarea id="fileEditor" class="editor-box" spellcheck="false" placeholder="Wähle links eine Textdatei aus."></textarea><div class="actions" style="margin-top:10px"><button type="button" class="primary" id="fileSave">Speichern</button><button type="button" class="soft" id="fileCloseEditor">Editor leeren</button></div><div class="info warning-box" style="margin-top:12px">Änderungen an server.properties, Packs oder Weltdateien brauchen je nach Datei einen Server-Neustart. Fehlerhaftes JSON wird blockiert.</div></div>
+        <div class="file-manager-grid" id="fileManagerGrid">
+          <div class="card file-explorer-panel" data-card-id="files-explorer"><div class="card-header"><div><h3>Explorer</h3><p>Ordner öffnen, Dateien downloaden, ZIPs erstellen oder ZIPs sicher entpacken.</p></div></div><div class="drop-zone" id="fileDropZone">Dateien hierher ziehen oder klicken zum Hochladen<input type="file" id="fileUploadInput" hidden multiple></div><div style="height:12px"></div><div class="file-table-wrap"><table class="file-table"><thead><tr><th>Name</th><th>Typ</th><th>Größe</th><th>Geändert</th><th>Aktionen</th></tr></thead><tbody id="fileTableBody"><tr><td colspan="5">Dateimanager wird geladen...</td></tr></tbody></table></div></div>
+          <div class="split-resizer" id="filesSplitHandle" title="Explorer und Editor verschieben"></div>
+          <div class="card editor-panel" id="editorPanel" data-card-id="files-editor"><div class="card-header"><div><h3>Editor</h3><p>Textdateien bearbeiten. JSON wird vor dem Speichern geprüft, vorher wird automatisch ein Backup erstellt.</p></div></div><div class="file-path" id="editorPath">Keine Datei geöffnet</div><div class="file-meta"><span id="editorMeta">Bereit</span></div><div style="height:10px"></div><textarea id="fileEditor" class="editor-box" spellcheck="false" placeholder="Wähle links eine Textdatei aus."></textarea><div class="actions" style="margin-top:10px"><button type="button" class="primary" id="fileSave">Speichern</button><button type="button" class="soft" id="fileCloseEditor">Editor leeren</button><button type="button" class="soft" id="editorFullscreen">Editor Vollbild</button><button type="button" class="soft" id="editorWrapToggle">Umbruch aus</button><button type="button" class="soft" id="editorFontPlus">A+</button><button type="button" class="soft" id="editorFontMinus">A-</button></div><div class="info warning-box" style="margin-top:12px">Änderungen an server.properties, Packs oder Weltdateien brauchen je nach Datei einen Server-Neustart. Fehlerhaftes JSON wird blockiert.</div></div>
         </div>
       </section>
 
@@ -366,9 +408,10 @@ INDEX_HTML = r"""<!doctype html>
     </main>
   </div>
 
-  <section class="console-dock" aria-label="Live Console">
+  <section class="console-dock" aria-label="Live Console" id="consoleDock">
+    <div class="console-resize-handle" id="consoleResizeHandle" title="Konsole größer oder kleiner ziehen"></div>
     <div class="console-inner">
-      <div class="console-head"><div><h3>Live Console</h3><p>Serverausgabe und freie Befehle bleiben immer erreichbar.</p></div><div class="console-controls"><button class="soft" type="button" data-console-size="compact">Kompakt</button><button class="soft" type="button" data-console-size="normal">Normal</button><button class="soft" type="button" data-console-size="large">Groß</button><button class="ghost" type="button" id="clearLog">Anzeige leeren</button></div></div>
+      <div class="console-head"><div><h3>Live Console</h3><p>Serverausgabe und freie Befehle bleiben immer erreichbar.</p></div><div class="console-controls"><button class="soft" type="button" data-console-size="compact">Kompakt</button><button class="soft" type="button" data-console-size="normal">Normal</button><button class="soft" type="button" data-console-size="large">Groß</button><button class="soft" type="button" id="consoleCollapse">Einklappen</button><button class="soft" type="button" id="consoleMaximize">Max</button><button class="ghost" type="button" id="clearLog">Anzeige leeren</button></div></div>
       <div id="log" aria-live="polite"></div>
       <form id="commandForm" autocomplete="off" class="command-row"><input id="command" name="command" placeholder="Freien Befehl eingeben, z. B. list, say Hallo, gamerule keepinventory true" autofocus><button type="submit" class="primary">Senden</button></form>
     </div>
@@ -411,13 +454,32 @@ INDEX_HTML = r"""<!doctype html>
     const editorPath = document.getElementById('editorPath');
     const editorMeta = document.getElementById('editorMeta');
     const fileEditor = document.getElementById('fileEditor');
+    const fileManagerGrid = document.getElementById('fileManagerGrid');
+    const filesSplitHandle = document.getElementById('filesSplitHandle');
+    const editorPanel = document.getElementById('editorPanel');
+    const editorFullscreen = document.getElementById('editorFullscreen');
+    const editorWrapToggle = document.getElementById('editorWrapToggle');
+    const editorFontPlus = document.getElementById('editorFontPlus');
+    const editorFontMinus = document.getElementById('editorFontMinus');
     const fileSave = document.getElementById('fileSave');
     const fileCloseEditor = document.getElementById('fileCloseEditor');
     const focusConsoleInput = document.getElementById('focusConsoleInput');
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const resetWorkbenchLayout = document.getElementById('resetWorkbenchLayout');
+    const consoleDock = document.getElementById('consoleDock');
+    const consoleResizeHandle = document.getElementById('consoleResizeHandle');
+    const consoleCollapse = document.getElementById('consoleCollapse');
+    const consoleMaximize = document.getElementById('consoleMaximize');
 
     const STORE_DASHBOARD = 'winomcDashboardActionsV2';
     const STORE_COLUMNS = 'winomcDashboardColumnsV1';
     const STORE_CONSOLE_SIZE = 'winomcConsoleSizeV1';
+    const STORE_CONSOLE_HEIGHT = 'winomcConsoleHeightV1';
+    const STORE_SIDEBAR_COLLAPSED = 'winomcSidebarCollapsedV1';
+    const STORE_FILES_SPLIT = 'winomcFilesSplitV1';
+    const STORE_HIDDEN_CARDS = 'winomcHiddenCardsV1';
+    const STORE_EDITOR_FONT = 'winomcEditorFontV1';
+    const STORE_EDITOR_WRAP = 'winomcEditorWrapV1';
     const MAX_JSON_UPLOAD_SIZE = 48 * 1024 * 1024;
 
     const ACTIONS = [
@@ -479,7 +541,6 @@ INDEX_HTML = r"""<!doctype html>
     function addDashboardAction(id) { if (!ACTION_BY_ID[id] || dashboardActions.includes(id)) return; dashboardActions.push(id); saveDashboard(); renderDashboard(); }
     function removeDashboardAction(id) { dashboardActions = dashboardActions.filter(item => item !== id); saveDashboard(); renderDashboard(); }
     function moveDashboardAction(index, direction) { const next = index + direction; if (next < 0 || next >= dashboardActions.length) return; [dashboardActions[index], dashboardActions[next]] = [dashboardActions[next], dashboardActions[index]]; saveDashboard(); renderDashboard(); }
-    function applyConsoleSize(size) { document.body.classList.toggle('console-compact', size === 'compact'); document.body.classList.toggle('console-large', size === 'large'); localStorage.setItem(STORE_CONSOLE_SIZE, size); }
 
     function apiUrl(path, params = {}) { const query = new URLSearchParams(params); const suffix = query.toString() ? '?' + query.toString() : ''; return './' + path.replace(/^\/+/, '') + suffix; }
     async function fetchJson(path, params = {}) { const res = await fetch(apiUrl(path, params), { cache: 'no-store' }); const data = await res.json(); if (!res.ok || !data.ok) throw new Error(data.error || res.statusText); return data; }
@@ -516,6 +577,14 @@ INDEX_HTML = r"""<!doctype html>
     document.addEventListener('click', event => { const actionBtn = event.target.closest('[data-action-id]'); if (actionBtn) { runAction(ACTION_BY_ID[actionBtn.dataset.actionId]); return; } const jump = event.target.closest('[data-jump-tab]'); if (jump) { activateTab(jump.dataset.jumpTab); return; } const openRootBtn = event.target.closest('[data-open-root]'); if (openRootBtn) { openRoot(openRootBtn.dataset.openRoot, '/'); return; } });
     document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => activateTab(button.dataset.tab)));
     document.querySelectorAll('[data-console-size]').forEach(button => button.addEventListener('click', () => applyConsoleSize(button.dataset.consoleSize)));
+    sidebarToggle.addEventListener('click', toggleSidebar);
+    resetWorkbenchLayout.addEventListener('click', resetWorkbench);
+    consoleCollapse.addEventListener('click', () => setConsoleMode(document.body.classList.contains('console-collapsed') ? 'normal' : 'collapsed'));
+    consoleMaximize.addEventListener('click', () => setConsoleMode(document.body.classList.contains('console-maximized') ? 'normal' : 'maximized'));
+    editorFullscreen.addEventListener('click', toggleEditorFullscreen);
+    editorWrapToggle.addEventListener('click', toggleEditorWrap);
+    editorFontPlus.addEventListener('click', () => changeEditorFont(1));
+    editorFontMinus.addEventListener('click', () => changeEditorFont(-1));
     dashboardColumns.addEventListener('change', () => { localStorage.setItem(STORE_COLUMNS, dashboardColumns.value); renderDashboard(); });
     resetDashboard.addEventListener('click', () => { dashboardActions = [...DEFAULT_DASHBOARD]; saveDashboard(); renderDashboard(); });
     clearLog.addEventListener('click', () => { log.innerHTML = ''; appendLine('[WinoMC Console] Anzeige geleert. Der echte Server-Log bleibt erhalten.', 'ok'); });
@@ -537,8 +606,168 @@ INDEX_HTML = r"""<!doctype html>
     fileDropZone.addEventListener('dragleave', () => fileDropZone.classList.remove('dragover'));
     fileDropZone.addEventListener('drop', event => { event.preventDefault(); fileDropZone.classList.remove('dragover'); uploadFiles(event.dataTransfer.files); });
 
+
+    function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+    function getStoredJson(key, fallback) { try { const value = JSON.parse(localStorage.getItem(key) || 'null'); return value ?? fallback; } catch (_) { return fallback; } }
+    function setRootVar(name, value) { document.documentElement.style.setProperty(name, value); }
+
+    function applySidebarState() {
+      const collapsed = localStorage.getItem(STORE_SIDEBAR_COLLAPSED) === 'true';
+      document.body.classList.toggle('sidebar-collapsed', collapsed);
+    }
+
+    function toggleSidebar() {
+      const next = !(localStorage.getItem(STORE_SIDEBAR_COLLAPSED) === 'true');
+      localStorage.setItem(STORE_SIDEBAR_COLLAPSED, String(next));
+      applySidebarState();
+    }
+
+    function setConsoleMode(mode) {
+      document.body.classList.remove('console-collapsed', 'console-hidden', 'console-maximized', 'console-compact', 'console-large');
+      if (mode === 'collapsed') document.body.classList.add('console-collapsed');
+      if (mode === 'hidden') document.body.classList.add('console-hidden');
+      if (mode === 'maximized') document.body.classList.add('console-maximized');
+      if (mode === 'compact') document.body.classList.add('console-compact');
+      if (mode === 'large') document.body.classList.add('console-large');
+      localStorage.setItem(STORE_CONSOLE_SIZE, mode);
+      if (mode === 'normal') {
+        const stored = Number(localStorage.getItem(STORE_CONSOLE_HEIGHT) || 330);
+        setRootVar('--console-height', clamp(stored, 180, Math.round(window.innerHeight * 0.82)) + 'px');
+      } else if (mode === 'compact' || mode === 'large') {
+        document.documentElement.style.removeProperty('--console-height');
+      }
+      if (consoleCollapse) consoleCollapse.textContent = mode === 'collapsed' ? 'Ausklappen' : 'Einklappen';
+      if (consoleMaximize) consoleMaximize.textContent = mode === 'maximized' ? 'Normal' : 'Max';
+    }
+
+    function applyConsoleSize(size) {
+      setConsoleMode(size || 'normal');
+    }
+
+    function initConsoleResize() {
+      if (!consoleResizeHandle) return;
+      let startY = 0;
+      let startHeight = 0;
+      const onMove = event => {
+        const maxHeight = Math.round(window.innerHeight * 0.86);
+        const minHeight = window.innerWidth <= 720 ? 170 : 190;
+        const nextHeight = clamp(startHeight + (startY - event.clientY), minHeight, maxHeight);
+        document.body.classList.remove('console-collapsed', 'console-hidden', 'console-maximized', 'console-compact', 'console-large');
+        setRootVar('--console-height', nextHeight + 'px');
+        localStorage.setItem(STORE_CONSOLE_HEIGHT, String(nextHeight));
+        localStorage.setItem(STORE_CONSOLE_SIZE, 'normal');
+      };
+      const onUp = () => {
+        consoleResizeHandle.classList.remove('dragging');
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      };
+      consoleResizeHandle.addEventListener('pointerdown', event => {
+        event.preventDefault();
+        startY = event.clientY;
+        startHeight = consoleDock ? consoleDock.getBoundingClientRect().height : 330;
+        consoleResizeHandle.classList.add('dragging');
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+    }
+
+    function initFileSplitResize() {
+      const stored = localStorage.getItem(STORE_FILES_SPLIT);
+      if (stored) setRootVar('--files-left-width', stored + '%');
+      if (!filesSplitHandle || !fileManagerGrid) return;
+      let rect = null;
+      const onMove = event => {
+        if (window.innerWidth <= 1050 || !rect) return;
+        const percent = clamp(((event.clientX - rect.left) / rect.width) * 100, 30, 72);
+        setRootVar('--files-left-width', percent.toFixed(1) + '%');
+        localStorage.setItem(STORE_FILES_SPLIT, percent.toFixed(1));
+      };
+      const onUp = () => {
+        filesSplitHandle.classList.remove('dragging');
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      };
+      filesSplitHandle.addEventListener('pointerdown', event => {
+        if (window.innerWidth <= 1050) return;
+        event.preventDefault();
+        rect = fileManagerGrid.getBoundingClientRect();
+        filesSplitHandle.classList.add('dragging');
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+    }
+
+    function applyEditorPrefs() {
+      const font = Number(localStorage.getItem(STORE_EDITOR_FONT) || 13);
+      fileEditor.style.fontSize = clamp(font, 11, 22) + 'px';
+      const wrap = localStorage.getItem(STORE_EDITOR_WRAP) !== 'off';
+      fileEditor.classList.toggle('nowrap', !wrap);
+      fileEditor.setAttribute('wrap', wrap ? 'soft' : 'off');
+      if (editorWrapToggle) editorWrapToggle.textContent = wrap ? 'Umbruch aus' : 'Umbruch an';
+    }
+
+    function changeEditorFont(delta) {
+      const current = Number(localStorage.getItem(STORE_EDITOR_FONT) || 13);
+      localStorage.setItem(STORE_EDITOR_FONT, String(clamp(current + delta, 11, 22)));
+      applyEditorPrefs();
+    }
+
+    function toggleEditorWrap() {
+      const wrap = localStorage.getItem(STORE_EDITOR_WRAP) !== 'off';
+      localStorage.setItem(STORE_EDITOR_WRAP, wrap ? 'off' : 'on');
+      applyEditorPrefs();
+    }
+
+    function toggleEditorFullscreen() {
+      editorPanel.classList.toggle('editor-fullscreen');
+      if (editorFullscreen) editorFullscreen.textContent = editorPanel.classList.contains('editor-fullscreen') ? 'Vollbild schließen' : 'Editor Vollbild';
+    }
+
+    function cardIdFor(card, index) {
+      if (card.dataset.cardId) return card.dataset.cardId;
+      const heading = card.querySelector('h2, h3');
+      const base = (heading ? heading.textContent : 'card-' + index).toLowerCase().replace(/[^a-z0-9äöüß]+/g, '-').replace(/^-+|-+$/g, '');
+      card.dataset.cardId = base || ('card-' + index);
+      return card.dataset.cardId;
+    }
+
+    function initCardChrome() {
+      const hidden = new Set(getStoredJson(STORE_HIDDEN_CARDS, []));
+      document.querySelectorAll('.card').forEach((card, index) => {
+        const id = cardIdFor(card, index);
+        if (hidden.has(id)) card.style.display = 'none';
+        const header = card.querySelector(':scope > .card-header');
+        if (!header || header.querySelector('.card-tools')) return;
+        const tools = document.createElement('div');
+        tools.className = 'card-tools';
+        const collapse = document.createElement('button');
+        collapse.type = 'button'; collapse.title = 'Modul einklappen'; collapse.textContent = '–';
+        collapse.addEventListener('click', event => { event.stopPropagation(); card.classList.toggle('collapsed'); collapse.textContent = card.classList.contains('collapsed') ? '+' : '–'; });
+        const maximize = document.createElement('button');
+        maximize.type = 'button'; maximize.title = 'Modul maximieren'; maximize.textContent = '□';
+        maximize.addEventListener('click', event => { event.stopPropagation(); const active = card.classList.toggle('maximized'); document.body.classList.toggle('has-maximized-card', active); maximize.textContent = active ? '×' : '□'; });
+        const hide = document.createElement('button');
+        hide.type = 'button'; hide.title = 'Modul ausblenden'; hide.textContent = '×';
+        hide.addEventListener('click', event => { event.stopPropagation(); hidden.add(id); localStorage.setItem(STORE_HIDDEN_CARDS, JSON.stringify([...hidden])); card.style.display = 'none'; });
+        tools.append(collapse, maximize, hide);
+        header.appendChild(tools);
+      });
+    }
+
+    function resetWorkbench() {
+      ['winomcConsoleHeightV1','winomcConsoleSizeV1','winomcSidebarCollapsedV1','winomcFilesSplitV1','winomcHiddenCardsV1','winomcEditorFontV1','winomcEditorWrapV1'].forEach(key => localStorage.removeItem(key));
+      document.documentElement.style.removeProperty('--console-height');
+      document.documentElement.style.removeProperty('--files-left-width');
+      document.body.classList.remove('sidebar-collapsed', 'console-collapsed', 'console-hidden', 'console-maximized', 'console-compact', 'console-large', 'has-maximized-card');
+      document.querySelectorAll('.card').forEach(card => { card.style.display = ''; card.classList.remove('collapsed', 'maximized'); });
+      applyConsoleSize('normal');
+      applyEditorPrefs();
+      alert('Workbench-Layout zurückgesetzt.');
+    }
+
     function connectLogs() { const source = new EventSource('./api/logs'); source.onopen = () => { statusEl.textContent = 'Live verbunden'; statusDot.classList.add('ok'); }; source.onmessage = event => { try { const data = JSON.parse(event.data); if (data.line) appendLine(data.line); } catch (_) {} }; source.onerror = () => { statusEl.textContent = 'Verbindung wird neu aufgebaut...'; statusDot.classList.remove('ok'); }; }
-    applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal'); renderDashboard(); connectLogs(); loadStatus();
+    applySidebarState(); applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal'); applyEditorPrefs(); initConsoleResize(); initFileSplitResize(); initCardChrome(); renderDashboard(); connectLogs(); loadStatus();
   </script>
 </body>
 </html>

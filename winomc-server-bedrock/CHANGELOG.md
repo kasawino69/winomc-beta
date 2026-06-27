@@ -5,6 +5,18 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.2
+
+* Web Console zur `WinoMC Dynamic Workbench` weiterentwickelt
+* Sidebar einklappbar gemacht, Desktop mit Icon-only-Modus und mobilem Scroll-Menü
+* Live Console dynamisch gemacht: Höhe per Drag-Leiste veränderbar, einklappbar und maximierbar
+* Dateimanager modernisiert: Explorer-/Editor-Bereich per Split-Griff vergrößerbar
+* Editor-Komfort ergänzt: Vollbild, Schriftgröße, Zeilenumbruch an/aus und weiterhin JSON-Prüfung vor dem Speichern
+* Module/Karten können eingeklappt, maximiert oder ausgeblendet werden
+* Workbench-Layout wird im Browser gespeichert und kann per Button zurückgesetzt werden
+* Mobile Ansicht für iPhone, Tablet und schmale Displays verbessert
+* Micro-Interaktionen und visuelle Rückmeldungen für eine modernere Bedienung ergänzt
+
 ### 1.5.1
 
 * Web Console zum WinoMC Control Center erweitert
@@ -71,7 +83,6 @@
 * Native Paket-Backups vor BDS-Updates ergänzt
 * `PACKAGE_BACKUP_KEEP` zur Begrenzung alter Paket-Backups nativ umgesetzt
 * Weitere itzg-Komfortfunktionen in die native WinoMC Runtime übernommen
-
 ### 1.4.3
 
 * Native Runtime weiter bereinigt
