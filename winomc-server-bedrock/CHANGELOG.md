@@ -5,9 +5,18 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.4.2
+
+Bereinigung
+
 ### 1.4.1
 
-Fehlerbehebungen
+* Dockerfile final auf direkte Ubuntu-Basis umgestellt
+* Veraltete `build.yaml`-Abhängigkeit entfernt
+* Build-Probleme durch nicht gesetztes `BUILD_FROM` behoben
+* Native WinoMC Runtime erfolgreich mit eigener Basis gebaut und gestartet
+* Add-on-Update auf native Runtime erfolgreich getestet
+* Alte itzg-/Home-Assistant-Base-Abhängigkeit weiter bereinigt
 
 ### 1.4.0
 
