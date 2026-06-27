@@ -5,6 +5,10 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.4.8
+
+Bereinigung und Dokumentation
+
 ### 1.4.7
 
 * Experimentelle Unterstützung für `aarch64` / ARM64 ergänzt

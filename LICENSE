@@ -1,6 +1,6 @@
-MIT License
+# MIT License
 
-Copyright (c) 2023 williamcorsel
+Copyright (c) 2023 williamcorsel  
 Copyright (c) 2026 kasawino69
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,3 +20,28 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+## Third-Party Notices
+
+This repository was originally based on work from:
+
+- williamcorsel/hassio-addons
+
+Parts of the structure, ideas and Home Assistant add-on patterns were inspired by or compared with:
+
+- alexbelgium/hassio-addons
+- itzg/docker-minecraft-bedrock-server
+- poeggi/bds-ipv6fix
+- Box64
+
+The WinoMC IPv6 bind fix is implemented inside this repository and built from source as part of the WinoMC add-on image. The technical approach is inspired by the MIT-licensed `bds-ipv6fix` project by poeggi.
+
+ARM64 / aarch64 support uses Box64 as a compatibility layer where required. Box64 is developed and licensed by its respective authors and is not owned by this project.
+
+Minecraft, Minecraft Bedrock, Bedrock Dedicated Server, Mojang and Microsoft are trademarks or properties of their respective owners.
+
+Home Assistant is a trademark or project of the Home Assistant community and its respective owners.
+
+This project is not affiliated with, endorsed by, sponsored by or officially connected to Mojang, Microsoft, Home Assistant, itzg, poeggi, Box64 or the original upstream add-on repositories unless explicitly stated otherwise.

@@ -1,4 +1,4 @@
-# WinoMC Friend Broadcast
+# [BETA] WinoMC Friend Broadcast
 
 Das **WinoMC Friend Broadcast Add-on** zeigt deinen WinoMC Bedrock Server über Xbox Live beziehungsweise die Freunde-Liste an.
 

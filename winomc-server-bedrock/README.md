@@ -1,1454 +1,103 @@
-# [BETA] WinoMC Bedrock Server
+# WinoMC
 
-Das **WinoMC Bedrock Server Add-on** stellt einen Minecraft Bedrock Dedicated Server direkt in Home Assistant bereit.
+WinoMC stellt einen Minecraft Bedrock Dedicated Server als Home-Assistant-Add-on bereit.
 
-Das Add-on basiert auf einem Minecraft Bedrock Dedicated Server Container und ist für den Betrieb als Home-Assistant-Add-on angepasst.
+Das Ziel ist ein einfacher Bedrock-Server für Home Assistant OS: Repository hinzufügen, Add-on installieren, Einstellungen prüfen, starten und spielen.
 
-Es eignet sich für private Bedrock-Server im Heimnetzwerk, zum Beispiel für Minecraft Bedrock auf:
-
-- Windows
-- Xbox
-- Nintendo Switch
-- iOS
-- Android
-- PlayStation
+WinoMC nutzt eine eigene native Runtime und basiert nicht mehr auf dem itzg-Image.
 
 ---
 
-## Funktionen
+### Inhalt
 
 - Minecraft Bedrock Dedicated Server als Home-Assistant-Add-on
-- Konfiguration direkt über die Home-Assistant-UI
-- Persistente Serverdaten im Add-on-Konfigurationsverzeichnis
+- Konfiguration über die Home-Assistant-Oberfläche
+- Web-Konsole direkt in Home Assistant
+- Speicherung von Welten und Serverdaten im Add-on
 - Unterstützung für Home-Assistant-Backups
-- Unterstützung für LAN-Sichtbarkeit
-- IPv4- und IPv6-Port-Konfiguration
-- Optionaler IPv6-Bind-Fix für Dual-Stack-Setups
-- WinoMC Live Console direkt über die Home-Assistant-Ingress-Oberfläche
-- Konsolenbefehle über Home Assistant und Automationen möglich
-- Unterstützung für Worlds, Resource Packs und Behavior Packs
-- Import- und Export-Verzeichnisse unter `/share/winomc`
+- Import von Welten, Resource Packs und Behavior Packs
+- IPv4 und IPv6
+- Optionaler IPv6-Bind-Fix
+- Unterstützung für amd64
+- Experimentelle Unterstützung für aarch64 / ARM64 über Box64
 
 ---
 
-## Installation
+### Installation
 
-1. Öffne Home Assistant.
-2. Gehe zu **Einstellungen → Add-ons → Add-on Store**.
-3. Füge das WinoMC Add-on Repository hinzu, falls noch nicht geschehen.
-4. Installiere **WinoMC Bedrock Server**.
-5. Öffne die Add-on-Konfiguration.
-6. Passe die Einstellungen an.
-7. Starte das Add-on.
+Repository in Home Assistant hinzufügen:
 
-Beim ersten Start lädt das Add-on die passende Minecraft Bedrock Server-Version herunter.
+[![Repository zu Home Assistant hinzufügen](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https://github.com/kasawino69/winomc-beta)
+
+Alternativ manuell:
+
+1. Home Assistant öffnen
+2. Einstellungen -> Add-ons -> Add-on Store
+3. Oben rechts auf die drei Punkte klicken
+4. Repositorys auswählen
+5. Diese URL einfügen:
+
+```text
+https://github.com/kasawino69/winomc-beta
+```
+
+Danach das Add-on installieren:
+
+```text
+[BETA] WinoMC Bedrock Server
+```
 
 ---
 
-## Speicherorte
+### Schnellstart
 
-Das Add-on nutzt folgende interne Pfade:
-
-```text
-/config
-```
-
-Hauptverzeichnis für Serverdaten.
-
-```text
-/config/worlds
-```
-
-Speicherort für Welten.
-
-```text
-/config/behavior_packs
-```
-
-Speicherort für Behavior Packs.
-
-```text
-/config/resource_packs
-```
-
-Speicherort für Resource Packs.
-
-```text
-/config/world_templates
-```
-
-Speicherort für Weltvorlagen.
-
-```text
-/share/winomc/import
-```
-
-Optionales Import-Verzeichnis.
-
-```text
-/share/winomc/export
-```
-
-Optionales Export-Verzeichnis.
-
----
-
-## Netzwerk
-
-Das Add-on verwendet Host-Netzwerk.
-
-Standard-Port:
-
-```text
-19132/udp
-```
-
-Minecraft Bedrock verwendet UDP. Bei Portweiterleitungen, Firewall-Regeln oder Router-Einstellungen muss daher UDP freigegeben werden, nicht TCP.
-
----
-
-## Empfohlene Grundkonfiguration
-
-Für einen normalen privaten Survival-Server:
+Für einen normalen privaten Survival-Server reichen meistens diese Werte:
 
 ```yaml
 VERSION: LATEST
 SERVER_NAME: WinoMC Server
 LEVEL_NAME: world
 GAMEMODE: survival
-FORCE_GAMEMODE: false
 DIFFICULTY: normal
 ALLOW_CHEATS: false
 MAX_PLAYERS: 10
-ALLOW_LIST: false
-ALLOW_LIST_USERS: ""
-LEVEL_TYPE: DEFAULT
 ONLINE_MODE: true
 ENABLE_LAN_VISIBILITY: true
-VIEW_DISTANCE: 10
-TICK_DISTANCE: 4
-PLAYER_IDLE_TIMEOUT: 30
-MAX_THREADS: 2
-LEVEL_SEED: ""
-DEFAULT_PLAYER_PERMISSION_LEVEL: member
-TEXTUREPACK_REQUIRED: false
-SERVER_AUTHORITATIVE_MOVEMENT: server-auth
-SERVER_AUTHORITATIVE_BLOCK_BREAKING: false
-EMIT_SERVER_TELEMETRY: false
-PLAYER_MOVEMENT_SCORE_THRESHOLD: 20
-PLAYER_MOVEMENT_DISTANCE_THRESHOLD: 0.3
-PLAYER_MOVEMENT_DURATION_THRESHOLD_IN_MS: 500
-CORRECT_PLAYER_MOVEMENT: false
-OPS: ""
-MEMBERS: ""
-VISITORS: ""
 SERVER_PORT: 19132
 SERVER_PORT_V6: 19133
-ENABLE_BDS_V6BIND_FIX: false
-TZ: Europe/Berlin
-PACKAGE_BACKUP_KEEP: 2
-DOWNLOAD_PROGRESS: false
-MC_PACK: ""
-FORCE_WORLD_COPY: false
-FORCE_PACK_COPY: false
-CONTENT_LOG_FILE_ENABLED: false
-CONTENT_LOG_LEVEL: info
-CONTENT_LOG_CONSOLE_OUTPUT_ENABLED: false
-CHAT_RESTRICTION: None
-DISABLE_PLAYER_INTERACTION: false
-DISABLE_PERSONA: false
-DISABLE_CUSTOM_SKINS: false
-MSA_GAMERTAGS_ONLY: false
-ENABLE_WEB_CONSOLE: true
-WINOMC_CONSOLE_HISTORY_LIMIT: 300
-VARIABLES: ""
-```
-
----
-
-# UI-Einstellungen
-
-## Server-Version
-
-### `VERSION`
-
-Legt fest, welche Minecraft Bedrock Server-Version verwendet wird.
-
-Mögliche Werte:
-
-```text
-LATEST
-PREVIEW
-PREVIOUS
-konkrete Versionsnummer
-```
-
-Beispiele:
-
-```yaml
-VERSION: LATEST
-```
-
-```yaml
-VERSION: PREVIEW
-```
-
-```yaml
-VERSION: PREVIOUS
-```
-
-```yaml
-VERSION: "1.21.93.1"
-```
-
-Empfohlen:
-
-```yaml
-VERSION: LATEST
-```
-
-Mit `LATEST` wird beim Start des Add-ons geprüft, ob eine neuere stabile Bedrock Server-Version verfügbar ist.
-
-Hinweis: Ein Add-on-Neustart kann dadurch auch den Bedrock Server aktualisieren.
-
----
-
-## Welt und Servername
-
-### `SERVER_NAME`
-
-Name des Servers, der im Minecraft-Client angezeigt wird.
-
-Typ:
-
-```text
-Text
-```
-
-Beispiele:
-
-```yaml
-SERVER_NAME: WinoMC Server
-```
-
-```yaml
-SERVER_NAME: Family Server
-```
-
-```yaml
-SERVER_NAME: Survival World
-```
-
----
-
-### `LEVEL_NAME`
-
-Name der Welt.
-
-Typ:
-
-```text
-Text
-```
-
-Beispiel:
-
-```yaml
-LEVEL_NAME: world
-```
-
-Wenn bereits eine Welt mit diesem Namen existiert, wird diese verwendet.
-
-Wenn keine Welt mit diesem Namen existiert, wird beim Start eine neue Welt erzeugt.
-
----
-
-### `LEVEL_SEED`
-
-Seed für neue Welten.
-
-Typ:
-
-```text
-Text
-```
-
-Beispiele:
-
-```yaml
-LEVEL_SEED: ""
-```
-
-```yaml
-LEVEL_SEED: "123456789"
-```
-
-```yaml
-LEVEL_SEED: "MySeed"
-```
-
-Wichtig: Der Seed wirkt normalerweise nur bei neu erzeugten Welten. Eine bestehende Welt wird dadurch nicht nachträglich neu generiert.
-
----
-
-### `LEVEL_TYPE`
-
-Legt den Welt-Typ fest.
-
-Mögliche Werte:
-
-```text
-DEFAULT
-FLAT
-LEGACY
-```
-
-Empfohlen:
-
-```yaml
-LEVEL_TYPE: DEFAULT
-```
-
-Bedeutung:
-
-| Wert | Bedeutung |
-|---|---|
-| `DEFAULT` | Normale Minecraft-Welt |
-| `FLAT` | Flache Welt |
-| `LEGACY` | Alte Legacy-Weltgröße, falls unterstützt |
-
----
-
-## Spielmodus und Schwierigkeit
-
-### `GAMEMODE`
-
-Legt den Standard-Spielmodus fest.
-
-Mögliche Werte:
-
-```text
-survival
-creative
-adventure
-```
-
-Empfohlen für normales Spielen:
-
-```yaml
-GAMEMODE: survival
-```
-
-Bedeutung:
-
-| Wert | Bedeutung |
-|---|---|
-| `survival` | Überleben |
-| `creative` | Kreativmodus |
-| `adventure` | Abenteuer-Modus |
-
----
-
-### `FORCE_GAMEMODE`
-
-Erzwingt den eingestellten Spielmodus beim Beitritt.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Empfohlen:
-
-```yaml
-FORCE_GAMEMODE: false
-```
-
-Wenn `true`, werden Spieler beim Beitritt auf den unter `GAMEMODE` gesetzten Modus gezwungen.
-
----
-
-### `DIFFICULTY`
-
-Legt die Schwierigkeit fest.
-
-Mögliche Werte:
-
-```text
-peaceful
-easy
-normal
-hard
-```
-
-Empfohlen:
-
-```yaml
-DIFFICULTY: normal
-```
-
-Bedeutung:
-
-| Wert | Bedeutung |
-|---|---|
-| `peaceful` | Friedlich, keine feindlichen Mobs |
-| `easy` | Einfach |
-| `normal` | Normal |
-| `hard` | Schwer |
-
----
-
-### `ALLOW_CHEATS`
-
-Aktiviert Cheats.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Empfohlen für Survival:
-
-```yaml
-ALLOW_CHEATS: false
-```
-
-Für Testserver oder Admin-Welten:
-
-```yaml
-ALLOW_CHEATS: true
-```
-
-Hinweis: Cheats können Auswirkungen auf Erfolge/Achievements haben.
-
----
-
-## Spieler und Rechte
-
-### `MAX_PLAYERS`
-
-Maximale Anzahl gleichzeitiger Spieler.
-
-Typ:
-
-```text
-Ganzzahl
-```
-
-Beispiel:
-
-```yaml
-MAX_PLAYERS: 10
-```
-
-Für kleine private Server sind Werte zwischen `5` und `20` üblich.
-
----
-
-### `DEFAULT_PLAYER_PERMISSION_LEVEL`
-
-Standard-Berechtigung für neue Spieler.
-
-Mögliche Werte:
-
-```text
-member
-operator
-visitor
-```
-
-Empfohlen:
-
-```yaml
-DEFAULT_PLAYER_PERMISSION_LEVEL: member
-```
-
-Bedeutung:
-
-| Wert | Bedeutung |
-|---|---|
-| `member` | Normaler Spieler |
-| `operator` | Operator/Admin |
-| `visitor` | Besucher, eingeschränkte Rechte |
-
----
-
-### `OPS`
-
-Liste von Spielern oder XUIDs, die Operator-Rechte erhalten sollen.
-
-Typ:
-
-```text
-Text
-```
-
-Beispiel:
-
-```yaml
-OPS: ""
-```
-
-Beispiel mit Platzhaltern:
-
-```yaml
-OPS: "XUID1,XUID2"
-```
-
-Hinweis: Je nach Setup werden XUIDs oder unterstützte Spielerkennungen verwendet.
-
----
-
-### `MEMBERS`
-
-Liste von Spielern oder XUIDs, die Member-Rechte erhalten sollen.
-
-Typ:
-
-```text
-Text
-```
-
-Beispiel:
-
-```yaml
-MEMBERS: ""
-```
-
-Beispiel mit Platzhaltern:
-
-```yaml
-MEMBERS: "XUID1,XUID2"
-```
-
----
-
-### `VISITORS`
-
-Liste von Spielern oder XUIDs, die Besucher-Rechte erhalten sollen.
-
-Typ:
-
-```text
-Text
-```
-
-Beispiel:
-
-```yaml
-VISITORS: ""
-```
-
-Beispiel mit Platzhaltern:
-
-```yaml
-VISITORS: "XUID1,XUID2"
-```
-
----
-
-## Allowlist
-
-### `ALLOW_LIST`
-
-Aktiviert die Allowlist.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Empfohlen für private Server:
-
-```yaml
-ALLOW_LIST: true
-```
-
-Wenn aktiviert, dürfen nur eingetragene Spieler beitreten.
-
----
-
-### `ALLOW_LIST_USERS`
-
-Spieler für die Allowlist.
-
-Typ:
-
-```text
-Text
-```
-
-Format:
-
-```text
-Name:XUID,Name2:XUID2
-```
-
-Beispiel:
-
-```yaml
-ALLOW_LIST_USERS: "Player1:XUID,Player2:XUID"
-```
-
-Wenn `ALLOW_LIST` deaktiviert ist, wird diese Liste normalerweise nicht benötigt.
-
----
-
-## Online-Modus und Sichtbarkeit
-
-### `ONLINE_MODE`
-
-Legt fest, ob Xbox-/Microsoft-Authentifizierung verwendet wird.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Empfohlen:
-
-```yaml
-ONLINE_MODE: true
-```
-
-Für normale Bedrock-Clients sollte `ONLINE_MODE` aktiviert bleiben.
-
----
-
-### `ENABLE_LAN_VISIBILITY`
-
-Legt fest, ob der Server im lokalen Netzwerk als LAN-Spiel sichtbar sein soll.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Empfohlen:
-
-```yaml
-ENABLE_LAN_VISIBILITY: true
-```
-
-Hinweis: LAN-Sichtbarkeit hängt zusätzlich vom Netzwerk, Router, Multicast/Broadcast-Verhalten und Client-Gerät ab.
-
----
-
-## Ports und IPv6
-
-### `SERVER_PORT`
-
-IPv4-Port des Bedrock Servers.
-
-Typ:
-
-```text
-Port
-```
-
-Standard:
-
-```yaml
-SERVER_PORT: 19132
-```
-
-Minecraft Bedrock verwendet UDP.
-
----
-
-### `SERVER_PORT_V6`
-
-IPv6-Port des Bedrock Servers.
-
-Typ:
-
-```text
-Port
-```
-
-Standard:
-
-```yaml
-SERVER_PORT_V6: 19133
-```
-
----
-
-### `ENABLE_BDS_V6BIND_FIX`
-
-Aktiviert den IPv6-Bind-Fix.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-ENABLE_BDS_V6BIND_FIX: false
-```
-
-Wenn aktiviert, können IPv4 und IPv6 denselben Port verwenden.
-
-Beispiel für Dual-Stack mit gleichem Port:
-
-```yaml
-SERVER_PORT: 19132
-SERVER_PORT_V6: 19132
-ENABLE_BDS_V6BIND_FIX: true
-```
-
-Empfohlen, wenn Geräte in Dual-Stack-Umgebungen Probleme beim Verbinden haben.
-
----
-
-## Performance
-
-### `VIEW_DISTANCE`
-
-Sichtweite in Chunks.
-
-Typ:
-
-```text
-Ganzzahl
-```
-
-Standard:
-
-```yaml
-VIEW_DISTANCE: 10
-```
-
-Niedriger Wert:
-
-```yaml
-VIEW_DISTANCE: 6
-```
-
-Höherer Wert:
-
-```yaml
-VIEW_DISTANCE: 16
-```
-
-Hinweis: Höhere Werte benötigen mehr CPU und RAM.
-
----
-
-### `TICK_DISTANCE`
-
-Tick-Distanz in Chunks.
-
-Typ:
-
-```text
-Ganzzahl
-```
-
-Standard:
-
-```yaml
-TICK_DISTANCE: 4
-```
-
-Empfohlen:
-
-```yaml
-TICK_DISTANCE: 4
-```
-
-Höhere Werte können Redstone, Farmen und Simulationen in größerem Abstand aktiv halten, erhöhen aber die Last.
-
----
-
-### `PLAYER_IDLE_TIMEOUT`
-
-Zeit in Minuten, nach der inaktive Spieler gekickt werden.
-
-Typ:
-
-```text
-Ganzzahl
-```
-
-Beispiel:
-
-```yaml
-PLAYER_IDLE_TIMEOUT: 30
-```
-
-`0` kann je nach Serverversion bedeuten, dass kein Timeout verwendet wird.
-
----
-
-### `MAX_THREADS`
-
-Maximale Thread-Anzahl für den Server.
-
-Typ:
-
-```text
-Ganzzahl
-```
-
-Standard:
-
-```yaml
-MAX_THREADS: 2
-```
-
-Für kleine private Server:
-
-```yaml
-MAX_THREADS: 2
-```
-
-Bei leistungsstärkerer Hardware kann ein höherer Wert getestet werden.
-
----
-
-## Resource Packs und Add-ons
-
-### `TEXTUREPACK_REQUIRED`
-
-Legt fest, ob Spieler Resource Packs zwingend akzeptieren müssen.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Empfohlen:
-
-```yaml
-TEXTUREPACK_REQUIRED: false
-```
-
-Wenn `true`, können Spieler nur beitreten, wenn sie die benötigten Resource Packs akzeptieren.
-
----
-
-### `MC_PACK`
-
-Pfad oder Angabe für ein Minecraft Pack.
-
-Typ:
-
-```text
-Text
-```
-
-Standard:
-
-```yaml
-MC_PACK: ""
-```
-
-Beispiel:
-
-```yaml
-MC_PACK: "/share/winomc/import/example.mcpack"
-```
-
-Wenn nicht verwendet, leer lassen.
-
----
-
-### `FORCE_WORLD_COPY`
-
-Erzwingt das Kopieren einer Welt.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-FORCE_WORLD_COPY: false
-```
-
-Nur aktivieren, wenn eine Welt bewusst erneut kopiert/importiert werden soll.
-
----
-
-### `FORCE_PACK_COPY`
-
-Erzwingt das Kopieren von Packs.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-FORCE_PACK_COPY: false
-```
-
-Nur aktivieren, wenn Packs bewusst erneut kopiert/importiert werden sollen.
-
----
-
-## Serverautorität und Bewegung
-
-Diese Optionen steuern, wie streng der Server Spielerbewegungen prüft.
-
-### `SERVER_AUTHORITATIVE_MOVEMENT`
-
-Legt fest, wie Bewegungen validiert werden.
-
-Mögliche Werte:
-
-```text
-client-auth
-server-auth
-server-auth-with-rewind
-```
-
-Empfohlen:
-
-```yaml
-SERVER_AUTHORITATIVE_MOVEMENT: server-auth
-```
-
-Bedeutung:
-
-| Wert | Bedeutung |
-|---|---|
-| `client-auth` | Client ist stärker verantwortlich |
-| `server-auth` | Server prüft Bewegungen |
-| `server-auth-with-rewind` | Server prüft strenger und kann Bewegungen zurücksetzen |
-
----
-
-### `SERVER_AUTHORITATIVE_BLOCK_BREAKING`
-
-Legt fest, ob Blockabbau serverautoritativ geprüft wird.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-SERVER_AUTHORITATIVE_BLOCK_BREAKING: false
-```
-
----
-
-### `PLAYER_MOVEMENT_SCORE_THRESHOLD`
-
-Schwellwert für Bewegungsprüfung.
-
-Typ:
-
-```text
-Ganzzahl
-```
-
-Standard:
-
-```yaml
-PLAYER_MOVEMENT_SCORE_THRESHOLD: 20
-```
-
----
-
-### `PLAYER_MOVEMENT_DISTANCE_THRESHOLD`
-
-Distanz-Schwellwert für Bewegungsprüfung.
-
-Typ:
-
-```text
-Kommazahl
-```
-
-Standard:
-
-```yaml
-PLAYER_MOVEMENT_DISTANCE_THRESHOLD: 0.3
-```
-
----
-
-### `PLAYER_MOVEMENT_DURATION_THRESHOLD_IN_MS`
-
-Zeit-Schwellwert für Bewegungsprüfung in Millisekunden.
-
-Typ:
-
-```text
-Ganzzahl
-```
-
-Standard:
-
-```yaml
-PLAYER_MOVEMENT_DURATION_THRESHOLD_IN_MS: 500
-```
-
----
-
-### `CORRECT_PLAYER_MOVEMENT`
-
-Legt fest, ob erkannte Bewegungsabweichungen korrigiert werden.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-CORRECT_PLAYER_MOVEMENT: false
-```
-
-Für normale private Server meist:
-
-```yaml
-CORRECT_PLAYER_MOVEMENT: false
-```
-
----
-
-## Telemetrie und Content-Logs
-
-### `EMIT_SERVER_TELEMETRY`
-
-Legt fest, ob Server-Telemetrie gesendet wird.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Empfohlen:
-
-```yaml
-EMIT_SERVER_TELEMETRY: false
-```
-
----
-
-### `CONTENT_LOG_FILE_ENABLED`
-
-Aktiviert Content-Logdateien.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-CONTENT_LOG_FILE_ENABLED: false
-```
-
-Für Fehlersuche bei Add-ons oder Packs kann aktiviert werden:
-
-```yaml
-CONTENT_LOG_FILE_ENABLED: true
-```
-
----
-
-### `CONTENT_LOG_LEVEL`
-
-Legt die Detailstufe der Content-Logs fest.
-
-Mögliche Werte:
-
-```text
-verbose
-info
-warning
-error
-```
-
-Standard:
-
-```yaml
-CONTENT_LOG_LEVEL: info
-```
-
-Bedeutung:
-
-| Wert | Bedeutung |
-|---|---|
-| `verbose` | Sehr ausführlich |
-| `info` | Normale Informationen |
-| `warning` | Warnungen |
-| `error` | Nur Fehler |
-
----
-
-### `CONTENT_LOG_CONSOLE_OUTPUT_ENABLED`
-
-Gibt Content-Logs zusätzlich in der Konsole aus.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-CONTENT_LOG_CONSOLE_OUTPUT_ENABLED: false
-```
-
-Für Fehlersuche:
-
-```yaml
-CONTENT_LOG_CONSOLE_OUTPUT_ENABLED: true
-```
-
----
-
-## Chat und Spielerinteraktion
-
-### `CHAT_RESTRICTION`
-
-Legt Chat-Einschränkungen fest.
-
-Mögliche Werte:
-
-```text
-None
-Dropped
-Disabled
-```
-
-Standard:
-
-```yaml
-CHAT_RESTRICTION: None
-```
-
-Bedeutung:
-
-| Wert | Bedeutung |
-|---|---|
-| `None` | Keine Chat-Einschränkung |
-| `Dropped` | Chat-Nachrichten können verworfen werden |
-| `Disabled` | Chat deaktiviert |
-
----
-
-### `DISABLE_PLAYER_INTERACTION`
-
-Deaktiviert Spielerinteraktionen.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-DISABLE_PLAYER_INTERACTION: false
-```
-
-Wenn aktiviert, können Spielerinteraktionen eingeschränkt werden.
-
----
-
-### `DISABLE_PERSONA`
-
-Deaktiviert Persona-/Charakter-Anpassungen.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-DISABLE_PERSONA: false
-```
-
----
-
-### `DISABLE_CUSTOM_SKINS`
-
-Deaktiviert benutzerdefinierte Skins.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-DISABLE_CUSTOM_SKINS: false
-```
-
-Für strengere Serverregeln:
-
-```yaml
-DISABLE_CUSTOM_SKINS: true
-```
-
----
-
-### `MSA_GAMERTAGS_ONLY`
-
-Beschränkt Namen auf Microsoft-/Xbox-Gamertags.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-MSA_GAMERTAGS_ONLY: false
-```
-
----
-
-## Live Console
-
-### `ENABLE_WEB_CONSOLE`
-
-Aktiviert die WinoMC Live Console in der Home-Assistant-Add-on-Oberfläche.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Empfohlen:
-
-```yaml
 ENABLE_WEB_CONSOLE: true
 ```
 
-Wenn diese Option aktiv ist, startet das Add-on zusätzlich zur Bedrock-Server-Instanz eine kleine interne Web-Konsole.
-
-Die Konsole wird über Home-Assistant-Ingress geöffnet und ist dadurch direkt in Home Assistant eingebettet.
-
-Über die Live Console können Bedrock-Konsolenbefehle gesendet werden, zum Beispiel:
-
-```text
-say Hallo
-list
-op PlayerName
-save hold
-save resume
-stop
-```
-
-Wichtig: Die Live Console ist ein Admin-Werkzeug. Darüber können serverrelevante Befehle ausgeführt werden.
+Beim ersten Start lädt WinoMC automatisch den offiziellen Minecraft Bedrock Dedicated Server herunter.
 
 ---
 
-### `WINOMC_CONSOLE_HISTORY_LIMIT`
+### Verbindung zum Server
 
-Legt fest, wie viele Log-Zeilen die Live Console beim Öffnen zunächst anzeigen soll.
+Im gleichen Netzwerk kann der Server je nach Gerät automatisch als LAN-Spiel erscheinen.
 
-Typ:
+Falls nicht, kann der Server manuell in Minecraft hinzugefügt werden:
 
 ```text
-Ganzzahl
+Adresse: IP-Adresse von Home Assistant
+Port: 19132
 ```
 
-Empfohlen:
-
-```yaml
-WINOMC_CONSOLE_HISTORY_LIMIT: 300
-```
-
-Kleinere Werte laden schneller.
-
-Größere Werte zeigen mehr Verlauf an, können die Oberfläche aber unübersichtlicher machen.
-
-Für normale private Server sind Werte zwischen `200` und `500` sinnvoll.
+Wichtig: Minecraft Bedrock nutzt UDP. Bei Router, Firewall oder Portfreigaben muss daher UDP freigegeben werden, nicht TCP.
 
 ---
 
-## System und Updates
+### Web-Konsole
 
-### `TZ`
+WinoMC enthält eine Web-Konsole in Home Assistant.
 
-Zeitzone des Containers.
+Damit können Servermeldungen gelesen und Befehle gesendet werden.
 
-Typ:
-
-```text
-Text
-```
-
-Beispiel:
-
-```yaml
-TZ: Europe/Berlin
-```
-
-Weitere Beispiele:
-
-```yaml
-TZ: UTC
-```
-
-```yaml
-TZ: America/New_York
-```
-
----
-
-### `PACKAGE_BACKUP_KEEP`
-
-Anzahl der Bedrock-Paket-Backups, die behalten werden.
-
-Typ:
-
-```text
-Ganzzahl
-```
-
-Standard:
-
-```yaml
-PACKAGE_BACKUP_KEEP: 2
-```
-
-Empfohlen:
-
-```yaml
-PACKAGE_BACKUP_KEEP: 2
-```
-
----
-
-### `DOWNLOAD_PROGRESS`
-
-Zeigt beim Download Fortschrittsinformationen an.
-
-Mögliche Werte:
-
-```text
-true
-false
-```
-
-Standard:
-
-```yaml
-DOWNLOAD_PROGRESS: false
-```
-
-Bei Fehlersuche oder langsamen Downloads:
-
-```yaml
-DOWNLOAD_PROGRESS: true
-```
-
----
-
-### `VARIABLES`
-
-Zusätzliche Variablen für fortgeschrittene Konfiguration.
-
-Typ:
-
-```text
-Text
-```
-
-Standard:
-
-```yaml
-VARIABLES: ""
-```
-
-Nur verwenden, wenn genau bekannt ist, welche zusätzlichen Variablen benötigt werden.
-
----
-
-# WinoMC Live Console
-
-Die WinoMC Live Console ist die empfohlene Methode, um Befehle direkt an den laufenden Bedrock Server zu senden.
-
-Die Oberfläche ist über den Home-Assistant-Ingress des Add-ons erreichbar.
-
-Voraussetzung:
-
-```yaml
-ENABLE_WEB_CONSOLE: true
-```
-
-Nach dem Start des Add-ons kann die Konsole über die Add-on-Oberfläche geöffnet werden.
-
-Die Live Console bietet:
-
-- Eingabefeld für Bedrock-Konsolenbefehle
-- Live-Ausgabe der letzten Server- und Konsolenmeldungen
-- Schnellbefehle für häufige Aktionen
-- Befehlsübergabe an die interne WinoMC-FIFO-Konsole
-
-Beispiele für Befehle in der Live Console:
+Beispiele:
 
 ```text
 say Hallo zusammen
 list
-op PlayerName
-deop PlayerName
-save hold
-save query
-save resume
 stop
 ```
 
@@ -1457,212 +106,276 @@ Befehle werden ohne führenden Slash eingegeben.
 Richtig:
 
 ```text
-say hello
+say Hallo
 ```
 
 Nicht nötig:
 
 ```text
-/say hello
+/say Hallo
 ```
 
-Falls versehentlich ein führender Slash eingegeben wird, sollte der Befehl trotzdem entfernt beziehungsweise normalisiert werden.
+Die Web-Konsole ist ein Admin-Werkzeug. Darüber können serverrelevante Befehle ausgeführt werden.
 
 ---
 
-# Konsolenbefehle über Home-Assistant-Automationen
+### Speicherorte
 
-Zusätzlich zur Live Console unterstützt das Add-on weiterhin STDIN.
-
-Dadurch können Bedrock-Konsolenbefehle über Home Assistant Automationen, Skripte oder Blueprints gesendet werden.
-
-Beispiel:
-
-```yaml
-action: hassio.app_stdin
-data:
-  app: <vollständiger_addon_slug>
-  input:
-    command: "say hello"
-```
-
-Der vollständige Add-on-Slug steht in der Add-on-URL.
-
-Beispiel-URL:
+Wichtige Pfade:
 
 ```text
-/config/app/repositoryid_winomc-bedrock/info
+/config
 ```
 
-Der zu verwendende Slug wäre dann:
+Serverdaten und Konfiguration.
 
 ```text
-repositoryid_winomc-bedrock
+/config/worlds
 ```
 
-Wichtig: Zwischen Repository-ID und Add-on-Slug steht ein Unterstrich `_`.
-
----
-
-## Beispiele für Automations-Konsolenbefehle
-
-Nachricht an alle Spieler:
-
-```yaml
-action: hassio.app_stdin
-data:
-  app: <vollständiger_addon_slug>
-  input:
-    command: "say Server startet gleich neu"
-```
-
-Spieler zum Operator machen:
-
-```yaml
-action: hassio.app_stdin
-data:
-  app: <vollständiger_addon_slug>
-  input:
-    command: "op PlayerName"
-```
-
-Server speichern:
-
-```yaml
-action: hassio.app_stdin
-data:
-  app: <vollständiger_addon_slug>
-  input:
-    command: "save hold"
-```
-
-Server stoppen:
-
-```yaml
-action: hassio.app_stdin
-data:
-  app: <vollständiger_addon_slug>
-  input:
-    command: "stop"
-```
-
----
-
-# Geplanter Neustart
-
-Da bei `VERSION: LATEST` beim Start nach der aktuellen Bedrock-Version gesucht wird, ist ein geplanter Neustart sinnvoll.
-
-Beispiel-Ablauf:
+Minecraft-Welten.
 
 ```text
-04:00 Uhr Bedrock Server Neustart
-04:01 Uhr optional Friend Broadcast Neustart
+/config/resource_packs
 ```
 
-Für einen Neustart wird verwendet:
-
-```yaml
-action: hassio.app_restart
-data:
-  app: <vollständiger_addon_slug>
-```
-
----
-
-# Backup
-
-Das Add-on unterstützt Cold Backup.
-
-Einige automatisch heruntergeladene oder generierte Dateien werden vom Backup ausgeschlossen, zum Beispiel:
+Resource Packs.
 
 ```text
-bedrock_server*
-behavior_packs/vanilla*
-behavior_packs/chemistry*
-resource_packs/vanilla*
-resource_packs/chemistry*
+/config/behavior_packs
 ```
 
-Dadurch bleiben Backups kleiner und konzentrieren sich auf relevante Serverdaten.
+Behavior Packs.
 
----
+```text
+/config/world_templates
+```
 
-# Import und Export
-
-Das Add-on erstellt, falls verfügbar:
+Weltvorlagen.
 
 ```text
 /share/winomc/import
+```
+
+Import-Ordner für Welten, Packs und Add-ons.
+
+```text
 /share/winomc/export
 ```
 
-Diese Ordner können verwendet werden, um Welten, Packs oder andere Dateien leichter zwischen Home Assistant und dem Add-on auszutauschen.
+Optionaler Export-Ordner.
 
 ---
 
-# Fehlerbehebung
+### Welten und Packs importieren
 
-## Server erscheint nicht als LAN-Spiel
+WinoMC kann folgende Dateien importieren:
 
-Prüfen:
+```text
+.mcworld
+.mcpack
+.mcaddon
+.mctemplate
+.zip
+```
 
-- `ENABLE_LAN_VISIBILITY: true`
-- Client und Home Assistant im selben Netzwerk
-- Keine WLAN-Isolation aktiviert
-- Router blockiert keine Broadcast-/Multicast-Pakete
-- Bedrock-Port ist UDP, nicht TCP
-- Auf Konsolen kann die LAN-Sichtbarkeit je nach Plattform eingeschränkt sein
+Beispiel für ein Resource Pack:
 
-Alternative:
+```yaml
+MC_PACK: /share/winomc/import/mein-pack.mcpack
+```
 
-Server manuell im Minecraft-Client hinzufügen.
+Beispiel für eine Welt:
+
+```yaml
+MC_PACK: /share/winomc/import/meine-welt.mcworld
+```
+
+Wenn vorhandene Packs oder Welten ersetzt werden sollen:
+
+```yaml
+FORCE_PACK_COPY: true
+FORCE_WORLD_COPY: true
+```
+
+Vorsicht: FORCE_WORLD_COPY kann eine bestehende Welt ersetzen. Vorher immer ein Backup erstellen.
 
 ---
 
-## Verbindung nicht möglich
+### Backups
 
-Prüfen:
+Das Add-on unterstützt Home-Assistant-Backups.
+
+Empfohlen:
+
+- Vor größeren Updates ein Backup erstellen
+- Vor Weltimporten ein Backup erstellen
+- Vor FORCE_WORLD_COPY ein Backup erstellen
+- Vor FORCE_PACK_COPY ein Backup erstellen
+
+Zusätzlich kann WinoMC alte Serverpakete vor Updates sichern:
+
+```yaml
+PACKAGE_BACKUP_KEEP: 2
+```
+
+Das ersetzt kein vollständiges Welt-Backup.
+
+---
+
+### Einstellungen kurz erklärt
+
+| Einstellung | Kurz erklärt |
+|---|---|
+| WINOMC_RUNTIME_MODE | Runtime-Modus. Aktuell native. Normalerweise nicht ändern. |
+| BDS_AUTO_UPDATE | Prüft beim Start, ob der Bedrock Server aktualisiert werden soll. |
+| BDS_DIRECT_DOWNLOAD_URL | Optionaler direkter Download-Link für den Bedrock Server. Nur bei Bedarf verwenden. |
+| VERSION | Bedrock-Server-Version. Empfohlen: LATEST. |
+| SERVER_NAME | Name des Servers im Minecraft-Client. |
+| LEVEL_NAME | Name der Welt. |
+| GAMEMODE | Standard-Spielmodus: survival, creative oder adventure. |
+| FORCE_GAMEMODE | Erzwingt den eingestellten Spielmodus beim Beitritt. |
+| DIFFICULTY | Schwierigkeit: peaceful, easy, normal oder hard. |
+| ALLOW_CHEATS | Aktiviert Cheats. Für normale Survival-Server meist false. |
+| MAX_PLAYERS | Maximale Anzahl gleichzeitiger Spieler. |
+| ALLOW_LIST | Aktiviert die Allowlist. Nur eingetragene Spieler können beitreten. |
+| ALLOW_LIST_USERS | Spieler für die Allowlist. |
+| LEVEL_TYPE | Welttyp: DEFAULT, FLAT oder LEGACY. |
+| ONLINE_MODE | Microsoft/Xbox-Authentifizierung. Für normale Server true lassen. |
+| ENABLE_LAN_VISIBILITY | Server soll im lokalen Netzwerk sichtbar sein. |
+| VIEW_DISTANCE | Sichtweite. Höhere Werte benötigen mehr Leistung. |
+| TICK_DISTANCE | Simulationsdistanz. Höhere Werte benötigen mehr Leistung. |
+| PLAYER_IDLE_TIMEOUT | Minuten bis inaktive Spieler getrennt werden. |
+| MAX_THREADS | Maximale Thread-Anzahl für den Server. |
+| LEVEL_SEED | Seed für neue Welten. Wirkt nicht nachträglich auf bestehende Welten. |
+| DEFAULT_PLAYER_PERMISSION_LEVEL | Standardrechte für neue Spieler: member, operator oder visitor. |
+| TEXTUREPACK_REQUIRED | Spieler müssen Resource Packs akzeptieren, wenn true. |
+| SERVER_AUTHORITATIVE_MOVEMENT | Legt fest, wie streng Bewegungen geprüft werden. Standard: server-auth. |
+| SERVER_AUTHORITATIVE_BLOCK_BREAKING | Server prüft Blockabbau strenger, wenn true. |
+| EMIT_SERVER_TELEMETRY | Server-Telemetrie senden. Standard: false. |
+| PLAYER_MOVEMENT_SCORE_THRESHOLD | Erweiterter Wert für Bewegungsprüfung. Normalerweise nicht ändern. |
+| PLAYER_MOVEMENT_DISTANCE_THRESHOLD | Erweiterter Wert für Bewegungsprüfung. Normalerweise nicht ändern. |
+| PLAYER_MOVEMENT_DURATION_THRESHOLD_IN_MS | Erweiterter Wert für Bewegungsprüfung. Normalerweise nicht ändern. |
+| CORRECT_PLAYER_MOVEMENT | Korrigiert erkannte Bewegungsabweichungen, wenn true. |
+| OPS | Spieler oder XUIDs mit Operator-Rechten. |
+| MEMBERS | Spieler oder XUIDs mit Member-Rechten. |
+| VISITORS | Spieler oder XUIDs mit Besucher-Rechten. |
+| SERVER_PORT | IPv4-Port des Bedrock Servers. Standard: 19132. |
+| SERVER_PORT_V6 | IPv6-Port des Bedrock Servers. Standard: 19133. |
+| ENABLE_BDS_V6BIND_FIX | Erlaubt IPv4 und IPv6 auf demselben Port. |
+| USE_BOX64 | Wird für ARM64 genutzt. Auf amd64 nicht relevant. |
+| TZ | Zeitzone, zum Beispiel Europe/Berlin. |
+| PACKAGE_BACKUP_KEEP | Anzahl alter Serverpaket-Backups, die behalten werden. |
+| DOWNLOAD_PROGRESS | Zeigt ausführlicheren Download-Fortschritt. |
+| MC_PACK | Datei oder Pfad für Welt-, Pack- oder Add-on-Import. |
+| FORCE_WORLD_COPY | Erzwingt erneuten Weltimport. Vorsichtig verwenden. |
+| FORCE_PACK_COPY | Erzwingt erneuten Packimport. |
+| CONTENT_LOG_FILE_ENABLED | Schreibt Content-Logs in Dateien. Hilfreich bei Pack-Fehlern. |
+| CONTENT_LOG_LEVEL | Detailgrad der Content-Logs: verbose, info, warning oder error. |
+| CONTENT_LOG_CONSOLE_OUTPUT_ENABLED | Gibt Content-Logs zusätzlich in der Konsole aus. |
+| CHAT_RESTRICTION | Chat-Einschränkung: None, Dropped oder Disabled. |
+| DISABLE_PLAYER_INTERACTION | Schränkt Spielerinteraktionen ein. |
+| DISABLE_PERSONA | Deaktiviert Persona-/Charakter-Anpassungen. |
+| DISABLE_CUSTOM_SKINS | Deaktiviert benutzerdefinierte Skins. |
+| MSA_GAMERTAGS_ONLY | Beschränkt Namen auf Microsoft-/Xbox-Gamertags. |
+| VARIABLES | Zusätzliche Variablen für fortgeschrittene Nutzung. Normalerweise leer lassen. |
+| ENABLE_WEB_CONSOLE | Aktiviert die WinoMC Web-Konsole. |
+| WINOMC_CONSOLE_HISTORY_LIMIT | Anzahl der Log-Zeilen, die die Web-Konsole lädt. |
+
+---
+
+### Empfohlene Werte für private Server
+
+```yaml
+VERSION: LATEST
+GAMEMODE: survival
+FORCE_GAMEMODE: false
+DIFFICULTY: normal
+ALLOW_CHEATS: false
+MAX_PLAYERS: 10
+ALLOW_LIST: true
+ONLINE_MODE: true
+ENABLE_LAN_VISIBILITY: true
+VIEW_DISTANCE: 10
+TICK_DISTANCE: 4
+DEFAULT_PLAYER_PERMISSION_LEVEL: member
+TEXTUREPACK_REQUIRED: false
+SERVER_PORT: 19132
+SERVER_PORT_V6: 19133
+ENABLE_BDS_V6BIND_FIX: false
+DOWNLOAD_PROGRESS: false
+CONTENT_LOG_LEVEL: info
+CHAT_RESTRICTION: None
+DISABLE_CUSTOM_SKINS: false
+ENABLE_WEB_CONSOLE: true
+WINOMC_CONSOLE_HISTORY_LIMIT: 300
+```
+
+---
+
+### IPv4 und IPv6
+
+Standard:
+
+```yaml
+SERVER_PORT: 19132
+SERVER_PORT_V6: 19133
+ENABLE_BDS_V6BIND_FIX: false
+```
+
+Für Dual-Stack mit gleichem Port:
+
+```yaml
+SERVER_PORT: 19132
+SERVER_PORT_V6: 19132
+ENABLE_BDS_V6BIND_FIX: true
+```
+
+Der IPv6-Bind-Fix wird von WinoMC selbst aus Quellcode gebaut. Es wird dafür kein fremdes Fertig-Binary heruntergeladen.
+
+---
+
+### ARM64 / aarch64
+
+ARM64 wird experimentell unterstützt.
+
+Da der offizielle Bedrock Dedicated Server für Linux nicht nativ als ARM64-Server bereitgestellt wird, nutzt WinoMC auf ARM64 Box64.
+
+Standard:
+
+```yaml
+USE_BOX64: true
+```
+
+Auf amd64 wird Box64 nicht verwendet.
+
+---
+
+### Fehlerbehebung
+
+Server erscheint nicht als LAN-Spiel:
+
+- ENABLE_LAN_VISIBILITY prüfen
+- Client und Home Assistant müssen im selben Netzwerk sein
+- WLAN-Isolation im Router deaktivieren
+- Firewall prüfen
+- UDP-Port prüfen
+- Server alternativ manuell hinzufügen
+
+Verbindung nicht möglich:
 
 - Läuft das Add-on?
-- Stimmt `SERVER_PORT`?
+- Stimmt der Port?
 - Wird UDP verwendet?
-- Ist `ONLINE_MODE` passend gesetzt?
+- Ist ONLINE_MODE passend gesetzt?
 - Ist die Allowlist aktiv?
-- Ist der Spieler in `ALLOW_LIST_USERS` eingetragen?
-- Blockiert eine Firewall den Port?
+- Ist der Spieler eingetragen?
 
----
+Resource Pack wird nicht geladen:
 
-## Spieler können nicht beitreten
-
-Prüfen:
-
-```yaml
-ALLOW_LIST: false
-```
-
-oder bei aktiver Allowlist:
-
-```yaml
-ALLOW_LIST: true
-ALLOW_LIST_USERS: "PlayerName:XUID"
-```
-
-Außerdem prüfen:
-
-```yaml
-ONLINE_MODE: true
-```
-
----
-
-## Resource Pack wird nicht geladen
-
-Prüfen:
-
-- Pack liegt im richtigen Verzeichnis
-- `TEXTUREPACK_REQUIRED` ist passend gesetzt
-- Pack ist mit der verwendeten Minecraft-Version kompatibel
+- Pack liegt im richtigen Ordner
+- MC_PACK zeigt auf die richtige Datei
+- Pack ist mit der Minecraft-Version kompatibel
 - Content-Logs für Fehlersuche aktivieren
 
 Debug-Werte:
@@ -1675,81 +388,7 @@ CONTENT_LOG_CONSOLE_OUTPUT_ENABLED: true
 
 ---
 
-## Live Console meldet `Leerer Befehl`
-
-Wenn beim Senden eines Befehls in der Live Console folgende Meldung erscheint:
-
-```text
-Fehler: Leerer Befehl.
-```
-
-dann wurde der eingegebene Befehl nicht korrekt an das interne Console-Backend übergeben.
-
-Prüfen:
-
-- Add-on ist auf eine Version mit Live-Console-Fix aktualisiert
-- Browser-Cache wurde nach dem Update neu geladen
-- Add-on wurde nach dem Update vollständig neu gestartet
-- `ENABLE_WEB_CONSOLE: true` ist gesetzt
-- Der Befehl enthält sichtbaren Text, zum Beispiel `say hello`
-
-Empfohlene Maßnahme:
-
-1. Add-on stoppen.
-2. Add-on neu bauen oder aktualisieren.
-3. Add-on starten.
-4. Home-Assistant-Seite hart neu laden.
-5. Befehl erneut testen.
-
-Testbefehl:
-
-```text
-say hello
-```
-
----
-
-## Server aktualisiert nicht
-
-Prüfen:
-
-```yaml
-VERSION: LATEST
-```
-
-Dann Add-on neu starten.
-
-Bei konkreter Version:
-
-```yaml
-VERSION: "1.21.93.1"
-```
-
-wird genau diese Version verwendet, soweit verfügbar.
-
----
-
-## IPv6- oder Dual-Stack-Probleme
-
-Wenn Clients Probleme mit IPv4/IPv6 haben, kann getestet werden:
-
-```yaml
-SERVER_PORT: 19132
-SERVER_PORT_V6: 19132
-ENABLE_BDS_V6BIND_FIX: true
-```
-
-Wenn das nicht benötigt wird:
-
-```yaml
-SERVER_PORT: 19132
-SERVER_PORT_V6: 19133
-ENABLE_BDS_V6BIND_FIX: false
-```
-
----
-
-# Sicherheitshinweise
+### Sicherheitshinweise
 
 Für private Server empfohlen:
 
@@ -1771,53 +410,49 @@ DEFAULT_PLAYER_PERMISSION_LEVEL: operator
 
 ---
 
-# Empfohlene Werte für private Server
-
-```yaml
-VERSION: LATEST
-GAMEMODE: survival
-FORCE_GAMEMODE: false
-DIFFICULTY: normal
-ALLOW_CHEATS: false
-MAX_PLAYERS: 10
-ALLOW_LIST: true
-ONLINE_MODE: true
-ENABLE_LAN_VISIBILITY: true
-VIEW_DISTANCE: 10
-TICK_DISTANCE: 4
-DEFAULT_PLAYER_PERMISSION_LEVEL: member
-TEXTUREPACK_REQUIRED: false
-SERVER_PORT: 19132
-ENABLE_BDS_V6BIND_FIX: false
-DOWNLOAD_PROGRESS: false
-CONTENT_LOG_LEVEL: info
-CHAT_RESTRICTION: None
-DISABLE_CUSTOM_SKINS: false
-ENABLE_WEB_CONSOLE: true
-WINOMC_CONSOLE_HISTORY_LIMIT: 300
-```
-
----
-
-# Bekannte Hinweise
+### Bekannte Hinweise
 
 - Minecraft Bedrock nutzt UDP.
-- Ein Add-on-Neustart kann bei `VERSION: LATEST` auch ein Bedrock-Server-Update auslösen.
-- LAN-Sichtbarkeit ist abhängig vom Netzwerk und vom Client-Gerät.
-- Konsolenbefehle gehören zum Bedrock Server Add-on, nicht zum Friend Broadcast Add-on.
-- Die Live Console ist ein Admin-Werkzeug und sollte nur von vertrauenswürdigen Home-Assistant-Benutzern verwendet werden.
-- Friend Broadcast kann ergänzend genutzt werden, damit Konsolen den Server über Freunde/Xbox Live leichter finden.
+- Ein Add-on-Neustart kann bei VERSION: LATEST auch ein Bedrock-Server-Update auslösen.
+- LAN-Sichtbarkeit hängt vom Netzwerk und vom Client-Gerät ab.
+- Konsolen wie Nintendo Switch oder Xbox können eigene Einschränkungen bei LAN-Anzeige oder Verbindung haben.
+- Die Web-Konsole ist ein Admin-Werkzeug und sollte nur von vertrauenswürdigen Home-Assistant-Benutzern verwendet werden.
+- Dieses Projekt ist kein offizielles Minecraft-, Mojang-, Microsoft- oder Home-Assistant-Projekt.
 
 ---
 
-# Credits
+### Credits
 
-Dieses Add-on ist Teil des WinoMC Home Assistant Add-on-Repositories.
+Dieses Repository basiert ursprünglich auf der Arbeit von:
 
-Technische Grundlage ist das Minecraft Bedrock Server Container-Image von itzg.
+- williamcorsel/hassio-addons
+
+Die ursprünglichen Vorlagen und Inspirationen stammen außerdem unter anderem von:
+
+- alexbelgium/hassio-addons
+
+WinoMC wurde danach für Minecraft Bedrock, Home Assistant und die eigene native Runtime weiter angepasst und erweitert.
+
+Danke außerdem an:
+
+- itzg/docker-minecraft-bedrock-server für viele gute Ideen, Verhaltensweisen und Kompatibilitätsreferenzen rund um Minecraft Bedrock Server Container
+- poeggi/bds-ipv6fix für die technische Beschreibung und Idee des IPv6-Bind-Fixes
+- Box64 für die Möglichkeit, den Bedrock Dedicated Server experimentell auf ARM64 auszuführen
+- die Home-Assistant-Community
+- die Minecraft-Community
+
+WinoMC-spezifische Anpassungen und Weiterentwicklung werden im WinoMC-Projekt gepflegt.
 
 ---
 
-# Lizenz
+### Lizenz
 
-Bitte beachte die Lizenzinformationen des Repositories sowie die Lizenzbedingungen der verwendeten Drittprojekte.
+Dieses Repository steht unter der MIT-Lizenz, soweit nicht anders angegeben.
+
+Drittprojekte behalten ihre jeweiligen eigenen Lizenzen und Rechte.
+
+Minecraft, Minecraft Bedrock, Bedrock Dedicated Server, Mojang und Microsoft sind Marken oder Eigentum der jeweiligen Rechteinhaber.
+
+Home Assistant ist ein Projekt der Home-Assistant-Community und ihrer jeweiligen Rechteinhaber.
+
+WinoMC ist nicht offiziell mit Mojang, Microsoft, Home Assistant, itzg, poeggi, Box64 oder den ursprünglichen Upstream-Repositories verbunden, sofern nicht ausdrücklich anders angegeben.
