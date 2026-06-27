@@ -1,4 +1,4 @@
-# WinoMC
+# [BETA] WinoMC
 
 WinoMC bringt einen Minecraft Bedrock Dedicated Server als Home-Assistant-Add-on auf dein Home Assistant OS.
 

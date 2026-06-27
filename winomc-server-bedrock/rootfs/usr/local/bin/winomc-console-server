@@ -7,7 +7,13 @@ import sys
 import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+import mimetypes
+import posixpath
+import re
+import shutil
+import tempfile
+import zipfile
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("WINOMC_CONSOLE_PORT", "8099"))
@@ -23,6 +29,513 @@ ALLOWED_PROXIES = {
     ).split(",")
     if item.strip()
 }
+
+FILE_ROOTS = {
+    "config": {
+        "label": "Serverdaten",
+        "path": os.environ.get("WINOMC_DATA_DIR", "/config"),
+        "description": "Hauptordner des Bedrock Servers",
+    },
+    "worlds": {
+        "label": "Welten",
+        "path": os.environ.get("WINOMC_WORLDS_DIR", "/config/worlds"),
+        "description": "Weltordner",
+    },
+    "resource_packs": {
+        "label": "Resource Packs",
+        "path": os.environ.get("WINOMC_RESOURCE_PACKS_DIR", "/config/resource_packs"),
+        "description": "Ressourcenpakete",
+    },
+    "behavior_packs": {
+        "label": "Behavior Packs",
+        "path": os.environ.get("WINOMC_BEHAVIOR_PACKS_DIR", "/config/behavior_packs"),
+        "description": "Verhaltenspakete",
+    },
+    "world_templates": {
+        "label": "World Templates",
+        "path": os.environ.get("WINOMC_WORLD_TEMPLATES_DIR", "/config/world_templates"),
+        "description": "Weltvorlagen",
+    },
+    "import": {
+        "label": "Import",
+        "path": os.environ.get("WINOMC_IMPORT_DIR", "/share/winomc/import"),
+        "description": "Importordner",
+    },
+    "export": {
+        "label": "Export",
+        "path": os.environ.get("WINOMC_EXPORT_DIR", "/share/winomc/export"),
+        "description": "Exportordner",
+    },
+}
+
+EDITABLE_TEXT_EXTENSIONS = {
+    ".json",
+    ".properties",
+    ".txt",
+    ".log",
+    ".mcfunction",
+    ".yml",
+    ".yaml",
+    ".lang",
+    ".md",
+    ".cfg",
+    ".conf",
+}
+
+JSON_EXTENSIONS = {".json"}
+ZIP_EXTRACT_EXTENSIONS = {".zip"}
+
+MAX_TEXT_FILE_BYTES = int(os.environ.get("WINOMC_FILE_EDITOR_MAX_BYTES", str(2 * 1024 * 1024)))
+MAX_UPLOAD_BYTES = int(os.environ.get("WINOMC_FILE_UPLOAD_MAX_BYTES", str(512 * 1024 * 1024)))
+MAX_ZIP_UNPACK_BYTES = int(os.environ.get("WINOMC_ZIP_UNPACK_MAX_BYTES", str(1024 * 1024 * 1024)))
+
+FILE_BACKUP_DIR = os.environ.get("WINOMC_FILE_BACKUP_DIR", "/config/.winomc/file_backups")
+
+def normalize_rel_path(rel_path: str) -> str:
+    rel_path = unquote(str(rel_path or "/")).replace("\\", "/").replace("\x00", "")
+    rel_path = posixpath.normpath("/" + rel_path.lstrip("/"))
+
+    if rel_path == "/.":
+        rel_path = "/"
+
+    return rel_path
+
+
+def is_inside_base(base_path: str, candidate_path: str) -> bool:
+    base_path = os.path.realpath(base_path)
+    candidate_path = os.path.realpath(candidate_path)
+    return candidate_path == base_path or candidate_path.startswith(base_path + os.sep)
+
+
+def resolve_safe_path(root_key: str, rel_path: str = "/") -> tuple[str, str]:
+    if root_key not in FILE_ROOTS:
+        raise ValueError("Unbekannter Dateibereich.")
+
+    rel_path = normalize_rel_path(rel_path)
+    base_path = os.path.realpath(FILE_ROOTS[root_key]["path"])
+    candidate_path = os.path.realpath(os.path.join(base_path, rel_path.lstrip("/")))
+
+    if not is_inside_base(base_path, candidate_path):
+        raise ValueError("Pfad außerhalb des erlaubten Bereichs blockiert.")
+
+    return candidate_path, rel_path
+
+
+def safe_download_name(name: str, fallback: str = "winomc-download") -> str:
+    name = str(name or fallback).strip()
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
+    name = name.strip("._-")
+    return name or fallback
+
+
+def list_file_roots() -> list[dict]:
+    roots = []
+
+    for key, info in FILE_ROOTS.items():
+        path = os.path.realpath(info["path"])
+        roots.append({
+            "key": key,
+            "label": info["label"],
+            "description": info.get("description", ""),
+            "path": path,
+            "exists": os.path.exists(path),
+            "readable": os.path.isdir(path) and os.access(path, os.R_OK),
+        })
+
+    return roots
+
+
+def list_directory(root_key: str, rel_path: str = "/") -> dict:
+    full_path, rel_path = resolve_safe_path(root_key, rel_path)
+
+    if not os.path.exists(full_path):
+        raise FileNotFoundError("Pfad existiert nicht.")
+
+    if not os.path.isdir(full_path):
+        raise ValueError("Pfad ist kein Ordner.")
+
+    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
+    entries = []
+
+    for name in sorted(os.listdir(full_path), key=lambda item: item.lower()):
+        child_path = os.path.join(full_path, name)
+
+        if not is_inside_base(root_base, child_path):
+            continue
+
+        try:
+            stat = os.stat(child_path)
+        except OSError:
+            continue
+
+        is_dir = os.path.isdir(child_path)
+        child_rel_path = normalize_rel_path(posixpath.join(rel_path, name))
+
+        entries.append({
+            "name": name,
+            "path": child_rel_path,
+            "type": "directory" if is_dir else "file",
+            "size": stat.st_size,
+            "modified": int(stat.st_mtime),
+            "downloadable": not is_dir,
+            "zipable": True,
+        })
+
+    entries.sort(key=lambda item: (item["type"] != "directory", item["name"].lower()))
+
+    parent = None
+    if rel_path != "/":
+        parent = normalize_rel_path(posixpath.dirname(rel_path))
+
+    return {
+        "ok": True,
+        "root": root_key,
+        "path": rel_path,
+        "parent": parent,
+        "entries": entries,
+    }
+
+
+def create_zip_from_paths(root_key: str, rel_paths: list[str], save_to_export: bool = False) -> dict:
+    if not rel_paths:
+        raise ValueError("Keine Dateien oder Ordner ausgewählt.")
+
+    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    zip_name = safe_download_name(f"winomc-{root_key}-{timestamp}.zip")
+
+    if save_to_export:
+        export_dir, _ = resolve_safe_path("export", "/")
+        os.makedirs(export_dir, exist_ok=True)
+        zip_path = os.path.join(export_dir, zip_name)
+        cleanup = False
+    else:
+        fd, zip_path = tempfile.mkstemp(prefix="winomc-", suffix=".zip")
+        os.close(fd)
+        cleanup = True
+
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for rel_path in rel_paths:
+            source_path, normalized_rel_path = resolve_safe_path(root_key, rel_path)
+
+            if not os.path.exists(source_path):
+                raise FileNotFoundError(f"Nicht gefunden: {normalized_rel_path}")
+
+            if not is_inside_base(root_base, source_path):
+                raise ValueError("Pfad außerhalb des erlaubten Bereichs blockiert.")
+
+            source_name = safe_download_name(
+                os.path.basename(source_path.rstrip(os.sep)) or FILE_ROOTS[root_key]["label"],
+                "winomc-files",
+            )
+
+            if os.path.isfile(source_path):
+                archive.write(source_path, source_name)
+                continue
+
+            if os.path.isdir(source_path):
+                parent_path = os.path.dirname(source_path.rstrip(os.sep))
+
+                for current_root, dirs, files in os.walk(source_path, followlinks=False):
+                    dirs[:] = [
+                        dirname for dirname in dirs
+                        if not os.path.islink(os.path.join(current_root, dirname))
+                        and is_inside_base(root_base, os.path.join(current_root, dirname))
+                    ]
+
+                    for filename in files:
+                        file_path = os.path.join(current_root, filename)
+
+                        if os.path.islink(file_path):
+                            continue
+
+                        if not is_inside_base(root_base, file_path):
+                            continue
+
+                        archive_name = os.path.relpath(file_path, parent_path)
+                        archive.write(file_path, archive_name)
+
+    return {
+        "zip_path": zip_path,
+        "zip_name": zip_name,
+        "cleanup": cleanup,
+        "saved_to_export": save_to_export,
+        "export_path": normalize_rel_path("/" + zip_name) if save_to_export else None,
+    }
+
+def parse_bool(value, default=False) -> bool:
+    if value is None:
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "on", "ja")
+
+
+def file_extension(path: str) -> str:
+    return os.path.splitext(str(path or ""))[1].lower()
+
+
+def is_editable_text_file(path: str) -> bool:
+    name = os.path.basename(path).lower()
+    ext = file_extension(path)
+
+    if ext in EDITABLE_TEXT_EXTENSIONS:
+        return True
+
+    return name in {
+        "server.properties",
+        "allowlist.json",
+        "permissions.json",
+        "valid_known_packs.json",
+        "world_resource_packs.json",
+        "world_behavior_packs.json",
+        "manifest.json",
+    }
+
+
+def validate_json_if_needed(path: str, content: str):
+    if file_extension(path) not in JSON_EXTENSIONS:
+        return
+
+    try:
+        json.loads(content or "")
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"JSON ist ungültig: Zeile {exc.lineno}, Spalte {exc.colno}: {exc.msg}")
+
+
+def make_file_backup(file_path: str, root_key: str, rel_path: str):
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
+        return None
+
+    os.makedirs(FILE_BACKUP_DIR, exist_ok=True)
+
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    backup_name = safe_download_name(
+        f"{timestamp}-{root_key}-{normalize_rel_path(rel_path).replace('/', '__')}",
+        "winomc-file-backup",
+    )
+
+    backup_path = os.path.join(FILE_BACKUP_DIR, backup_name)
+
+    if os.path.exists(backup_path):
+        backup_path = backup_path + ".bak"
+
+    shutil.copy2(file_path, backup_path)
+    return backup_path
+
+
+def read_text_file(root_key: str, rel_path: str) -> dict:
+    file_path, rel_path = resolve_safe_path(root_key, rel_path)
+
+    if not os.path.exists(file_path):
+        raise FileNotFoundError("Datei existiert nicht.")
+
+    if not os.path.isfile(file_path):
+        raise ValueError("Nur Dateien können im Editor geöffnet werden.")
+
+    if not is_editable_text_file(file_path):
+        raise ValueError("Dieser Dateityp ist nicht für den Texteditor freigegeben.")
+
+    size = os.path.getsize(file_path)
+    if size > MAX_TEXT_FILE_BYTES:
+        raise ValueError(f"Datei ist zu groß für den Editor. Maximum: {MAX_TEXT_FILE_BYTES} Bytes.")
+
+    with open(file_path, "r", encoding="utf-8", errors="replace") as handle:
+        content = handle.read()
+
+    stat = os.stat(file_path)
+
+    return {
+        "ok": True,
+        "root": root_key,
+        "path": rel_path,
+        "name": os.path.basename(file_path),
+        "size": stat.st_size,
+        "modified": int(stat.st_mtime),
+        "editable": True,
+        "json": file_extension(file_path) in JSON_EXTENSIONS,
+        "content": content,
+    }
+
+
+def write_text_file(root_key: str, rel_path: str, content: str) -> dict:
+    file_path, rel_path = resolve_safe_path(root_key, rel_path)
+
+    if os.path.isdir(file_path):
+        raise ValueError("Ordner können nicht als Datei gespeichert werden.")
+
+    parent = os.path.dirname(file_path)
+    if not os.path.isdir(parent):
+        raise FileNotFoundError("Zielordner existiert nicht.")
+
+    if not is_editable_text_file(file_path):
+        raise ValueError("Dieser Dateityp ist nicht für den Texteditor freigegeben.")
+
+    content = str(content or "")
+    validate_json_if_needed(file_path, content)
+
+    backup_path = make_file_backup(file_path, root_key, rel_path)
+
+    fd, temp_path = tempfile.mkstemp(prefix=".winomc-edit-", dir=parent)
+    os.close(fd)
+
+    try:
+        with open(temp_path, "w", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+
+        os.replace(temp_path, file_path)
+    except Exception:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+        raise
+
+    return {
+        "ok": True,
+        "root": root_key,
+        "path": rel_path,
+        "backup_created": bool(backup_path),
+        "backup_path": backup_path,
+        "message": "Datei gespeichert.",
+    }
+
+
+def prepare_upload_target(root_key: str, dir_rel_path: str, filename: str, overwrite: bool = False):
+    dir_path, dir_rel_path = resolve_safe_path(root_key, dir_rel_path)
+
+    if not os.path.exists(dir_path):
+        raise FileNotFoundError("Upload-Zielordner existiert nicht.")
+
+    if not os.path.isdir(dir_path):
+        raise ValueError("Upload-Ziel ist kein Ordner.")
+
+    filename = safe_download_name(unquote(filename or ""), "upload.bin")
+    target_path = os.path.realpath(os.path.join(dir_path, filename))
+    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
+
+    if not is_inside_base(root_base, target_path):
+        raise ValueError("Upload-Ziel außerhalb des erlaubten Bereichs blockiert.")
+
+    if os.path.exists(target_path) and not overwrite:
+        raise FileExistsError("Datei existiert bereits. Überschreiben wurde nicht erlaubt.")
+
+    target_rel_path = normalize_rel_path(posixpath.join(dir_rel_path, filename))
+    return target_path, target_rel_path
+
+
+def extract_zip_file(root_key: str, archive_rel_path: str, destination_rel_path: str = "/", overwrite: bool = False) -> dict:
+    archive_path, archive_rel_path = resolve_safe_path(root_key, archive_rel_path)
+    destination_path, destination_rel_path = resolve_safe_path(root_key, destination_rel_path)
+
+    if not os.path.isfile(archive_path):
+        raise FileNotFoundError("ZIP-Datei nicht gefunden.")
+
+    if file_extension(archive_path) not in ZIP_EXTRACT_EXTENSIONS:
+        raise ValueError("Nur .zip-Dateien können entpackt werden.")
+
+    if not os.path.isdir(destination_path):
+        raise ValueError("Ziel zum Entpacken ist kein Ordner.")
+
+    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
+    extracted_files = 0
+    extracted_dirs = 0
+    total_size = 0
+
+    with zipfile.ZipFile(archive_path, "r") as archive:
+        for member in archive.infolist():
+            total_size += int(member.file_size or 0)
+            if total_size > MAX_ZIP_UNPACK_BYTES:
+                raise ValueError("ZIP ist zu groß zum Entpacken.")
+
+        for member in archive.infolist():
+            raw_name = str(member.filename or "").replace("\\", "/")
+
+            if not raw_name or raw_name.startswith("/") or raw_name.startswith("../") or "/../" in raw_name:
+                raise ValueError(f"Unsicherer ZIP-Pfad blockiert: {raw_name}")
+
+            normalized_name = posixpath.normpath(raw_name)
+
+            if normalized_name in ("", ".") or normalized_name.startswith("../") or normalized_name == "..":
+                raise ValueError(f"Unsicherer ZIP-Pfad blockiert: {raw_name}")
+
+            target_path = os.path.realpath(os.path.join(destination_path, normalized_name))
+
+            if not is_inside_base(destination_path, target_path):
+                raise ValueError(f"ZIP-Pfad außerhalb des Zielordners blockiert: {raw_name}")
+
+            if not is_inside_base(root_base, target_path):
+                raise ValueError(f"ZIP-Pfad außerhalb des erlaubten Bereichs blockiert: {raw_name}")
+
+            if member.is_dir():
+                os.makedirs(target_path, exist_ok=True)
+                extracted_dirs += 1
+                continue
+
+            if os.path.exists(target_path) and not overwrite:
+                raise FileExistsError(f"Datei existiert bereits: {normalized_name}")
+
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+
+            with archive.open(member, "r") as source, open(target_path, "wb") as target:
+                shutil.copyfileobj(source, target, length=1024 * 1024)
+
+            extracted_files += 1
+
+    return {
+        "ok": True,
+        "root": root_key,
+        "archive": archive_rel_path,
+        "destination": destination_rel_path,
+        "files": extracted_files,
+        "directories": extracted_dirs,
+        "message": "ZIP wurde entpackt.",
+    }
+
+
+def append_console_note(message: str):
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8", errors="replace") as log_handle:
+            log_handle.write(f"[WinoMC Console] {message}\n")
+    except Exception:
+        pass
+
+
+def send_internal_console_command(command: str):
+    command = sanitize_command(command)
+    write_command(command)
+
+
+def create_safe_world_export(world_rel_path: str = "/world", save_to_export: bool = True) -> dict:
+    world_rel_path = normalize_rel_path(world_rel_path)
+    world_path, _ = resolve_safe_path("worlds", world_rel_path)
+
+    if not os.path.isdir(world_path):
+        raise FileNotFoundError("Weltordner wurde nicht gefunden.")
+
+    hold_sent = False
+
+    try:
+        append_console_note("Sicherer Welt-Export gestartet.")
+        send_internal_console_command("save hold")
+        hold_sent = True
+
+        time.sleep(1.0)
+
+        send_internal_console_command("save query")
+
+        time.sleep(2.0)
+
+        zip_info = create_zip_from_paths("worlds", [world_rel_path], save_to_export=save_to_export)
+
+        append_console_note("Sicherer Welt-Export wurde erstellt.")
+        return zip_info
+
+    finally:
+        if hold_sent:
+            try:
+                send_internal_console_command("save resume")
+                append_console_note("save resume nach sicherem Welt-Export ausgeführt.")
+            except Exception as exc:
+                append_console_note(f"WARNUNG: save resume konnte nicht automatisch ausgeführt werden: {exc}")
 
 INDEX_HTML = r"""<!doctype html>
 <html lang="de">
@@ -485,6 +998,143 @@ INDEX_HTML = r"""<!doctype html>
 
     .modal input { width: 100%; margin-top: 12px; }
 
+    .file-toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .file-toolbar select,
+    .file-toolbar input {
+      min-width: 180px;
+    }
+
+    .file-path {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #cbd5e1;
+      background: rgba(15, 23, 42, .72);
+      border: 1px solid rgba(51, 65, 85, .70);
+      border-radius: 10px;
+      padding: 10px 12px;
+      overflow: auto;
+      white-space: nowrap;
+    }
+
+    .file-manager-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+      gap: 14px;
+    }
+
+    .drop-zone {
+      border: 1px dashed rgba(148, 163, 184, .45);
+      background: rgba(15, 23, 42, .48);
+      border-radius: 14px;
+      padding: 18px;
+      text-align: center;
+      color: var(--muted);
+      transition: border-color .15s ease, background .15s ease;
+    }
+
+    .drop-zone.dragover {
+      border-color: rgba(34, 197, 94, .75);
+      background: rgba(34, 197, 94, .10);
+      color: #dcfce7;
+    }
+
+    .file-table-wrap {
+      overflow: auto;
+      border: 1px solid rgba(51, 65, 85, .70);
+      border-radius: 12px;
+      background: rgba(15, 23, 42, .45);
+    }
+
+    .file-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .file-table th,
+    .file-table td {
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(51, 65, 85, .55);
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .file-table th {
+      color: var(--muted-2);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      background: rgba(15, 23, 42, .62);
+    }
+
+    .file-table tr:hover td {
+      background: rgba(148, 163, 184, .07);
+    }
+
+    .file-name-button {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: #dbeafe;
+      font-weight: 740;
+      cursor: pointer;
+    }
+
+    .file-name-button:hover {
+      text-decoration: underline;
+      background: transparent;
+    }
+
+    .file-row-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+
+    .file-row-actions button {
+      padding: 6px 8px;
+      font-size: 12px;
+    }
+
+    .editor-box {
+      width: 100%;
+      min-height: 390px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      background: #020617;
+      color: #e5e7eb;
+      border-radius: 12px;
+      padding: 12px;
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      outline: none;
+    }
+
+    .editor-box:focus {
+      border-color: #64748b;
+      box-shadow: 0 0 0 3px rgba(100, 116, 139, .18);
+    }
+
+    .file-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 1050px) {
+      .file-manager-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    
     @media (max-width: 1050px) {
       .layout { grid-template-columns: 1fr; }
       nav {
@@ -528,6 +1178,7 @@ INDEX_HTML = r"""<!doctype html>
       <button class="tab-button" data-tab="multiplayer"><span class="icon">👥</span> Mehrspieler</button>
       <button class="tab-button" data-tab="cheats"><span class="icon">🎮</span> Spielregeln</button>
       <button class="tab-button" data-tab="packs"><span class="icon">📦</span> Pakete</button>
+      <button class="tab-button" data-tab="files"><span class="icon">📁</span> Dateien</button>
       <button class="tab-button" data-tab="expert"><span class="icon">🧰</span> Experten</button>
     </nav>
 
@@ -930,6 +1581,96 @@ INDEX_HTML = r"""<!doctype html>
         </div>
       </section>
 
+      <section class="tab-panel" data-panel="files">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Dateimanager</h2>
+              <p>Dateien sicher in erlaubten WinoMC-Ordnern verwalten, herunterladen, hochladen, bearbeiten und als ZIP exportieren.</p>
+            </div>
+            <span class="badge warn" id="filesStatus">Noch nicht geladen</span>
+          </div>
+
+          <div class="file-toolbar">
+            <label class="status">Bereich
+              <select id="fileRootSelect" aria-label="Dateibereich"></select>
+            </label>
+            <button type="button" id="fileRefresh">Aktualisieren</button>
+            <button type="button" id="fileParent">Nach oben</button>
+            <button type="button" id="fileZipCurrent">Ordner als ZIP</button>
+            <button type="button" id="fileZipExportCurrent">ZIP nach Export</button>
+            <button type="button" class="primary" id="safeWorldExport">Sicherer Welt-Export</button>
+          </div>
+
+          <div class="file-path" id="fileCurrentPath">/</div>
+        </div>
+
+        <div class="file-manager-grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Explorer</h3>
+                <p>Ordner öffnen, Dateien downloaden, ZIPs erstellen oder ZIPs sicher entpacken.</p>
+              </div>
+            </div>
+
+            <div class="drop-zone" id="fileDropZone">
+              Dateien hierher ziehen oder klicken zum Hochladen
+              <input type="file" id="fileUploadInput" hidden multiple>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="file-table-wrap">
+              <table class="file-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Typ</th>
+                    <th>Größe</th>
+                    <th>Geändert</th>
+                    <th>Aktionen</th>
+                  </tr>
+                </thead>
+                <tbody id="fileTableBody">
+                  <tr>
+                    <td colspan="5">Dateimanager wird geladen...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Editor</h3>
+                <p>Textdateien bearbeiten. JSON wird vor dem Speichern geprüft, vorher wird automatisch ein Backup erstellt.</p>
+              </div>
+            </div>
+
+            <div class="file-path" id="editorPath">Keine Datei geöffnet</div>
+
+            <div class="file-meta">
+              <span id="editorMeta">Bereit</span>
+            </div>
+
+            <div style="height:10px"></div>
+
+            <textarea id="fileEditor" class="editor-box" spellcheck="false" placeholder="Wähle links eine Textdatei aus."></textarea>
+
+            <div class="actions" style="margin-top:10px">
+              <button type="button" class="primary" id="fileSave">Speichern</button>
+              <button type="button" class="soft" id="fileCloseEditor">Editor leeren</button>
+            </div>
+
+            <div class="info warning-box" style="margin-top:12px">
+              Änderungen an <b>server.properties</b>, Packs oder Weltdateien brauchen je nach Datei einen Server-Neustart. Bei JSON-Dateien wird fehlerhaftes JSON blockiert.
+            </div>
+          </div>
+        </div>
+      </section>
+      
       <section class="tab-panel" data-panel="expert">
         <div class="grid">
           <div class="card">
@@ -1027,6 +1768,22 @@ INDEX_HTML = r"""<!doctype html>
     const dashboardColumns = document.getElementById('dashboardColumns');
     const resetDashboard = document.getElementById('resetDashboard');
     const clearLog = document.getElementById('clearLog');
+    const filesStatus = document.getElementById('filesStatus');
+    const fileRootSelect = document.getElementById('fileRootSelect');
+    const fileRefresh = document.getElementById('fileRefresh');
+    const fileParent = document.getElementById('fileParent');
+    const fileZipCurrent = document.getElementById('fileZipCurrent');
+    const fileZipExportCurrent = document.getElementById('fileZipExportCurrent');
+    const safeWorldExport = document.getElementById('safeWorldExport');
+    const fileCurrentPath = document.getElementById('fileCurrentPath');
+    const fileDropZone = document.getElementById('fileDropZone');
+    const fileUploadInput = document.getElementById('fileUploadInput');
+    const fileTableBody = document.getElementById('fileTableBody');
+    const editorPath = document.getElementById('editorPath');
+    const editorMeta = document.getElementById('editorMeta');
+    const fileEditor = document.getElementById('fileEditor');
+    const fileSave = document.getElementById('fileSave');
+    const fileCloseEditor = document.getElementById('fileCloseEditor');
 
     const STORE_DASHBOARD = 'winomcDashboardActionsV1';
     const STORE_COLUMNS = 'winomcDashboardColumnsV1';
@@ -1108,6 +1865,10 @@ INDEX_HTML = r"""<!doctype html>
     let historyIndex = history.length;
     let pendingTemplate = null;
     let dashboardActions = loadDashboard();
+    let filesInitialized = false;
+    let currentFileRoot = 'config';
+    let currentFilePath = '/';
+    let currentEditorFile = null;
 
     function appendLine(text, cls) {
       const div = document.createElement('div');
@@ -1344,6 +2105,10 @@ INDEX_HTML = r"""<!doctype html>
         const tab = button.dataset.tab;
         document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item === button));
         document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab));
+
+        if (tab === 'files') {
+          initFileManager();
+        }
       });
     });
 
@@ -1367,6 +2132,54 @@ INDEX_HTML = r"""<!doctype html>
       appendLine('[WinoMC Console] Anzeige geleert. Der echte Server-Log bleibt erhalten.', 'ok');
     });
 
+    fileRootSelect.addEventListener('change', () => {
+      currentFileRoot = fileRootSelect.value;
+      currentFilePath = '/';
+      clearEditor();
+      loadFileList('/');
+    });
+
+    fileRefresh.addEventListener('click', () => loadFileList(currentFilePath));
+
+    fileParent.addEventListener('click', () => {
+      loadFileList(parentUiPath(currentFilePath));
+    });
+
+    fileZipCurrent.addEventListener('click', () => {
+      downloadZip(currentFilePath);
+    });
+
+    fileZipExportCurrent.addEventListener('click', () => {
+      saveZipToExport(currentFilePath);
+    });
+
+    safeWorldExport.addEventListener('click', runSafeWorldExport);
+
+    fileSave.addEventListener('click', saveEditorFile);
+    fileCloseEditor.addEventListener('click', clearEditor);
+
+    fileDropZone.addEventListener('click', () => fileUploadInput.click());
+
+    fileUploadInput.addEventListener('change', () => {
+      uploadFiles(fileUploadInput.files);
+      fileUploadInput.value = '';
+    });
+
+    fileDropZone.addEventListener('dragover', event => {
+      event.preventDefault();
+      fileDropZone.classList.add('dragover');
+    });
+
+    fileDropZone.addEventListener('dragleave', () => {
+      fileDropZone.classList.remove('dragover');
+    });
+
+    fileDropZone.addEventListener('drop', event => {
+      event.preventDefault();
+      fileDropZone.classList.remove('dragover');
+      uploadFiles(event.dataTransfer.files);
+    });
+    
     modalCancel.addEventListener('click', closePrompt);
     modalSend.addEventListener('click', sendPromptValue);
     modalBackdrop.addEventListener('click', (event) => {
@@ -1389,6 +2202,393 @@ INDEX_HTML = r"""<!doctype html>
         event.preventDefault();
       }
     });
+
+    function apiUrl(path, params = {}) {
+      const query = new URLSearchParams(params);
+      const suffix = query.toString() ? '?' + query.toString() : '';
+      return './' + path.replace(/^\/+/, '') + suffix;
+    }
+
+    async function fetchJson(path, params = {}) {
+      const res = await fetch(apiUrl(path, params), { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+
+    async function postJson(path, payload = {}) {
+      const res = await fetch('./' + path.replace(/^\/+/, ''), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+
+    function setFilesStatus(text, variant) {
+      filesStatus.textContent = text;
+      filesStatus.classList.toggle('warn', variant === 'warn');
+    }
+
+    function formatBytes(value) {
+      const bytes = Number(value || 0);
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+      return (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+    }
+
+    function formatUnixTime(value) {
+      if (!value) return '-';
+      return new Date(Number(value) * 1000).toLocaleString();
+    }
+
+    function normalizeUiPath(path) {
+      path = String(path || '/').replaceAll('\\', '/');
+      if (!path.startsWith('/')) path = '/' + path;
+      path = path.replace(/\/+/g, '/');
+      return path || '/';
+    }
+
+    function parentUiPath(path) {
+      path = normalizeUiPath(path);
+      if (path === '/') return '/';
+      const parts = path.split('/').filter(Boolean);
+      parts.pop();
+      return '/' + parts.join('/');
+    }
+
+    async function initFileManager() {
+      if (filesInitialized) {
+        await loadFileList();
+        return;
+      }
+
+      filesInitialized = true;
+
+      try {
+        setFilesStatus('Lade Bereiche...', 'warn');
+        const data = await fetchJson('/api/files/roots');
+
+        fileRootSelect.innerHTML = '';
+        data.roots.forEach(root => {
+          const option = document.createElement('option');
+          option.value = root.key;
+          option.textContent = root.label + (root.exists ? '' : ' (fehlt)');
+          option.disabled = !root.exists || !root.readable;
+          fileRootSelect.appendChild(option);
+        });
+
+        if ([...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) {
+          fileRootSelect.value = currentFileRoot;
+        } else {
+          const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled);
+          currentFileRoot = firstEnabled ? firstEnabled.value : 'config';
+          fileRootSelect.value = currentFileRoot;
+        }
+
+        await loadFileList();
+      } catch (err) {
+        setFilesStatus('Fehler', 'warn');
+        fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>';
+      }
+    }
+
+    async function loadFileList(path) {
+      if (path !== undefined) currentFilePath = normalizeUiPath(path);
+      currentFileRoot = fileRootSelect.value || currentFileRoot;
+
+      try {
+        setFilesStatus('Lade...', 'warn');
+        fileCurrentPath.textContent = currentFileRoot + ':' + currentFilePath;
+
+        const data = await fetchJson('/api/files/list', {
+          root: currentFileRoot,
+          path: currentFilePath
+        });
+
+        currentFilePath = data.path || '/';
+        fileCurrentPath.textContent = currentFileRoot + ':' + currentFilePath;
+        fileParent.disabled = currentFilePath === '/';
+
+        renderFileEntries(data.entries || []);
+        setFilesStatus('Bereit', '');
+      } catch (err) {
+        setFilesStatus('Fehler', 'warn');
+        fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>';
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function renderFileEntries(entries) {
+      if (!entries.length) {
+        fileTableBody.innerHTML = '<tr><td colspan="5">Dieser Ordner ist leer.</td></tr>';
+        return;
+      }
+
+      fileTableBody.innerHTML = '';
+
+      entries.forEach(entry => {
+        const tr = document.createElement('tr');
+
+        const nameTd = document.createElement('td');
+        const nameButton = document.createElement('button');
+        nameButton.type = 'button';
+        nameButton.className = 'file-name-button';
+        nameButton.textContent = (entry.type === 'directory' ? '📁 ' : '📄 ') + entry.name;
+        nameButton.addEventListener('click', () => {
+          if (entry.type === 'directory') {
+            loadFileList(entry.path);
+          } else {
+            openFileInEditor(entry.path);
+          }
+        });
+        nameTd.appendChild(nameButton);
+
+        const typeTd = document.createElement('td');
+        typeTd.textContent = entry.type === 'directory' ? 'Ordner' : 'Datei';
+
+        const sizeTd = document.createElement('td');
+        sizeTd.textContent = entry.type === 'directory' ? '-' : formatBytes(entry.size);
+
+        const modifiedTd = document.createElement('td');
+        modifiedTd.textContent = formatUnixTime(entry.modified);
+
+        const actionsTd = document.createElement('td');
+        const actions = document.createElement('div');
+        actions.className = 'file-row-actions';
+
+        if (entry.type === 'directory') {
+          const open = document.createElement('button');
+          open.type = 'button';
+          open.textContent = 'Öffnen';
+          open.addEventListener('click', () => loadFileList(entry.path));
+          actions.appendChild(open);
+
+          const zip = document.createElement('button');
+          zip.type = 'button';
+          zip.textContent = 'ZIP';
+          zip.addEventListener('click', () => downloadZip(entry.path));
+          actions.appendChild(zip);
+        } else {
+          const download = document.createElement('button');
+          download.type = 'button';
+          download.textContent = 'Download';
+          download.addEventListener('click', () => downloadFile(entry.path));
+          actions.appendChild(download);
+
+          const edit = document.createElement('button');
+          edit.type = 'button';
+          edit.textContent = 'Editor';
+          edit.addEventListener('click', () => openFileInEditor(entry.path));
+          actions.appendChild(edit);
+
+          if (entry.name.toLowerCase().endsWith('.zip')) {
+            const unzip = document.createElement('button');
+            unzip.type = 'button';
+            unzip.textContent = 'Entpacken';
+            unzip.addEventListener('click', () => unzipFile(entry.path));
+            actions.appendChild(unzip);
+          }
+        }
+
+        actionsTd.appendChild(actions);
+        tr.append(nameTd, typeTd, sizeTd, modifiedTd, actionsTd);
+        fileTableBody.appendChild(tr);
+      });
+    }
+
+    function downloadFile(path) {
+      window.location.href = apiUrl('/api/files/download', {
+        root: currentFileRoot,
+        path
+      });
+    }
+
+    function downloadZip(path) {
+      window.location.href = apiUrl('/api/files/zip', {
+        root: currentFileRoot,
+        path
+      });
+    }
+
+    async function saveZipToExport(path) {
+      try {
+        setFilesStatus('Erstelle ZIP...', 'warn');
+        const data = await postJson('/api/files/zip', {
+          root: currentFileRoot,
+          paths: [path],
+          save_to_export: true
+        });
+        appendLine('[WinoMC Dateien] ZIP exportiert: ' + data.filename, 'ok');
+        setFilesStatus('ZIP exportiert', '');
+        await loadFileList();
+      } catch (err) {
+        setFilesStatus('Fehler', 'warn');
+        appendLine('[WinoMC Dateien] ZIP-Fehler: ' + err.message, 'error');
+        alert(err.message);
+      }
+    }
+
+    async function openFileInEditor(path) {
+      try {
+        setFilesStatus('Öffne Datei...', 'warn');
+        const data = await fetchJson('/api/files/read', {
+          root: currentFileRoot,
+          path
+        });
+
+        currentEditorFile = {
+          root: data.root,
+          path: data.path
+        };
+
+        editorPath.textContent = data.root + ':' + data.path;
+        editorMeta.textContent = formatBytes(data.size) + ' · geändert: ' + formatUnixTime(data.modified) + (data.json ? ' · JSON-Prüfung aktiv' : '');
+        fileEditor.value = data.content || '';
+        setFilesStatus('Datei geöffnet', '');
+      } catch (err) {
+        setFilesStatus('Fehler', 'warn');
+        appendLine('[WinoMC Dateien] Editor-Fehler: ' + err.message, 'error');
+        alert(err.message);
+      }
+    }
+
+    async function saveEditorFile() {
+      if (!currentEditorFile) {
+        alert('Keine Datei geöffnet.');
+        return;
+      }
+
+      try {
+        setFilesStatus('Speichere...', 'warn');
+        const data = await postJson('/api/files/write', {
+          root: currentEditorFile.root,
+          path: currentEditorFile.path,
+          content: fileEditor.value
+        });
+
+        appendLine('[WinoMC Dateien] Datei gespeichert: ' + currentEditorFile.path, 'ok');
+
+        if (data.backup_created) {
+          appendLine('[WinoMC Dateien] Backup erstellt: ' + data.backup_path, 'ok');
+        }
+
+        setFilesStatus('Gespeichert', '');
+        await loadFileList(currentFilePath);
+      } catch (err) {
+        setFilesStatus('Fehler', 'warn');
+        appendLine('[WinoMC Dateien] Speichern fehlgeschlagen: ' + err.message, 'error');
+        alert(err.message);
+      }
+    }
+
+    function clearEditor() {
+      currentEditorFile = null;
+      editorPath.textContent = 'Keine Datei geöffnet';
+      editorMeta.textContent = 'Bereit';
+      fileEditor.value = '';
+    }
+
+    async function uploadFiles(files) {
+      files = Array.from(files || []);
+      if (!files.length) return;
+
+      for (const file of files) {
+        try {
+          setFilesStatus('Upload: ' + file.name, 'warn');
+
+          const res = await fetch(apiUrl('/api/files/upload', {
+            root: currentFileRoot,
+            path: currentFilePath,
+            filename: file.name,
+            overwrite: 'false'
+          }), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: file
+          });
+
+          const data = await res.json();
+
+          if (!res.ok || !data.ok) {
+            throw new Error(data.error || res.statusText);
+          }
+
+          appendLine('[WinoMC Dateien] Hochgeladen: ' + data.path, 'ok');
+        } catch (err) {
+          appendLine('[WinoMC Dateien] Upload fehlgeschlagen: ' + file.name + ' · ' + err.message, 'error');
+          alert('Upload fehlgeschlagen: ' + file.name + '\n\n' + err.message);
+        }
+      }
+
+      setFilesStatus('Upload fertig', '');
+      await loadFileList(currentFilePath);
+    }
+
+    async function unzipFile(path) {
+      const destination = window.prompt('In welchen Ordner entpacken?', currentFilePath || '/');
+      if (destination === null) return;
+
+      const overwrite = window.confirm('Vorhandene Dateien überschreiben?');
+
+      try {
+        setFilesStatus('Entpacke ZIP...', 'warn');
+        const data = await postJson('/api/files/unzip', {
+          root: currentFileRoot,
+          path,
+          destination,
+          overwrite
+        });
+
+        appendLine('[WinoMC Dateien] ZIP entpackt: ' + data.files + ' Dateien', 'ok');
+        setFilesStatus('ZIP entpackt', '');
+        await loadFileList(currentFilePath);
+      } catch (err) {
+        setFilesStatus('Fehler', 'warn');
+        appendLine('[WinoMC Dateien] Entpacken fehlgeschlagen: ' + err.message, 'error');
+        alert(err.message);
+      }
+    }
+
+    async function runSafeWorldExport() {
+      const worldPath = window.prompt('Welche Welt sicher exportieren?', '/world');
+      if (!worldPath) return;
+
+      if (!window.confirm('Sicheren Welt-Export starten?\n\nAblauf: save hold → save query → ZIP → save resume')) {
+        return;
+      }
+
+      try {
+        setFilesStatus('Welt-Export läuft...', 'warn');
+        const data = await postJson('/api/worlds/export-safe', {
+          path: worldPath,
+          save_to_export: true
+        });
+
+        appendLine('[WinoMC Dateien] Sicherer Welt-Export erstellt: ' + data.filename, 'ok');
+        setFilesStatus('Welt exportiert', '');
+
+        if (currentFileRoot === 'export') {
+          await loadFileList('/');
+        }
+      } catch (err) {
+        setFilesStatus('Fehler', 'warn');
+        appendLine('[WinoMC Dateien] Welt-Export fehlgeschlagen: ' + err.message, 'error');
+        alert(err.message);
+      }
+    }
 
     function connectLogs() {
       const source = new EventSource('./api/logs');
@@ -1487,6 +2687,38 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _send_file(self, file_path: str, download_name: str | None = None, content_type: str | None = None, cleanup: bool = False):
+        try:
+            if not os.path.isfile(file_path):
+                raise FileNotFoundError("Datei nicht gefunden.")
+
+            download_name = safe_download_name(download_name or os.path.basename(file_path))
+            content_type = content_type or mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+            size = os.path.getsize(file_path)
+
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(size))
+            self.send_header(
+                "Content-Disposition",
+                f"attachment; filename=\"{download_name}\"; filename*=UTF-8''{quote(download_name)}",
+            )
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+
+            with open(file_path, "rb") as handle:
+                while True:
+                    chunk = handle.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+
+        finally:
+            if cleanup:
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
 
     def _read_request_body(self, max_bytes: int = 4096) -> str:
         """Read a small request body.
@@ -1522,6 +2754,49 @@ class Handler(BaseHTTPRequestHandler):
 
         return ""
 
+    def _write_request_body_to_file(self, target_path: str, max_bytes: int):
+        content_length = self.headers.get("Content-Length")
+
+        if not content_length:
+            raise ValueError("Upload ohne Content-Length wird nicht unterstützt.")
+
+        try:
+            remaining = int(content_length)
+        except ValueError:
+            raise ValueError("Ungültige Upload-Größe.")
+
+        if remaining < 0:
+            raise ValueError("Ungültige Upload-Größe.")
+
+        if remaining > max_bytes:
+            raise ValueError(f"Upload ist zu groß. Maximum: {max_bytes} Bytes.")
+
+        parent = os.path.dirname(target_path)
+        os.makedirs(parent, exist_ok=True)
+
+        fd, temp_path = tempfile.mkstemp(prefix=".winomc-upload-", dir=parent)
+        os.close(fd)
+
+        try:
+            with open(temp_path, "wb") as handle:
+                while remaining > 0:
+                    chunk = self.rfile.read(min(1024 * 1024, remaining))
+
+                    if not chunk:
+                        raise ValueError("Upload wurde unerwartet beendet.")
+
+                    handle.write(chunk)
+                    remaining -= len(chunk)
+
+            os.replace(temp_path, target_path)
+
+        except Exception:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+            raise
+
     def _extract_command(self) -> str:
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
@@ -1545,7 +2820,10 @@ class Handler(BaseHTTPRequestHandler):
         if self._forbidden_if_needed():
             return
 
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+
         if path in ("/", "", "/index.html"):
             data = INDEX_HTML.encode("utf-8")
             self.send_response(200)
@@ -1568,23 +2846,216 @@ class Handler(BaseHTTPRequestHandler):
             self._stream_logs()
             return
 
+        if path.endswith("/api/files/roots") or path == "/api/files/roots":
+            self._send_json(200, {
+                "ok": True,
+                "roots": list_file_roots(),
+            })
+            return
+
+        if path.endswith("/api/files/list") or path == "/api/files/list":
+            try:
+                root_key = query.get("root", ["config"])[0]
+                rel_path = query.get("path", ["/"])[0]
+                self._send_json(200, list_directory(root_key, rel_path))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
+        if path.endswith("/api/files/read") or path == "/api/files/read":
+            try:
+                root_key = query.get("root", ["config"])[0]
+                rel_path = query.get("path", ["/"])[0]
+                self._send_json(200, read_text_file(root_key, rel_path))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
+        if path.endswith("/api/files/download") or path == "/api/files/download":
+            try:
+                root_key = query.get("root", ["config"])[0]
+                rel_path = query.get("path", ["/"])[0]
+                file_path, normalized_rel_path = resolve_safe_path(root_key, rel_path)
+
+                if os.path.isdir(file_path):
+                    raise ValueError("Ordner können nur als ZIP heruntergeladen werden.")
+
+                download_name = os.path.basename(file_path)
+                self._send_file(file_path, download_name=download_name)
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
+        if path.endswith("/api/files/zip") or path == "/api/files/zip":
+            try:
+                root_key = query.get("root", ["config"])[0]
+                rel_path = query.get("path", ["/"])[0]
+                zip_info = create_zip_from_paths(root_key, [rel_path], save_to_export=False)
+                self._send_file(
+                    zip_info["zip_path"],
+                    download_name=zip_info["zip_name"],
+                    content_type="application/zip",
+                    cleanup=zip_info["cleanup"],
+                )
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
         self.send_error(404)
 
     def do_POST(self):
         if self._forbidden_if_needed():
             return
 
-        path = urlparse(self.path).path
-        if not (path.endswith("/api/command") or path == "/api/command"):
-            self.send_error(404)
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path.endswith("/api/command") or path == "/api/command":
+            try:
+                command = sanitize_command(self._extract_command())
+                write_command(command)
+                self._send_json(200, {"ok": True, "command": command})
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
             return
 
-        try:
-            command = sanitize_command(self._extract_command())
-            write_command(command)
-            self._send_json(200, {"ok": True, "command": command})
-        except Exception as exc:
-            self._send_json(400, {"ok": False, "error": str(exc)})
+        if path.endswith("/api/files/upload") or path == "/api/files/upload":
+            try:
+                query = parse_qs(parsed.query)
+
+                root_key = query.get("root", ["import"])[0]
+                dir_rel_path = query.get("path", ["/"])[0]
+                filename = query.get("filename", ["upload.bin"])[0]
+                overwrite = parse_bool(query.get("overwrite", ["false"])[0], default=False)
+
+                target_path, target_rel_path = prepare_upload_target(
+                    root_key,
+                    dir_rel_path,
+                    filename,
+                    overwrite=overwrite,
+                )
+
+                backup_path = None
+                if os.path.exists(target_path):
+                    backup_path = make_file_backup(target_path, root_key, target_rel_path)
+
+                self._write_request_body_to_file(target_path, MAX_UPLOAD_BYTES)
+
+                self._send_json(200, {
+                    "ok": True,
+                    "root": root_key,
+                    "path": target_rel_path,
+                    "filename": os.path.basename(target_path),
+                    "backup_created": bool(backup_path),
+                    "backup_path": backup_path,
+                    "message": "Datei hochgeladen.",
+                })
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
+        if path.endswith("/api/files/write") or path == "/api/files/write":
+            try:
+                body = self._read_request_body(max_bytes=MAX_TEXT_FILE_BYTES + 65536)
+                payload = json.loads(body or "{}")
+
+                root_key = str(payload.get("root", "config"))
+                rel_path = str(payload.get("path", "/"))
+                content = str(payload.get("content", ""))
+
+                self._send_json(200, write_text_file(root_key, rel_path, content))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
+        if path.endswith("/api/files/unzip") or path == "/api/files/unzip":
+            try:
+                body = self._read_request_body(max_bytes=65536)
+                payload = json.loads(body or "{}")
+
+                root_key = str(payload.get("root", "import"))
+                archive_path = str(payload.get("path", "/"))
+                destination = str(payload.get("destination", "/"))
+                overwrite = bool(payload.get("overwrite", False))
+
+                self._send_json(200, extract_zip_file(
+                    root_key,
+                    archive_path,
+                    destination_rel_path=destination,
+                    overwrite=overwrite,
+                ))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
+        if path.endswith("/api/worlds/export-safe") or path == "/api/worlds/export-safe":
+            try:
+                body = self._read_request_body(max_bytes=65536)
+                payload = json.loads(body or "{}")
+
+                world_path = str(payload.get("path", "/world"))
+                save_to_export = bool(payload.get("save_to_export", True))
+
+                zip_info = create_safe_world_export(world_path, save_to_export=save_to_export)
+
+                if save_to_export:
+                    self._send_json(200, {
+                        "ok": True,
+                        "saved_to_export": True,
+                        "root": "export",
+                        "path": zip_info["export_path"],
+                        "filename": zip_info["zip_name"],
+                        "message": "Sicherer Welt-Export wurde nach /share/winomc/export gespeichert.",
+                    })
+                    return
+
+                self._send_file(
+                    zip_info["zip_path"],
+                    download_name=zip_info["zip_name"],
+                    content_type="application/zip",
+                    cleanup=zip_info["cleanup"],
+                )
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
+        if path.endswith("/api/files/zip") or path == "/api/files/zip":
+            try:
+                body = self._read_request_body(max_bytes=65536)
+                payload = json.loads(body or "{}")
+
+                root_key = str(payload.get("root", "config"))
+                rel_paths = payload.get("paths")
+
+                if not isinstance(rel_paths, list) or not rel_paths:
+                    rel_paths = [str(payload.get("path", "/"))]
+
+                rel_paths = [str(item) for item in rel_paths]
+                save_to_export = bool(payload.get("save_to_export", False))
+
+                zip_info = create_zip_from_paths(root_key, rel_paths, save_to_export=save_to_export)
+
+                if save_to_export:
+                    self._send_json(200, {
+                        "ok": True,
+                        "saved_to_export": True,
+                        "root": "export",
+                        "path": zip_info["export_path"],
+                        "filename": zip_info["zip_name"],
+                    })
+                    return
+
+                self._send_file(
+                    zip_info["zip_path"],
+                    download_name=zip_info["zip_name"],
+                    content_type="application/zip",
+                    cleanup=zip_info["cleanup"],
+                )
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
+        self.send_error(404)
 
     def _sse_send(self, payload: dict):
         data = json.dumps(payload, ensure_ascii=False)

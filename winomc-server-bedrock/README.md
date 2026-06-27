@@ -1,4 +1,4 @@
-# WinoMC
+# [BETA] WinoMC
 
 WinoMC stellt einen Minecraft Bedrock Dedicated Server als Home-Assistant-Add-on bereit.
 
@@ -55,7 +55,7 @@ Für einen normalen privaten Survival-Server reichen meistens diese Werte:
 
 ```yaml
 VERSION: LATEST
-SERVER_NAME: WinoMC Server
+SERVER_NAME: "[BETA] WinoMC Server"
 LEVEL_NAME: world
 GAMEMODE: survival
 DIFFICULTY: normal

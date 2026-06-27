@@ -5,6 +5,10 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.0
+
+Hinzufügen von neuen Funktionen für die Web Console.
+
 ### 1.4.8
 
 Bereinigung und Dokumentation
