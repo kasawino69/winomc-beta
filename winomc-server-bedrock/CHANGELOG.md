@@ -5,6 +5,9 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.3.7
+Bug fixes
+
 ### 1.3.6
 
 * Native WinoMC Bedrock Runtime als Vorschau vorbereitet
