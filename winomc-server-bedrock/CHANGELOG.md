@@ -5,6 +5,15 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.6
+
+* Mein Dashboard überarbeitet: keine lange Aktionsliste mehr, stattdessen kompakte Such-/Auswahlzeile im Stil einer Command Palette.
+* Dashboard-Kacheln optisch vereinheitlicht und Ausführen-Schaltflächen konsistenter ausgerichtet.
+* Papierkorb-Dateien sind im Editor nur noch als Vorschau geöffnet und können nicht mehr direkt gespeichert werden.
+* Schreibzugriff auf den Papierkorb zusätzlich im Backend blockiert.
+* Eingeklappte Sidebar in der klassischen Ansicht stabilisiert, damit Icons nicht mehr aus dem sichtbaren Bereich gescrollt werden.
+* Abstände und Bedienflächen im Dateimanager weiter bereinigt.
+
 ### 1.5.5
 
 * Klassische Ansicht weiter bereinigt und die Serversteuerung auf die Übersicht beschränkt

@@ -784,6 +784,69 @@ INDEX_HTML = r"""<!doctype html>
 
     @media (max-width: 1050px) { .layout { grid-template-columns: 1fr; padding: 10px; } body.sidebar-collapsed { --sidebar-width: 255px; } nav { position: static; height: auto; min-height: 0; display: flex; overflow-x: auto; gap: 6px; padding: 8px; border-radius: 12px; } .sidebar-toggle, .nav-title { display: none; } .tab-button { width: auto; min-width: max-content; } .grid, .grid-3, .file-manager-grid { grid-template-columns: 1fr; } .split-resizer { display: none; } .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); } }
     @media (max-width: 720px) { :root { --console-height: 310px; } body.console-compact { --console-height: 220px; } body.console-large { --console-height: 70vh; } body.console-maximized { --console-height: 82vh; } header { padding: 10px 12px; } .layout { padding: 8px; gap: 10px; } .hero, .card { padding: 12px; border-radius: 12px; } .hero-actions button, .command-row button, .file-toolbar button, .file-toolbar input, .file-toolbar select { width: 100%; } .file-row-actions { flex-wrap: wrap; } .file-table th, .file-table td { padding: 8px; } .split-actions { grid-template-columns: 1fr; } .command-row { flex-direction: column; } .console-controls button { padding: 7px 9px; font-size: 12px; } .console-head { gap: 6px; } .console-head h3 { font-size: 14px; } .console-head p { display: none; } #log { font-size: 12px; } .editor-panel.editor-fullscreen { inset: 8px 8px calc(var(--console-height) + 10px) 8px; } .card.maximized { inset: 8px; } .dashboard-layout { grid-template-columns: 1fr; } }
+
+
+    /* v1.5.6 Dashboard + Trash UX refinement */
+    body.sidebar-collapsed nav {
+      overflow: hidden !important;
+      scrollbar-width: none;
+      display: grid;
+      align-content: start;
+      gap: 6px;
+    }
+    body.sidebar-collapsed nav::-webkit-scrollbar { display: none; }
+    body.sidebar-collapsed .tab-button,
+    body.sidebar-collapsed .sidebar-toggle {
+      flex: 0 0 auto;
+    }
+    .dashboard-layout { display: block; }
+    .dashboard-add-card { display: grid; gap: 12px; }
+    .dashboard-add-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(240px, .85fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .dashboard-add-row input,
+    .dashboard-add-row select { width: 100%; min-width: 0; }
+    .dashboard-action-preview {
+      display: grid;
+      grid-template-columns: auto auto 1fr;
+      gap: 8px 12px;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px solid rgba(51, 65, 85, .72);
+      border-radius: 12px;
+      background: rgba(15, 23, 42, .55);
+      color: var(--muted);
+    }
+    .dashboard-action-preview b { color: var(--text); }
+    .dashboard-action-preview span {
+      width: max-content;
+      color: #cbd5e1;
+      background: rgba(148, 163, 184, .11);
+      border: 1px solid rgba(148, 163, 184, .18);
+      border-radius: 999px;
+      padding: 3px 7px;
+      font-size: 12px;
+    }
+    .dashboard-action-preview p { grid-column: 1 / -1; font-size: 13px; }
+    .dashboard-action-preview.danger { border-color: rgba(239, 68, 68, .35); background: rgba(239, 68, 68, .10); }
+    .dashboard-action-preview.warning { border-color: rgba(245, 158, 11, .35); background: rgba(245, 158, 11, .10); }
+    .dashboard-active-card { display: grid; gap: 12px; }
+    .dashboard-tile { grid-template-rows: auto minmax(46px, 1fr) auto; min-height: 178px; }
+    .tile-action-main { width: 100%; align-self: end; min-height: 44px; }
+    .tile-actions { align-self: end; }
+    .compact-card-header { margin-bottom: 0; }
+    .editor-panel.preview-only .editor-actions #fileSave { display: none !important; }
+    .editor-panel.preview-only .editor-box { border-color: rgba(96, 165, 250, .35); background: rgba(2, 6, 23, .92); }
+    .editor-panel.preview-only .info.warning-box { display: none; }
+    .file-manager-grid .card-header { gap: 16px; }
+    .file-manager-grid .card-header .actions { margin-top: 0; }
+    @media (max-width: 900px) {
+      .dashboard-add-row { grid-template-columns: 1fr; }
+      .dashboard-action-preview { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -862,21 +925,31 @@ INDEX_HTML = r"""<!doctype html>
       </section>
 
       <section class="tab-panel" data-panel="dashboard">
-        <div class="card">
+        <div class="card dashboard-hero-card">
           <div class="dashboard-toolbar">
-            <div><h2>Mein Dashboard</h2><p>Deine Favoriten links, neue Aktionen rechts nach Kategorien. Bereits hinzugefügte Aktionen werden ausgeblendet.</p></div>
-            <div class="actions">
+            <div><h2>Mein Dashboard</h2><p>Deine Favoriten als kompakte Kacheln. Neue Aktionen fügst du über die Suche hinzu, statt durch lange Listen zu scrollen.</p></div>
+            <div class="actions dashboard-controls">
               <label class="status">Layout <select id="dashboardColumns" aria-label="Dashboard Layout"><option value="auto">Auto</option><option value="2">2 Spalten</option><option value="3">3 Spalten</option><option value="4">4 Spalten</option></select></label>
               <button class="soft" id="resetDashboard" type="button">Standard wiederherstellen</button>
             </div>
           </div>
         </div>
-        <div class="dashboard-layout">
-          <div>
-            <div class="card"><div class="card-header"><div><h3>Aktive Kacheln</h3><p>Diese Aktionen sind in deinem Dashboard. Sortiere sie mit den Pfeilen oder entferne sie.</p></div></div></div>
-            <div id="dashboardGrid" class="dashboard-grid auto" aria-live="polite"></div>
+
+        <div class="card dashboard-add-card">
+          <div class="card-header compact-card-header">
+            <div><h3>Aktion hinzufügen</h3><p>Suchen wie in einer Command Palette: tippen, auswählen, hinzufügen.</p></div>
           </div>
-          <details class="card" open><summary>Aktionen hinzufügen</summary><p style="margin-top:8px">Nur noch nicht hinzugefügte Aktionen. Kritische Aktionen bleiben markiert.</p><div id="actionPicker" class="picker-grid"></div></details>
+          <div class="dashboard-add-row">
+            <input id="dashboardActionSearch" type="search" placeholder="Aktion suchen, z. B. Wetter, Backup, Spieler, OP…" aria-label="Dashboard-Aktion suchen">
+            <select id="dashboardActionSelect" aria-label="Dashboard-Aktion auswählen"></select>
+            <button class="primary" id="dashboardAddSelected" type="button">Hinzufügen</button>
+          </div>
+          <div id="actionPicker" class="dashboard-action-preview" aria-live="polite"></div>
+        </div>
+
+        <div class="card dashboard-active-card">
+          <div class="card-header compact-card-header"><div><h3>Aktive Kacheln</h3><p>Sortiere Favoriten mit den Pfeilen oder entferne sie wieder.</p></div></div>
+          <div id="dashboardGrid" class="dashboard-grid auto" aria-live="polite"></div>
         </div>
       </section>
 
@@ -989,6 +1062,9 @@ INDEX_HTML = r"""<!doctype html>
     const actionPicker = document.getElementById('actionPicker');
     const dashboardColumns = document.getElementById('dashboardColumns');
     const resetDashboard = document.getElementById('resetDashboard');
+    const dashboardActionSearch = document.getElementById('dashboardActionSearch');
+    const dashboardActionSelect = document.getElementById('dashboardActionSelect');
+    const dashboardAddSelected = document.getElementById('dashboardAddSelected');
     const clearLog = document.getElementById('clearLog');
     const filesStatus = document.getElementById('filesStatus');
     const fileRootSelect = document.getElementById('fileRootSelect');
@@ -1119,7 +1195,7 @@ INDEX_HTML = r"""<!doctype html>
       if (!dashboardActions.length) {
         const empty = document.createElement('div');
         empty.className = 'dashboard-empty';
-        empty.textContent = 'Noch keine Kacheln ausgewählt. Füge rechts die Aktionen hinzu, die du wirklich brauchst.';
+        empty.textContent = 'Noch keine Kacheln ausgewählt. Suche oben nach einer Aktion und füge sie hinzu.';
         dashboardGrid.appendChild(empty);
       }
 
@@ -1127,7 +1203,7 @@ INDEX_HTML = r"""<!doctype html>
         const action = ACTION_BY_ID[id];
         if (!action) return;
         const tile = document.createElement('article');
-        tile.className = 'tile';
+        tile.className = 'tile dashboard-tile';
         const top = document.createElement('div');
         top.className = 'tile-top';
         const text = document.createElement('div');
@@ -1143,6 +1219,7 @@ INDEX_HTML = r"""<!doctype html>
         tag.textContent = action.category;
         top.append(text, tag);
         const actionButton = createButtonForAction(action, action.template ? 'Ausführen…' : 'Ausführen');
+        actionButton.classList.add('tile-action-main');
         const controls = document.createElement('div');
         controls.className = 'tile-actions';
         const up = document.createElement('button');
@@ -1169,54 +1246,57 @@ INDEX_HTML = r"""<!doctype html>
       renderActionPicker();
     }
 
+    function getDashboardAvailableActions() {
+      const term = String(dashboardActionSearch?.value || '').trim().toLowerCase();
+      return ACTIONS
+        .filter(action => !dashboardActions.includes(action.id))
+        .filter(action => !term || [action.label, action.description, action.category, action.id].join(' ').toLowerCase().includes(term))
+        .sort((a, b) => (a.category + a.label).localeCompare(b.category + b.label));
+    }
+
     function renderActionPicker() {
-      actionPicker.innerHTML = '';
-      const available = ACTIONS.filter(action => !dashboardActions.includes(action.id));
+      if (!dashboardActionSelect || !actionPicker) return;
+      const available = getDashboardAvailableActions();
+      dashboardActionSelect.innerHTML = '';
+
       if (!available.length) {
-        const empty = document.createElement('div');
-        empty.className = 'dashboard-empty';
-        empty.textContent = 'Alle verfügbaren Aktionen sind bereits im Dashboard.';
-        actionPicker.appendChild(empty);
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = dashboardActionSearch?.value ? 'Keine passende Aktion gefunden' : 'Alle Aktionen sind bereits im Dashboard';
+        dashboardActionSelect.appendChild(option);
+        if (dashboardAddSelected) dashboardAddSelected.disabled = true;
+        actionPicker.textContent = option.textContent;
         return;
       }
 
-      const groups = new Map();
+      let currentCategory = '';
       available.forEach(action => {
-        if (!groups.has(action.category)) groups.set(action.category, []);
-        groups.get(action.category).push(action);
+        if (action.category !== currentCategory) {
+          currentCategory = action.category;
+          const group = document.createElement('option');
+          group.disabled = true;
+          group.textContent = '── ' + currentCategory + ' ──';
+          dashboardActionSelect.appendChild(group);
+        }
+        const option = document.createElement('option');
+        option.value = action.id;
+        option.textContent = action.label + (action.variant === 'danger' ? '  · Kritisch' : '');
+        dashboardActionSelect.appendChild(option);
       });
 
-      groups.forEach((items, category) => {
-        const section = document.createElement('section');
-        section.className = 'picker-section';
-        const title = document.createElement('div');
-        title.className = 'picker-section-title';
-        title.textContent = category;
-        section.appendChild(title);
-        items.forEach(action => {
-          const item = document.createElement('div');
-          item.className = 'picker-item';
-          const meta = document.createElement('div');
-          meta.className = 'picker-meta';
-          const name = document.createElement('strong');
-          name.textContent = action.label;
-          const cat = document.createElement('span');
-          cat.className = 'category-label';
-          cat.textContent = action.variant === 'danger' ? 'Kritisch' : category;
-          meta.append(name, cat);
-          const desc = document.createElement('div');
-          desc.className = 'tile-desc';
-          desc.textContent = action.description || '';
-          const add = document.createElement('button');
-          add.type = 'button';
-          add.textContent = 'Hinzufügen';
-          if (action.variant) add.classList.add(action.variant);
-          add.addEventListener('click', () => addDashboardAction(action.id));
-          item.append(meta, desc, add);
-          section.appendChild(item);
-        });
-        actionPicker.appendChild(section);
-      });
+      const first = available[0];
+      dashboardActionSelect.value = first.id;
+      if (dashboardAddSelected) dashboardAddSelected.disabled = false;
+      updateDashboardActionPreview();
+    }
+
+    function updateDashboardActionPreview() {
+      if (!dashboardActionSelect || !actionPicker) return;
+      const action = ACTION_BY_ID[dashboardActionSelect.value];
+      if (!action) { actionPicker.textContent = 'Keine Aktion ausgewählt.'; return; }
+      actionPicker.innerHTML = '<b>' + escapeHtml(action.label) + '</b><span>' + escapeHtml(action.category) + '</span><p>' + escapeHtml(action.description || '') + '</p>';
+      actionPicker.classList.toggle('danger', action.variant === 'danger');
+      actionPicker.classList.toggle('warning', action.variant === 'warning');
     }
 
     function addDashboardAction(id) { if (!ACTION_BY_ID[id] || dashboardActions.includes(id)) return; dashboardActions.push(id); saveDashboard(); renderDashboard(); }
@@ -1290,7 +1370,7 @@ INDEX_HTML = r"""<!doctype html>
           download.addEventListener('click', () => downloadFile(entry.path));
           const edit = document.createElement('button');
           edit.type = 'button';
-          edit.textContent = 'Editor';
+          edit.textContent = inTrash ? 'Vorschau' : 'Editor';
           edit.addEventListener('click', () => openFileInEditor(entry.path));
           actions.append(download, edit);
           if (['.zip', '.mcpack', '.mcaddon', '.mcworld', '.mctemplate'].some(ext => entry.name.toLowerCase().endsWith(ext))) {
@@ -1330,9 +1410,52 @@ INDEX_HTML = r"""<!doctype html>
     function downloadFile(path) { window.location.href = apiUrl('/api/files/download', { root: currentFileRoot, path }); }
     function downloadZip(path) { window.location.href = apiUrl('/api/files/zip', { root: currentFileRoot, path }); }
     async function saveZipToExport(path) { try { setFilesStatus('Erstelle ZIP...', 'warn'); const data = await postJson('/api/files/zip', { root: currentFileRoot, paths: [path], save_to_export: true }); appendLine('[WinoMC Dateien] ZIP exportiert: ' + data.filename, 'ok'); setFilesStatus('ZIP exportiert', ''); if (currentFileRoot === 'export') await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] ZIP-Fehler: ' + err.message, 'error'); alert(err.message); } }
-    async function openFileInEditor(path) { try { setFilesStatus('Öffne Datei...', 'warn'); const data = await fetchJson('/api/files/read', { root: currentFileRoot, path }); currentEditorFile = { root: data.root, path: data.path }; editorPath.textContent = data.root + ':' + data.path; editorMeta.textContent = formatBytes(data.size) + ' · geändert: ' + formatUnixTime(data.modified) + (data.json ? ' · JSON-Prüfung aktiv' : ''); fileEditor.value = data.content || ''; setFilesStatus('Datei geöffnet', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Editor-Fehler: ' + err.message, 'error'); alert(err.message); } }
-    async function saveEditorFile() { if (!currentEditorFile) { alert('Keine Datei geöffnet.'); return; } try { setFilesStatus('Speichere...', 'warn'); const data = await postJson('/api/files/write', { root: currentEditorFile.root, path: currentEditorFile.path, content: fileEditor.value }); appendLine('[WinoMC Dateien] Datei gespeichert: ' + currentEditorFile.path, 'ok'); if (data.backup_created) appendLine('[WinoMC Dateien] Backup erstellt: ' + data.backup_path, 'ok'); setFilesStatus('Gespeichert', ''); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Speichern fehlgeschlagen: ' + err.message, 'error'); alert(err.message); } }
-    function clearEditor() { currentEditorFile = null; editorPath.textContent = 'Keine Datei geöffnet'; editorMeta.textContent = 'Bereit'; fileEditor.value = ''; }
+    function setEditorPreviewMode(previewOnly) {
+      if (fileSave) {
+        fileSave.disabled = !!previewOnly;
+        fileSave.style.display = previewOnly ? 'none' : '';
+      }
+      if (fileEditor) fileEditor.readOnly = !!previewOnly;
+      const panel = document.getElementById('editorPanel');
+      if (panel) panel.classList.toggle('preview-only', !!previewOnly);
+    }
+
+    async function openFileInEditor(path) {
+      try {
+        setFilesStatus(currentFileRoot === 'trash' ? 'Öffne Vorschau...' : 'Öffne Datei...', 'warn');
+        const data = await fetchJson('/api/files/read', { root: currentFileRoot, path });
+        const previewOnly = data.root === 'trash';
+        currentEditorFile = previewOnly ? null : { root: data.root, path: data.path };
+        editorPath.textContent = data.root + ':' + data.path;
+        editorMeta.textContent = formatBytes(data.size) + ' · geändert: ' + formatUnixTime(data.modified) + (data.json ? ' · JSON-Prüfung aktiv' : '') + (previewOnly ? ' · Papierkorb-Vorschau, nicht schreibbar' : '');
+        fileEditor.value = data.content || '';
+        setEditorPreviewMode(previewOnly);
+        setFilesStatus(previewOnly ? 'Vorschau geöffnet' : 'Datei geöffnet', '');
+      } catch (err) {
+        setFilesStatus('Fehler', 'warn');
+        appendLine('[WinoMC Dateien] Editor-Fehler: ' + err.message, 'error');
+        alert(err.message);
+      }
+    }
+
+    async function saveEditorFile() {
+      if (currentFileRoot === 'trash') { alert('Papierkorb-Dateien sind nur als Vorschau geöffnet. Bitte zuerst wiederherstellen.'); return; }
+      if (!currentEditorFile) { alert('Keine Datei geöffnet.'); return; }
+      try {
+        setFilesStatus('Speichere...', 'warn');
+        const data = await postJson('/api/files/write', { root: currentEditorFile.root, path: currentEditorFile.path, content: fileEditor.value });
+        appendLine('[WinoMC Dateien] Datei gespeichert: ' + currentEditorFile.path, 'ok');
+        if (data.backup_created) appendLine('[WinoMC Dateien] Backup erstellt: ' + data.backup_path, 'ok');
+        setFilesStatus('Gespeichert', '');
+        await loadFileList(currentFilePath);
+      } catch (err) {
+        setFilesStatus('Fehler', 'warn');
+        appendLine('[WinoMC Dateien] Speichern fehlgeschlagen: ' + err.message, 'error');
+        alert(err.message);
+      }
+    }
+
+    function clearEditor() { currentEditorFile = null; editorPath.textContent = 'Keine Datei geöffnet'; editorMeta.textContent = 'Bereit'; fileEditor.value = ''; setEditorPreviewMode(false); }
     async function uploadFiles(files) { files = Array.from(files || []); if (!files.length) return; for (const file of files) { try { setFilesStatus('Upload: ' + file.name, 'warn'); let data; try { data = await uploadFileBinary(file); } catch (binaryErr) { if (file.size > MAX_JSON_UPLOAD_SIZE) throw binaryErr; appendLine('[WinoMC Dateien] Binary Upload fehlgeschlagen, nutze JSON-Fallback: ' + binaryErr.message, 'error'); data = await uploadFileJson(file); } appendLine('[WinoMC Dateien] Hochgeladen: ' + data.path, 'ok'); } catch (err) { appendLine('[WinoMC Dateien] Upload fehlgeschlagen: ' + file.name + ' · ' + err.message, 'error'); alert('Upload fehlgeschlagen: ' + file.name + '\n\n' + err.message); } } setFilesStatus('Upload fertig', ''); await loadFileList(currentFilePath); }
     async function uploadFileBinary(file) { const res = await fetch(apiUrl('/api/files/upload', { root: currentFileRoot, path: currentFilePath, filename: file.name, overwrite: 'false' }), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-WinoMC-Upload-Size': String(file.size), 'X-WinoMC-Filename': encodeURIComponent(file.name) }, body: file }); const data = await res.json(); if (!res.ok || !data.ok) throw new Error(data.error || res.statusText); return data; }
     function readFileAsBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '').split(',', 2)[1] || ''); reader.onerror = () => reject(reader.error || new Error('Datei konnte nicht gelesen werden.')); reader.readAsDataURL(file); }); }
@@ -1407,6 +1530,9 @@ INDEX_HTML = r"""<!doctype html>
     editorFontMinus.addEventListener('click', () => changeEditorFont(-1));
     dashboardColumns.addEventListener('change', () => { localStorage.setItem(STORE_COLUMNS, dashboardColumns.value); renderDashboard(); });
     resetDashboard.addEventListener('click', () => { dashboardActions = [...DEFAULT_DASHBOARD]; saveDashboard(); renderDashboard(); });
+    if (dashboardActionSearch) dashboardActionSearch.addEventListener('input', renderActionPicker);
+    if (dashboardActionSelect) dashboardActionSelect.addEventListener('change', updateDashboardActionPreview);
+    if (dashboardAddSelected) dashboardAddSelected.addEventListener('click', () => { if (dashboardActionSelect && dashboardActionSelect.value) addDashboardAction(dashboardActionSelect.value); });
     clearLog.addEventListener('click', () => { log.innerHTML = ''; appendLine('[WinoMC Console] Anzeige geleert. Der echte Server-Log bleibt erhalten.', 'ok'); });
     focusConsoleInput.addEventListener('click', () => input.focus());
     modalCancel.addEventListener('click', closePrompt); modalSend.addEventListener('click', sendPromptValue); modalBackdrop.addEventListener('click', event => { if (event.target === modalBackdrop) closePrompt(); }); modalInput.addEventListener('keydown', event => { if (event.key === 'Enter') sendPromptValue(); if (event.key === 'Escape') closePrompt(); });
@@ -2266,6 +2392,8 @@ def read_text_file(root_key, rel_path):
 
 
 def write_text_file(root_key, rel_path, content):
+    if root_key == "trash":
+        raise ValueError("Papierkorb-Dateien sind nur als Vorschau geöffnet. Bitte zuerst wiederherstellen.")
     file_path, rel_path = resolve_safe_path(root_key, rel_path)
     if os.path.isdir(file_path):
         raise ValueError("Ordner können nicht als Datei gespeichert werden.")
