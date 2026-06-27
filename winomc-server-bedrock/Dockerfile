@@ -36,11 +36,11 @@ LABEL \
     io.hass.arch="${BUILD_ARCH}" \
     io.hass.type="addon" \
     io.hass.version=${BUILD_VERSION} \
-    maintainer="kasawino (https://github.com/kasawino69)" \
+    maintainer="kasawino69 (https://github.com/kasawino69)" \
     org.opencontainers.image.title="${BUILD_NAME}" \
     org.opencontainers.image.description="${BUILD_DESCRIPTION}" \
     org.opencontainers.image.vendor="Home Assistant Add-ons" \
-    org.opencontainers.image.authors="kasawino (https://github.com/kasawino69)" \
+    org.opencontainers.image.authors="kasawino69 (https://github.com/kasawino69)" \
     org.opencontainers.image.licenses="MIT" \
     org.opencontainers.image.url="https://github.com/kasawino69" \
     org.opencontainers.image.source="https://github.com/${BUILD_REPOSITORY}" \
