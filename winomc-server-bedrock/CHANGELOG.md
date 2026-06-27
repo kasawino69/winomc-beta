@@ -5,6 +5,18 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.3
+
+* Neuer optionaler Desktop-Workbench-Modus ergänzt
+* Desktop-Verknüpfungen für Übersicht, Dateien, Konsole, Server, Packs, Backups, Netzwerk, Dashboard und Experten ergänzt
+* Startmenü mit allen Web-Console-Modulen ergänzt
+* Taskleiste mit offenen und minimierten Fenstern ergänzt
+* Module können im Desktop-Modus als Fenster geöffnet, verschoben, minimiert, maximiert und geschlossen werden
+* Fensterpositionen und geöffnete Desktop-Module werden im Browser gespeichert
+* Mobile Desktop-Ansicht erkennt schmale Geräte und nutzt Fullscreen-Module statt frei schwebender Fenster
+* Eingeklappte Sidebar auf echten Icons-only-Modus korrigiert
+* Classic-Ansicht bleibt weiterhin verfügbar
+
 ### 1.5.2
 
 * Web Console zur `WinoMC Dynamic Workbench` weiterentwickelt
@@ -83,6 +95,7 @@
 * Native Paket-Backups vor BDS-Updates ergänzt
 * `PACKAGE_BACKUP_KEEP` zur Begrenzung alter Paket-Backups nativ umgesetzt
 * Weitere itzg-Komfortfunktionen in die native WinoMC Runtime übernommen
+
 ### 1.4.3
 
 * Native Runtime weiter bereinigt

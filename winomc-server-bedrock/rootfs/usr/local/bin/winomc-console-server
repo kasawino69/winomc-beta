@@ -65,7 +65,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Dynamic Workbench</title>
+  <title>WinoMC Desktop Workbench</title>
   <style>
     :root {
       color-scheme: dark;
@@ -235,9 +235,13 @@ INDEX_HTML = r"""<!doctype html>
     body.sidebar-collapsed nav { padding: 8px; }
     body.sidebar-collapsed .nav-title { text-align: center; font-size: 0; padding: 8px 0; }
     body.sidebar-collapsed .nav-title::after { content: "MENÜ"; font-size: 10px; }
-    body.sidebar-collapsed .tab-button { justify-content: center; padding: 12px 8px; }
-    body.sidebar-collapsed .tab-button .icon { width: auto; font-size: 17px; }
+    body.sidebar-collapsed .tab-button { justify-content: center; padding: 12px 8px; font-size: 0; gap: 0; }
+    body.sidebar-collapsed .tab-button .icon { width: auto; font-size: 22px; line-height: 1; }
     body.sidebar-collapsed .tab-button span:not(.icon) { display: none; }
+    body.sidebar-collapsed .tab-button::after { content: attr(aria-label); position: absolute; left: 72px; opacity: 0; pointer-events: none; background: #0f172a; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12px; white-space: nowrap; transition: opacity .12s ease; box-shadow: 0 12px 34px rgba(0,0,0,.35); }
+    body.sidebar-collapsed .tab-button:hover::after { opacity: 1; }
+    body.sidebar-collapsed .sidebar-toggle { font-size: 0; }
+    body.sidebar-collapsed .sidebar-toggle span:first-child { font-size: 18px; }
     body.sidebar-collapsed .sidebar-toggle .toggle-label { display: none; }
     .workbench-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .card-header { position: relative; }
@@ -258,13 +262,397 @@ INDEX_HTML = r"""<!doctype html>
     .console-inner { padding-top: 16px; }
     .mobile-quickbar { display: none; }
 
+    /* WinoMC Desktop Workbench */
+    body.desktop-mode {
+      padding-bottom: 0;
+      overflow: hidden;
+      --console-height: 0px;
+    }
+
+    body.desktop-mode header,
+    body.desktop-mode nav,
+    body.desktop-mode .hero {
+      display: none !important;
+    }
+
+    body.desktop-mode .layout {
+      display: block;
+      max-width: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    body.desktop-mode main.content {
+      position: fixed;
+      inset: 0 0 46px 0;
+      display: block;
+      padding: 18px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(34, 197, 94, .20), transparent 31rem),
+        radial-gradient(circle at 90% 80%, rgba(96, 165, 250, .18), transparent 36rem),
+        linear-gradient(135deg, #08111f 0%, #0f172a 48%, #052e2b 100%);
+    }
+
+    .desktop-layer {
+      display: none;
+    }
+
+    body.desktop-mode .desktop-layer {
+      display: block;
+      position: absolute;
+      inset: 0;
+      padding: 22px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .desktop-brand {
+      position: absolute;
+      right: 24px;
+      top: 22px;
+      color: rgba(226, 232, 240, .22);
+      font-size: clamp(24px, 4vw, 58px);
+      font-weight: 900;
+      letter-spacing: .02em;
+      user-select: none;
+      text-align: right;
+    }
+
+    .desktop-icon-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 94px);
+      gap: 14px;
+      align-content: start;
+      pointer-events: auto;
+      width: 220px;
+    }
+
+    .desktop-icon {
+      width: 94px;
+      min-height: 86px;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      background: rgba(15, 23, 42, .18);
+      color: #f8fafc;
+      padding: 10px 8px;
+      display: grid;
+      justify-items: center;
+      gap: 7px;
+      text-align: center;
+      text-shadow: 0 2px 10px rgba(0,0,0,.45);
+      backdrop-filter: blur(6px);
+    }
+
+    .desktop-icon:hover,
+    .desktop-icon:focus-visible {
+      border-color: rgba(34, 197, 94, .42);
+      background: rgba(34, 197, 94, .16);
+      outline: none;
+    }
+
+    .desktop-icon .desktop-icon-symbol {
+      font-size: 30px;
+      line-height: 1;
+      filter: drop-shadow(0 8px 18px rgba(0,0,0,.35));
+    }
+
+    .desktop-icon .desktop-icon-label {
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.15;
+    }
+
+    body.desktop-mode .tab-panel {
+      display: none !important;
+      position: absolute;
+      left: 144px;
+      top: 72px;
+      width: min(980px, calc(100vw - 190px));
+      height: min(660px, calc(100vh - 145px));
+      overflow: auto;
+      padding: 0 14px 14px;
+      z-index: 5;
+      background: rgba(15, 23, 42, .94);
+      border: 1px solid rgba(148, 163, 184, .30);
+      border-radius: 16px;
+      box-shadow: 0 28px 90px rgba(0, 0, 0, .52);
+      backdrop-filter: blur(16px);
+      resize: both;
+      min-width: min(420px, calc(100vw - 22px));
+      min-height: 260px;
+    }
+
+    body.desktop-mode .tab-panel.desktop-open:not(.desktop-minimized) {
+      display: grid !important;
+      gap: 14px;
+      align-content: start;
+    }
+
+    body.desktop-mode .tab-panel.desktop-maximized {
+      left: 10px !important;
+      top: 10px !important;
+      width: calc(100vw - 20px) !important;
+      height: calc(100vh - 66px) !important;
+      resize: none;
+    }
+
+    .desktop-window-bar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      margin: 0 -14px 12px;
+      padding: 9px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: linear-gradient(180deg, rgba(30, 41, 59, .98), rgba(15, 23, 42, .95));
+      border-bottom: 1px solid rgba(148, 163, 184, .22);
+      border-radius: 16px 16px 0 0;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .desktop-window-bar:active {
+      cursor: grabbing;
+    }
+
+    .desktop-window-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 850;
+      min-width: 0;
+    }
+
+    .desktop-window-actions {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      flex: 0 0 auto;
+    }
+
+    .desktop-window-actions button {
+      width: 32px;
+      min-width: 32px;
+      height: 28px;
+      padding: 0;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+    }
+
+    .desktop-taskbar {
+      display: none;
+    }
+
+    body.desktop-mode .desktop-taskbar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 46px;
+      z-index: 80;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 8px;
+      background: rgba(2, 6, 23, .96);
+      border-top: 1px solid rgba(148, 163, 184, .20);
+      box-shadow: 0 -16px 44px rgba(0,0,0,.38);
+      backdrop-filter: blur(14px);
+    }
+
+    .desktop-start-wrap {
+      position: relative;
+    }
+
+    .desktop-start-button {
+      height: 34px;
+      border-color: rgba(34, 197, 94, .55);
+      background: linear-gradient(180deg, #15803d, #14532d);
+    }
+
+    .desktop-start-menu {
+      display: none;
+      position: fixed;
+      left: 8px;
+      bottom: 50px;
+      width: min(320px, calc(100vw - 16px));
+      padding: 10px;
+      border: 1px solid rgba(148, 163, 184, .30);
+      border-radius: 16px;
+      background: rgba(15, 23, 42, .98);
+      box-shadow: 0 24px 80px rgba(0,0,0,.50);
+      backdrop-filter: blur(18px);
+    }
+
+    .desktop-start-menu.open {
+      display: grid;
+      gap: 6px;
+    }
+
+    .desktop-start-menu button {
+      width: 100%;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-start;
+      text-align: left;
+      background: transparent;
+    }
+
+    .desktop-start-menu button:hover {
+      background: rgba(34,197,94,.14);
+    }
+
+    .desktop-task-buttons {
+      min-width: 0;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+
+    .desktop-task-button {
+      height: 34px;
+      max-width: 190px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 0 0 auto;
+      background: rgba(30, 41, 59, .86);
+    }
+
+    .desktop-task-button.active {
+      border-color: rgba(34, 197, 94, .70);
+      background: rgba(34, 197, 94, .20);
+    }
+
+    .desktop-clock {
+      color: var(--muted-2);
+      font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      padding: 0 4px;
+      white-space: nowrap;
+    }
+
+    body.desktop-mode .console-dock {
+      position: fixed;
+      left: auto;
+      right: 18px;
+      bottom: 58px;
+      width: min(760px, calc(100vw - 36px));
+      height: 320px;
+      border: 1px solid rgba(148, 163, 184, .30);
+      border-radius: 16px;
+      overflow: hidden;
+      transform: none !important;
+      box-shadow: 0 28px 90px rgba(0,0,0,.56);
+      resize: both;
+    }
+
+    body.desktop-mode.console-hidden .console-dock {
+      display: none;
+    }
+
+    body.desktop-mode .console-inner {
+      padding: 16px 12px 12px;
+    }
+
+    body.desktop-mode .console-resize-handle::after {
+      width: 82px;
+    }
+
+    @media (max-width: 850px) {
+      body.desktop-mode {
+        overflow: hidden;
+      }
+
+      body.desktop-mode main.content {
+        inset: 0 0 56px 0;
+        padding: 10px;
+        overflow: auto;
+      }
+
+      body.desktop-mode .desktop-layer {
+        position: relative;
+        inset: auto;
+        padding: 6px;
+        min-height: calc(100vh - 74px);
+      }
+
+      .desktop-brand {
+        position: static;
+        text-align: left;
+        font-size: 24px;
+        margin: 2px 0 14px;
+        color: rgba(226, 232, 240, .34);
+      }
+
+      .desktop-icon-grid {
+        width: 100%;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .desktop-icon {
+        width: 100%;
+        min-height: 82px;
+      }
+
+      body.desktop-mode .tab-panel.desktop-open:not(.desktop-minimized) {
+        position: fixed;
+        inset: 8px 8px 62px 8px !important;
+        width: auto !important;
+        height: auto !important;
+        resize: none;
+        min-width: 0;
+        min-height: 0;
+        border-radius: 16px;
+      }
+
+      body.desktop-mode .desktop-window-bar {
+        border-radius: 16px 16px 0 0;
+      }
+
+      body.desktop-mode .desktop-taskbar {
+        height: 56px;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 6px;
+        padding: 7px;
+      }
+
+      .desktop-clock {
+        display: none;
+      }
+
+      .desktop-task-button {
+        max-width: 138px;
+        height: 38px;
+      }
+
+      body.desktop-mode .console-dock {
+        left: 8px;
+        right: 8px;
+        bottom: 64px;
+        width: auto;
+        height: min(360px, 48vh);
+        resize: none;
+      }
+    }
+
+
     @media (max-width: 1050px) { .layout { grid-template-columns: 1fr; padding: 10px; } body.sidebar-collapsed { --sidebar-width: 255px; } nav { position: static; height: auto; min-height: 0; display: flex; overflow-x: auto; gap: 6px; padding: 8px; border-radius: 12px; } .sidebar-toggle, .nav-title { display: none; } .tab-button { width: auto; min-width: max-content; } .grid, .grid-3, .file-manager-grid { grid-template-columns: 1fr; } .split-resizer { display: none; } .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); } }
     @media (max-width: 720px) { :root { --console-height: 310px; } body.console-compact { --console-height: 220px; } body.console-large { --console-height: 70vh; } body.console-maximized { --console-height: 82vh; } header { padding: 10px 12px; } .layout { padding: 8px; gap: 10px; } .hero, .card { padding: 12px; border-radius: 12px; } .hero-actions button, .command-row button, .file-toolbar button, .file-toolbar input, .file-toolbar select { width: 100%; } .file-row-actions { flex-wrap: wrap; } .file-table th, .file-table td { padding: 8px; } .split-actions { grid-template-columns: 1fr; } .command-row { flex-direction: column; } .console-controls button { padding: 7px 9px; font-size: 12px; } .console-head { gap: 6px; } .console-head h3 { font-size: 14px; } .console-head p { display: none; } #log { font-size: 12px; } .editor-panel.editor-fullscreen { inset: 8px; } .card.maximized { inset: 8px; } }
   </style>
 </head>
 <body>
   <header>
-    <h1>WinoMC Dynamic Workbench</h1>
+    <h1>WinoMC Desktop Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
   </header>
 
@@ -272,18 +660,32 @@ INDEX_HTML = r"""<!doctype html>
     <nav aria-label="WinoMC Menü">
       <div class="nav-title">Menü</div>
       <button class="sidebar-toggle soft" type="button" id="sidebarToggle"><span>⇔</span><span class="toggle-label">Navigation</span></button>
-      <button class="tab-button active" data-tab="overview"><span class="icon">🏠</span> Übersicht</button>
-      <button class="tab-button" data-tab="dashboard"><span class="icon">🧩</span> Mein Dashboard</button>
-      <button class="tab-button" data-tab="console"><span class="icon">💻</span> Konsole</button>
-      <button class="tab-button" data-tab="server"><span class="icon">🌍</span> Server</button>
-      <button class="tab-button" data-tab="packs"><span class="icon">📦</span> Packs & Add-ons</button>
-      <button class="tab-button" data-tab="backups"><span class="icon">💾</span> Backups</button>
-      <button class="tab-button" data-tab="network"><span class="icon">🛜</span> Netzwerk</button>
-      <button class="tab-button" data-tab="files"><span class="icon">📁</span> Dateien</button>
-      <button class="tab-button" data-tab="expert"><span class="icon">🧰</span> Experten</button>
+      <button class="tab-button active" data-tab="overview" aria-label="Übersicht"><span class="icon">🏠</span> Übersicht</button>
+      <button class="tab-button" data-tab="dashboard" aria-label="Mein Dashboard"><span class="icon">🧩</span> Mein Dashboard</button>
+      <button class="tab-button" data-tab="console" aria-label="Konsole"><span class="icon">💻</span> Konsole</button>
+      <button class="tab-button" data-tab="server" aria-label="Server"><span class="icon">🌍</span> Server</button>
+      <button class="tab-button" data-tab="packs" aria-label="Packs & Add-ons"><span class="icon">📦</span> Packs & Add-ons</button>
+      <button class="tab-button" data-tab="backups" aria-label="Backups"><span class="icon">💾</span> Backups</button>
+      <button class="tab-button" data-tab="network" aria-label="Netzwerk"><span class="icon">🛜</span> Netzwerk</button>
+      <button class="tab-button" data-tab="files" aria-label="Dateien"><span class="icon">📁</span> Dateien</button>
+      <button class="tab-button" data-tab="expert" aria-label="Experten"><span class="icon">🧰</span> Experten</button>
     </nav>
 
     <main class="content">
+      <div class="desktop-layer" id="desktopLayer" aria-label="WinoMC Desktop">
+        <div class="desktop-brand">WinoMC<br>Desktop</div>
+        <div class="desktop-icon-grid" id="desktopIconGrid">
+          <button type="button" class="desktop-icon" data-open-window="overview"><span class="desktop-icon-symbol">🏠</span><span class="desktop-icon-label">Übersicht</span></button>
+          <button type="button" class="desktop-icon" data-open-window="files"><span class="desktop-icon-symbol">📁</span><span class="desktop-icon-label">Dateien</span></button>
+          <button type="button" class="desktop-icon" data-open-window="console"><span class="desktop-icon-symbol">💻</span><span class="desktop-icon-label">Konsole</span></button>
+          <button type="button" class="desktop-icon" data-open-window="backups"><span class="desktop-icon-symbol">💾</span><span class="desktop-icon-label">Backups</span></button>
+          <button type="button" class="desktop-icon" data-open-window="server"><span class="desktop-icon-symbol">🌍</span><span class="desktop-icon-label">Server</span></button>
+          <button type="button" class="desktop-icon" data-open-window="packs"><span class="desktop-icon-symbol">📦</span><span class="desktop-icon-label">Packs</span></button>
+          <button type="button" class="desktop-icon" data-open-window="network"><span class="desktop-icon-symbol">🛜</span><span class="desktop-icon-label">Netzwerk</span></button>
+          <button type="button" class="desktop-icon" data-open-window="dashboard"><span class="desktop-icon-symbol">🧩</span><span class="desktop-icon-label">Dashboard</span></button>
+          <button type="button" class="desktop-icon" data-open-window="expert"><span class="desktop-icon-symbol">🧰</span><span class="desktop-icon-label">Experten</span></button>
+        </div>
+      </div>
       <section class="hero">
         <div class="hero-top">
           <div>
@@ -293,7 +695,7 @@ INDEX_HTML = r"""<!doctype html>
           <div class="hero-actions">
             <button data-action-id="list">Spieler anzeigen</button>
             <button data-action-id="say">Nachricht</button>
-            <button type="button" class="soft" id="resetWorkbenchLayout">Layout zurücksetzen</button>
+            <button type="button" class="primary" id="desktopModeToggle">Desktop-Modus</button><button type="button" class="soft" id="resetWorkbenchLayout">Layout zurücksetzen</button>
             <button class="danger" data-action-id="stop">Server stoppen</button>
           </div>
         </div>
@@ -408,6 +810,16 @@ INDEX_HTML = r"""<!doctype html>
     </main>
   </div>
 
+  <section class="desktop-taskbar" id="desktopTaskbar" aria-label="WinoMC Desktop Taskleiste">
+    <div class="desktop-start-wrap">
+      <button type="button" class="desktop-start-button" id="desktopStartButton">🟢 Start</button>
+      <div class="desktop-start-menu" id="desktopStartMenu" aria-label="Startmenü"></div>
+    </div>
+    <div class="desktop-task-buttons" id="desktopTaskButtons" aria-label="Offene Fenster"></div>
+    <button type="button" class="soft" id="desktopExitButton">Klassisch</button>
+    <div class="desktop-clock" id="desktopClock">--:--</div>
+  </section>
+
   <section class="console-dock" aria-label="Live Console" id="consoleDock">
     <div class="console-resize-handle" id="consoleResizeHandle" title="Konsole größer oder kleiner ziehen"></div>
     <div class="console-inner">
@@ -470,6 +882,13 @@ INDEX_HTML = r"""<!doctype html>
     const consoleResizeHandle = document.getElementById('consoleResizeHandle');
     const consoleCollapse = document.getElementById('consoleCollapse');
     const consoleMaximize = document.getElementById('consoleMaximize');
+    const desktopModeToggle = document.getElementById('desktopModeToggle');
+    const desktopLayer = document.getElementById('desktopLayer');
+    const desktopStartButton = document.getElementById('desktopStartButton');
+    const desktopStartMenu = document.getElementById('desktopStartMenu');
+    const desktopTaskButtons = document.getElementById('desktopTaskButtons');
+    const desktopExitButton = document.getElementById('desktopExitButton');
+    const desktopClock = document.getElementById('desktopClock');
 
     const STORE_DASHBOARD = 'winomcDashboardActionsV2';
     const STORE_COLUMNS = 'winomcDashboardColumnsV1';
@@ -480,6 +899,9 @@ INDEX_HTML = r"""<!doctype html>
     const STORE_HIDDEN_CARDS = 'winomcHiddenCardsV1';
     const STORE_EDITOR_FONT = 'winomcEditorFontV1';
     const STORE_EDITOR_WRAP = 'winomcEditorWrapV1';
+    const STORE_DESKTOP_MODE = 'winomcDesktopModeV1';
+    const STORE_DESKTOP_WINDOWS = 'winomcDesktopWindowsV1';
+    const STORE_DESKTOP_POSITIONS = 'winomcDesktopPositionsV1';
     const MAX_JSON_UPLOAD_SIZE = 48 * 1024 * 1024;
 
     const ACTIONS = [
@@ -551,7 +973,7 @@ INDEX_HTML = r"""<!doctype html>
     function normalizeUiPath(path) { path = String(path || '/').replaceAll('\\', '/'); if (!path.startsWith('/')) path = '/' + path; path = path.replace(/\/+/g, '/'); return path || '/'; }
     function parentUiPath(path) { path = normalizeUiPath(path); if (path === '/') return '/'; const parts = path.split('/').filter(Boolean); parts.pop(); return '/' + parts.join('/'); }
     function escapeHtml(value) { return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;'); }
-    function activateTab(tab) { document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); }
+    function activateTab(tab) { if (document.body.classList.contains('desktop-mode')) { openDesktopWindow(tab); return; } document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); }
     function openRoot(root, path = '/') { activateTab('files'); setTimeout(async () => { await initFileManager(); currentFileRoot = root; fileRootSelect.value = root; await loadFileList(path); }, 0); }
 
     async function loadStatus() { try { const data = await fetchJson('/api/status'); latestStatus = data; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
@@ -756,18 +1178,279 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function resetWorkbench() {
-      ['winomcConsoleHeightV1','winomcConsoleSizeV1','winomcSidebarCollapsedV1','winomcFilesSplitV1','winomcHiddenCardsV1','winomcEditorFontV1','winomcEditorWrapV1'].forEach(key => localStorage.removeItem(key));
+      ['winomcConsoleHeightV1','winomcConsoleSizeV1','winomcSidebarCollapsedV1','winomcFilesSplitV1','winomcHiddenCardsV1','winomcEditorFontV1','winomcEditorWrapV1','winomcDesktopModeV1','winomcDesktopWindowsV1','winomcDesktopPositionsV1'].forEach(key => localStorage.removeItem(key));
       document.documentElement.style.removeProperty('--console-height');
       document.documentElement.style.removeProperty('--files-left-width');
-      document.body.classList.remove('sidebar-collapsed', 'console-collapsed', 'console-hidden', 'console-maximized', 'console-compact', 'console-large', 'has-maximized-card');
-      document.querySelectorAll('.card').forEach(card => { card.style.display = ''; card.classList.remove('collapsed', 'maximized'); });
+      document.body.classList.remove('sidebar-collapsed', 'console-collapsed', 'console-hidden', 'console-maximized', 'console-compact', 'console-large', 'has-maximized-card', 'desktop-mode');
+      document.querySelectorAll('.card').forEach(card => { card.style.display = ''; card.classList.remove('collapsed', 'maximized'); }); document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('desktop-open', 'desktop-minimized', 'desktop-maximized'));
       applyConsoleSize('normal');
       applyEditorPrefs();
       alert('Workbench-Layout zurückgesetzt.');
     }
 
+
+
+    const DESKTOP_MODULES = [
+      { id: 'overview', title: 'Übersicht', icon: '🏠' },
+      { id: 'dashboard', title: 'Mein Dashboard', icon: '🧩' },
+      { id: 'console', title: 'Konsole', icon: '💻' },
+      { id: 'server', title: 'Server', icon: '🌍' },
+      { id: 'packs', title: 'Packs & Add-ons', icon: '📦' },
+      { id: 'backups', title: 'Backups', icon: '💾' },
+      { id: 'network', title: 'Netzwerk', icon: '🛜' },
+      { id: 'files', title: 'Dateien', icon: '📁' },
+      { id: 'expert', title: 'Experten', icon: '🧰' }
+    ];
+    const DESKTOP_BY_ID = Object.fromEntries(DESKTOP_MODULES.map(item => [item.id, item]));
+    let desktopZ = 100;
+
+    function isDesktopMobile() {
+      return window.matchMedia('(max-width: 850px)').matches;
+    }
+
+    function desktopOpenIds() {
+      return getStoredJson(STORE_DESKTOP_WINDOWS, ['overview']);
+    }
+
+    function saveDesktopOpenIds(ids) {
+      localStorage.setItem(STORE_DESKTOP_WINDOWS, JSON.stringify([...new Set(ids)]));
+    }
+
+    function desktopPositions() {
+      return getStoredJson(STORE_DESKTOP_POSITIONS, {});
+    }
+
+    function saveDesktopPosition(id, panel) {
+      if (!id || isDesktopMobile() || panel.classList.contains('desktop-maximized')) return;
+      const positions = desktopPositions();
+      positions[id] = {
+        left: panel.style.left,
+        top: panel.style.top,
+        width: panel.style.width,
+        height: panel.style.height
+      };
+      localStorage.setItem(STORE_DESKTOP_POSITIONS, JSON.stringify(positions));
+    }
+
+    function desktopDefaultRect(id) {
+      const index = DESKTOP_MODULES.findIndex(item => item.id === id);
+      const offset = Math.max(0, index) * 26;
+      const width = Math.min(980, Math.max(560, window.innerWidth - 240));
+      const height = Math.min(660, Math.max(360, window.innerHeight - 160));
+      return {
+        left: 140 + offset + 'px',
+        top: 68 + offset + 'px',
+        width: width + 'px',
+        height: height + 'px'
+      };
+    }
+
+    function ensureDesktopWindowBar(panel, id) {
+      if (!panel || panel.querySelector(':scope > .desktop-window-bar')) return;
+      const meta = DESKTOP_BY_ID[id] || { title: id, icon: '🪟' };
+      const bar = document.createElement('div');
+      bar.className = 'desktop-window-bar';
+      bar.innerHTML = '<div class="desktop-window-title"><span>' + meta.icon + '</span><span>' + escapeHtml(meta.title) + '</span></div><div class="desktop-window-actions"><button type="button" data-window-action="minimize" title="Minimieren">–</button><button type="button" data-window-action="maximize" title="Maximieren">□</button><button type="button" data-window-action="close" title="Schließen">×</button></div>';
+      panel.prepend(bar);
+
+      bar.addEventListener('pointerdown', event => {
+        if (event.target.closest('button') || isDesktopMobile() || panel.classList.contains('desktop-maximized')) return;
+        event.preventDefault();
+        bringDesktopWindowToFront(id);
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const rect = panel.getBoundingClientRect();
+        const onMove = moveEvent => {
+          const nextLeft = clamp(rect.left + moveEvent.clientX - startX, 6, window.innerWidth - 120);
+          const nextTop = clamp(rect.top + moveEvent.clientY - startY, 6, window.innerHeight - 110);
+          panel.style.left = nextLeft + 'px';
+          panel.style.top = nextTop + 'px';
+        };
+        const onUp = () => {
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+          saveDesktopPosition(id, panel);
+        };
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+
+      bar.querySelector('[data-window-action="minimize"]').addEventListener('click', () => minimizeDesktopWindow(id));
+      bar.querySelector('[data-window-action="maximize"]').addEventListener('click', () => toggleDesktopMaximize(id));
+      bar.querySelector('[data-window-action="close"]').addEventListener('click', () => closeDesktopWindow(id));
+    }
+
+    function bringDesktopWindowToFront(id) {
+      const panel = document.querySelector('[data-panel="' + id + '"]');
+      if (!panel) return;
+      desktopZ += 1;
+      panel.style.zIndex = String(desktopZ);
+      document.querySelectorAll('.desktop-task-button').forEach(btn => btn.classList.toggle('active', btn.dataset.windowId === id));
+    }
+
+    function openDesktopWindow(id) {
+      const panel = document.querySelector('[data-panel="' + id + '"]');
+      if (!panel) return;
+
+      if (isDesktopMobile()) {
+        document.querySelectorAll('.tab-panel.desktop-open').forEach(item => {
+          if (item !== panel) item.classList.remove('desktop-open', 'desktop-minimized');
+        });
+      }
+
+      ensureDesktopWindowBar(panel, id);
+      panel.classList.add('desktop-open');
+      panel.classList.remove('desktop-minimized');
+
+      if (!isDesktopMobile() && !panel.dataset.desktopPlaced) {
+        const positions = desktopPositions();
+        const rect = positions[id] || desktopDefaultRect(id);
+        panel.style.left = rect.left;
+        panel.style.top = rect.top;
+        panel.style.width = rect.width;
+        panel.style.height = rect.height;
+        panel.dataset.desktopPlaced = 'true';
+      }
+
+      const ids = desktopOpenIds();
+      if (!ids.includes(id)) ids.push(id);
+      saveDesktopOpenIds(ids);
+
+      if (id === 'files') initFileManager();
+      if (id === 'overview' || id === 'network') loadStatus();
+      bringDesktopWindowToFront(id);
+      updateDesktopTaskbar();
+    }
+
+    function minimizeDesktopWindow(id) {
+      const panel = document.querySelector('[data-panel="' + id + '"]');
+      if (!panel) return;
+      panel.classList.add('desktop-minimized');
+      updateDesktopTaskbar();
+    }
+
+    function restoreDesktopWindow(id) {
+      const panel = document.querySelector('[data-panel="' + id + '"]');
+      if (!panel || !panel.classList.contains('desktop-open')) {
+        openDesktopWindow(id);
+        return;
+      }
+      panel.classList.remove('desktop-minimized');
+      bringDesktopWindowToFront(id);
+      updateDesktopTaskbar();
+    }
+
+    function closeDesktopWindow(id) {
+      const panel = document.querySelector('[data-panel="' + id + '"]');
+      if (!panel) return;
+      panel.classList.remove('desktop-open', 'desktop-minimized', 'desktop-maximized');
+      saveDesktopOpenIds(desktopOpenIds().filter(item => item !== id));
+      updateDesktopTaskbar();
+    }
+
+    function toggleDesktopMaximize(id) {
+      const panel = document.querySelector('[data-panel="' + id + '"]');
+      if (!panel) return;
+      if (!panel.classList.contains('desktop-maximized')) saveDesktopPosition(id, panel);
+      panel.classList.toggle('desktop-maximized');
+      const button = panel.querySelector('[data-window-action="maximize"]');
+      if (button) button.textContent = panel.classList.contains('desktop-maximized') ? '❐' : '□';
+      bringDesktopWindowToFront(id);
+    }
+
+    function updateDesktopTaskbar() {
+      if (!desktopTaskButtons) return;
+      desktopTaskButtons.innerHTML = '';
+      desktopOpenIds().forEach(id => {
+        const panel = document.querySelector('[data-panel="' + id + '"]');
+        if (!panel || !panel.classList.contains('desktop-open')) return;
+        const meta = DESKTOP_BY_ID[id] || { title: id, icon: '🪟' };
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'desktop-task-button';
+        btn.dataset.windowId = id;
+        btn.textContent = meta.icon + ' ' + meta.title;
+        btn.addEventListener('click', () => {
+          if (panel.classList.contains('desktop-minimized')) restoreDesktopWindow(id);
+          else minimizeDesktopWindow(id);
+        });
+        desktopTaskButtons.appendChild(btn);
+      });
+    }
+
+    function renderDesktopStartMenu() {
+      if (!desktopStartMenu) return;
+      desktopStartMenu.innerHTML = '';
+      DESKTOP_MODULES.forEach(meta => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.innerHTML = '<span>' + meta.icon + '</span><span>' + escapeHtml(meta.title) + '</span>';
+        btn.addEventListener('click', () => {
+          desktopStartMenu.classList.remove('open');
+          openDesktopWindow(meta.id);
+        });
+        desktopStartMenu.appendChild(btn);
+      });
+      const divider = document.createElement('div');
+      divider.style.height = '1px';
+      divider.style.background = 'rgba(148,163,184,.18)';
+      divider.style.margin = '6px 0';
+      desktopStartMenu.appendChild(divider);
+      const classic = document.createElement('button');
+      classic.type = 'button';
+      classic.innerHTML = '<span>↩</span><span>Klassische Ansicht</span>';
+      classic.addEventListener('click', () => setDesktopMode(false));
+      desktopStartMenu.appendChild(classic);
+    }
+
+    function setDesktopMode(enabled) {
+      document.body.classList.toggle('desktop-mode', enabled);
+      localStorage.setItem(STORE_DESKTOP_MODE, enabled ? 'true' : 'false');
+      if (desktopModeToggle) desktopModeToggle.textContent = enabled ? 'Klassische Ansicht' : 'Desktop-Modus';
+      if (enabled) {
+        renderDesktopStartMenu();
+        const ids = desktopOpenIds();
+        if (!ids.length) ids.push('overview');
+        ids.forEach(openDesktopWindow);
+        if (!document.querySelector('.tab-panel.desktop-open')) openDesktopWindow('overview');
+        updateDesktopClock();
+      } else {
+        desktopStartMenu?.classList.remove('open');
+        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('desktop-open', 'desktop-minimized', 'desktop-maximized'));
+        updateDesktopTaskbar();
+      }
+    }
+
+    function toggleDesktopMode() {
+      setDesktopMode(!document.body.classList.contains('desktop-mode'));
+    }
+
+    function updateDesktopClock() {
+      if (!desktopClock) return;
+      desktopClock.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function initDesktopWorkbench() {
+      renderDesktopStartMenu();
+      document.querySelectorAll('[data-open-window]').forEach(button => button.addEventListener('click', () => openDesktopWindow(button.dataset.openWindow)));
+      if (desktopModeToggle) desktopModeToggle.addEventListener('click', toggleDesktopMode);
+      if (desktopExitButton) desktopExitButton.addEventListener('click', () => setDesktopMode(false));
+      if (desktopStartButton) desktopStartButton.addEventListener('click', () => desktopStartMenu.classList.toggle('open'));
+      document.addEventListener('click', event => {
+        if (!event.target.closest('.desktop-start-wrap')) desktopStartMenu?.classList.remove('open');
+      });
+      document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.addEventListener('pointerdown', () => {
+          if (document.body.classList.contains('desktop-mode')) bringDesktopWindowToFront(panel.dataset.panel);
+        });
+      });
+      setInterval(updateDesktopClock, 15000);
+      updateDesktopClock();
+      if (localStorage.getItem(STORE_DESKTOP_MODE) === 'true') setDesktopMode(true);
+    }
+
     function connectLogs() { const source = new EventSource('./api/logs'); source.onopen = () => { statusEl.textContent = 'Live verbunden'; statusDot.classList.add('ok'); }; source.onmessage = event => { try { const data = JSON.parse(event.data); if (data.line) appendLine(data.line); } catch (_) {} }; source.onerror = () => { statusEl.textContent = 'Verbindung wird neu aufgebaut...'; statusDot.classList.remove('ok'); }; }
-    applySidebarState(); applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal'); applyEditorPrefs(); initConsoleResize(); initFileSplitResize(); initCardChrome(); renderDashboard(); connectLogs(); loadStatus();
+    applySidebarState(); applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal'); applyEditorPrefs(); initConsoleResize(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); renderDashboard(); connectLogs(); loadStatus();
   </script>
 </body>
 </html>
