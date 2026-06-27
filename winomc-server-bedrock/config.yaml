@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: Bedrock Minecraft Server auf Home Assistant
-version: 1.3.8.1
+version: 1.3.9
 slug: winomc-bedrock
 init: false
 boot: auto
@@ -23,7 +23,7 @@ ports_description:
   19132/udp: Minecraft Server Port
 
 options:
-  WINOMC_RUNTIME_MODE: itzg
+  WINOMC_RUNTIME_MODE: native
   BDS_AUTO_UPDATE: true
   VERSION: LATEST
   SERVER_NAME: WinoMC Server
@@ -77,7 +77,7 @@ options:
   WINOMC_CONSOLE_HISTORY_LIMIT: 300
 
 schema:
-  WINOMC_RUNTIME_MODE: list(itzg|native)
+  WINOMC_RUNTIME_MODE: list(native)
   BDS_DIRECT_DOWNLOAD_URL: str?
   BDS_AUTO_UPDATE: bool
   VERSION: str
