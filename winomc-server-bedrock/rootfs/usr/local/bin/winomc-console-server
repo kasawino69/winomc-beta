@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-import html
+import base64
 import json
-import os
-import signal
-import sys
-import time
-from collections import deque
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import mimetypes
+import os
 import posixpath
 import re
 import shutil
+import signal
+import sys
 import tempfile
+import time
 import zipfile
+from collections import deque
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 HOST = "0.0.0.0"
@@ -30,512 +30,35 @@ ALLOWED_PROXIES = {
     if item.strip()
 }
 
-FILE_ROOTS = {
-    "config": {
-        "label": "Serverdaten",
-        "path": os.environ.get("WINOMC_DATA_DIR", "/config"),
-        "description": "Hauptordner des Bedrock Servers",
-    },
-    "worlds": {
-        "label": "Welten",
-        "path": os.environ.get("WINOMC_WORLDS_DIR", "/config/worlds"),
-        "description": "Weltordner",
-    },
-    "resource_packs": {
-        "label": "Resource Packs",
-        "path": os.environ.get("WINOMC_RESOURCE_PACKS_DIR", "/config/resource_packs"),
-        "description": "Ressourcenpakete",
-    },
-    "behavior_packs": {
-        "label": "Behavior Packs",
-        "path": os.environ.get("WINOMC_BEHAVIOR_PACKS_DIR", "/config/behavior_packs"),
-        "description": "Verhaltenspakete",
-    },
-    "world_templates": {
-        "label": "World Templates",
-        "path": os.environ.get("WINOMC_WORLD_TEMPLATES_DIR", "/config/world_templates"),
-        "description": "Weltvorlagen",
-    },
-    "import": {
-        "label": "Import",
-        "path": os.environ.get("WINOMC_IMPORT_DIR", "/share/winomc/import"),
-        "description": "Importordner",
-    },
-    "export": {
-        "label": "Export",
-        "path": os.environ.get("WINOMC_EXPORT_DIR", "/share/winomc/export"),
-        "description": "Exportordner",
-    },
-}
-
-EDITABLE_TEXT_EXTENSIONS = {
-    ".json",
-    ".properties",
-    ".txt",
-    ".log",
-    ".mcfunction",
-    ".yml",
-    ".yaml",
-    ".lang",
-    ".md",
-    ".cfg",
-    ".conf",
-}
-
-JSON_EXTENSIONS = {".json"}
-ZIP_EXTRACT_EXTENSIONS = {".zip"}
+DATA_DIR = os.environ.get("WINOMC_DATA_DIR", "/config")
+WORLDS_DIR = os.environ.get("WINOMC_WORLDS_DIR", os.path.join(DATA_DIR, "worlds"))
+RESOURCE_PACKS_DIR = os.environ.get("WINOMC_RESOURCE_PACKS_DIR", os.path.join(DATA_DIR, "resource_packs"))
+BEHAVIOR_PACKS_DIR = os.environ.get("WINOMC_BEHAVIOR_PACKS_DIR", os.path.join(DATA_DIR, "behavior_packs"))
+WORLD_TEMPLATES_DIR = os.environ.get("WINOMC_WORLD_TEMPLATES_DIR", os.path.join(DATA_DIR, "world_templates"))
+IMPORT_DIR = os.environ.get("WINOMC_IMPORT_DIR", "/share/winomc/import")
+EXPORT_DIR = os.environ.get("WINOMC_EXPORT_DIR", "/share/winomc/export")
+FILE_BACKUP_DIR = os.environ.get("WINOMC_FILE_BACKUP_DIR", os.path.join(DATA_DIR, ".winomc", "file_backups"))
 
 MAX_TEXT_FILE_BYTES = int(os.environ.get("WINOMC_FILE_EDITOR_MAX_BYTES", str(2 * 1024 * 1024)))
 MAX_UPLOAD_BYTES = int(os.environ.get("WINOMC_FILE_UPLOAD_MAX_BYTES", str(512 * 1024 * 1024)))
+MAX_JSON_UPLOAD_BYTES = int(os.environ.get("WINOMC_FILE_JSON_UPLOAD_MAX_BYTES", str(64 * 1024 * 1024)))
 MAX_ZIP_UNPACK_BYTES = int(os.environ.get("WINOMC_ZIP_UNPACK_MAX_BYTES", str(1024 * 1024 * 1024)))
 
-FILE_BACKUP_DIR = os.environ.get("WINOMC_FILE_BACKUP_DIR", "/config/.winomc/file_backups")
-
-def normalize_rel_path(rel_path: str) -> str:
-    rel_path = unquote(str(rel_path or "/")).replace("\\", "/").replace("\x00", "")
-    rel_path = posixpath.normpath("/" + rel_path.lstrip("/"))
-
-    if rel_path == "/.":
-        rel_path = "/"
-
-    return rel_path
-
-
-def is_inside_base(base_path: str, candidate_path: str) -> bool:
-    base_path = os.path.realpath(base_path)
-    candidate_path = os.path.realpath(candidate_path)
-    return candidate_path == base_path or candidate_path.startswith(base_path + os.sep)
-
-
-def resolve_safe_path(root_key: str, rel_path: str = "/") -> tuple[str, str]:
-    if root_key not in FILE_ROOTS:
-        raise ValueError("Unbekannter Dateibereich.")
-
-    rel_path = normalize_rel_path(rel_path)
-    base_path = os.path.realpath(FILE_ROOTS[root_key]["path"])
-    candidate_path = os.path.realpath(os.path.join(base_path, rel_path.lstrip("/")))
-
-    if not is_inside_base(base_path, candidate_path):
-        raise ValueError("Pfad außerhalb des erlaubten Bereichs blockiert.")
-
-    return candidate_path, rel_path
-
-
-def safe_download_name(name: str, fallback: str = "winomc-download") -> str:
-    name = str(name or fallback).strip()
-    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
-    name = name.strip("._-")
-    return name or fallback
-
-
-def list_file_roots() -> list[dict]:
-    roots = []
-
-    for key, info in FILE_ROOTS.items():
-        path = os.path.realpath(info["path"])
-        roots.append({
-            "key": key,
-            "label": info["label"],
-            "description": info.get("description", ""),
-            "path": path,
-            "exists": os.path.exists(path),
-            "readable": os.path.isdir(path) and os.access(path, os.R_OK),
-        })
-
-    return roots
-
-
-def list_directory(root_key: str, rel_path: str = "/") -> dict:
-    full_path, rel_path = resolve_safe_path(root_key, rel_path)
-
-    if not os.path.exists(full_path):
-        raise FileNotFoundError("Pfad existiert nicht.")
-
-    if not os.path.isdir(full_path):
-        raise ValueError("Pfad ist kein Ordner.")
-
-    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
-    entries = []
-
-    for name in sorted(os.listdir(full_path), key=lambda item: item.lower()):
-        child_path = os.path.join(full_path, name)
-
-        if not is_inside_base(root_base, child_path):
-            continue
-
-        try:
-            stat = os.stat(child_path)
-        except OSError:
-            continue
-
-        is_dir = os.path.isdir(child_path)
-        child_rel_path = normalize_rel_path(posixpath.join(rel_path, name))
-
-        entries.append({
-            "name": name,
-            "path": child_rel_path,
-            "type": "directory" if is_dir else "file",
-            "size": stat.st_size,
-            "modified": int(stat.st_mtime),
-            "downloadable": not is_dir,
-            "zipable": True,
-        })
-
-    entries.sort(key=lambda item: (item["type"] != "directory", item["name"].lower()))
-
-    parent = None
-    if rel_path != "/":
-        parent = normalize_rel_path(posixpath.dirname(rel_path))
-
-    return {
-        "ok": True,
-        "root": root_key,
-        "path": rel_path,
-        "parent": parent,
-        "entries": entries,
-    }
-
-
-def create_zip_from_paths(root_key: str, rel_paths: list[str], save_to_export: bool = False) -> dict:
-    if not rel_paths:
-        raise ValueError("Keine Dateien oder Ordner ausgewählt.")
-
-    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
-    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-    zip_name = safe_download_name(f"winomc-{root_key}-{timestamp}.zip")
-
-    if save_to_export:
-        export_dir, _ = resolve_safe_path("export", "/")
-        os.makedirs(export_dir, exist_ok=True)
-        zip_path = os.path.join(export_dir, zip_name)
-        cleanup = False
-    else:
-        fd, zip_path = tempfile.mkstemp(prefix="winomc-", suffix=".zip")
-        os.close(fd)
-        cleanup = True
-
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for rel_path in rel_paths:
-            source_path, normalized_rel_path = resolve_safe_path(root_key, rel_path)
-
-            if not os.path.exists(source_path):
-                raise FileNotFoundError(f"Nicht gefunden: {normalized_rel_path}")
-
-            if not is_inside_base(root_base, source_path):
-                raise ValueError("Pfad außerhalb des erlaubten Bereichs blockiert.")
-
-            source_name = safe_download_name(
-                os.path.basename(source_path.rstrip(os.sep)) or FILE_ROOTS[root_key]["label"],
-                "winomc-files",
-            )
-
-            if os.path.isfile(source_path):
-                archive.write(source_path, source_name)
-                continue
-
-            if os.path.isdir(source_path):
-                parent_path = os.path.dirname(source_path.rstrip(os.sep))
-
-                for current_root, dirs, files in os.walk(source_path, followlinks=False):
-                    dirs[:] = [
-                        dirname for dirname in dirs
-                        if not os.path.islink(os.path.join(current_root, dirname))
-                        and is_inside_base(root_base, os.path.join(current_root, dirname))
-                    ]
-
-                    for filename in files:
-                        file_path = os.path.join(current_root, filename)
-
-                        if os.path.islink(file_path):
-                            continue
-
-                        if not is_inside_base(root_base, file_path):
-                            continue
-
-                        archive_name = os.path.relpath(file_path, parent_path)
-                        archive.write(file_path, archive_name)
-
-    return {
-        "zip_path": zip_path,
-        "zip_name": zip_name,
-        "cleanup": cleanup,
-        "saved_to_export": save_to_export,
-        "export_path": normalize_rel_path("/" + zip_name) if save_to_export else None,
-    }
-
-def parse_bool(value, default=False) -> bool:
-    if value is None:
-        return default
-    return str(value).strip().lower() in ("1", "true", "yes", "on", "ja")
-
-
-def file_extension(path: str) -> str:
-    return os.path.splitext(str(path or ""))[1].lower()
-
-
-def is_editable_text_file(path: str) -> bool:
-    name = os.path.basename(path).lower()
-    ext = file_extension(path)
-
-    if ext in EDITABLE_TEXT_EXTENSIONS:
-        return True
-
-    return name in {
-        "server.properties",
-        "allowlist.json",
-        "permissions.json",
-        "valid_known_packs.json",
-        "world_resource_packs.json",
-        "world_behavior_packs.json",
-        "manifest.json",
-    }
-
-
-def validate_json_if_needed(path: str, content: str):
-    if file_extension(path) not in JSON_EXTENSIONS:
-        return
-
-    try:
-        json.loads(content or "")
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"JSON ist ungültig: Zeile {exc.lineno}, Spalte {exc.colno}: {exc.msg}")
-
-
-def make_file_backup(file_path: str, root_key: str, rel_path: str):
-    if not os.path.exists(file_path) or not os.path.isfile(file_path):
-        return None
-
-    os.makedirs(FILE_BACKUP_DIR, exist_ok=True)
-
-    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-    backup_name = safe_download_name(
-        f"{timestamp}-{root_key}-{normalize_rel_path(rel_path).replace('/', '__')}",
-        "winomc-file-backup",
-    )
-
-    backup_path = os.path.join(FILE_BACKUP_DIR, backup_name)
-
-    if os.path.exists(backup_path):
-        backup_path = backup_path + ".bak"
-
-    shutil.copy2(file_path, backup_path)
-    return backup_path
-
-
-def read_text_file(root_key: str, rel_path: str) -> dict:
-    file_path, rel_path = resolve_safe_path(root_key, rel_path)
-
-    if not os.path.exists(file_path):
-        raise FileNotFoundError("Datei existiert nicht.")
-
-    if not os.path.isfile(file_path):
-        raise ValueError("Nur Dateien können im Editor geöffnet werden.")
-
-    if not is_editable_text_file(file_path):
-        raise ValueError("Dieser Dateityp ist nicht für den Texteditor freigegeben.")
-
-    size = os.path.getsize(file_path)
-    if size > MAX_TEXT_FILE_BYTES:
-        raise ValueError(f"Datei ist zu groß für den Editor. Maximum: {MAX_TEXT_FILE_BYTES} Bytes.")
-
-    with open(file_path, "r", encoding="utf-8", errors="replace") as handle:
-        content = handle.read()
-
-    stat = os.stat(file_path)
-
-    return {
-        "ok": True,
-        "root": root_key,
-        "path": rel_path,
-        "name": os.path.basename(file_path),
-        "size": stat.st_size,
-        "modified": int(stat.st_mtime),
-        "editable": True,
-        "json": file_extension(file_path) in JSON_EXTENSIONS,
-        "content": content,
-    }
-
-
-def write_text_file(root_key: str, rel_path: str, content: str) -> dict:
-    file_path, rel_path = resolve_safe_path(root_key, rel_path)
-
-    if os.path.isdir(file_path):
-        raise ValueError("Ordner können nicht als Datei gespeichert werden.")
-
-    parent = os.path.dirname(file_path)
-    if not os.path.isdir(parent):
-        raise FileNotFoundError("Zielordner existiert nicht.")
-
-    if not is_editable_text_file(file_path):
-        raise ValueError("Dieser Dateityp ist nicht für den Texteditor freigegeben.")
-
-    content = str(content or "")
-    validate_json_if_needed(file_path, content)
-
-    backup_path = make_file_backup(file_path, root_key, rel_path)
-
-    fd, temp_path = tempfile.mkstemp(prefix=".winomc-edit-", dir=parent)
-    os.close(fd)
-
-    try:
-        with open(temp_path, "w", encoding="utf-8", newline="") as handle:
-            handle.write(content)
-
-        os.replace(temp_path, file_path)
-    except Exception:
-        try:
-            os.remove(temp_path)
-        except OSError:
-            pass
-        raise
-
-    return {
-        "ok": True,
-        "root": root_key,
-        "path": rel_path,
-        "backup_created": bool(backup_path),
-        "backup_path": backup_path,
-        "message": "Datei gespeichert.",
-    }
-
-
-def prepare_upload_target(root_key: str, dir_rel_path: str, filename: str, overwrite: bool = False):
-    dir_path, dir_rel_path = resolve_safe_path(root_key, dir_rel_path)
-
-    if not os.path.exists(dir_path):
-        raise FileNotFoundError("Upload-Zielordner existiert nicht.")
-
-    if not os.path.isdir(dir_path):
-        raise ValueError("Upload-Ziel ist kein Ordner.")
-
-    filename = safe_download_name(unquote(filename or ""), "upload.bin")
-    target_path = os.path.realpath(os.path.join(dir_path, filename))
-    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
-
-    if not is_inside_base(root_base, target_path):
-        raise ValueError("Upload-Ziel außerhalb des erlaubten Bereichs blockiert.")
-
-    if os.path.exists(target_path) and not overwrite:
-        raise FileExistsError("Datei existiert bereits. Überschreiben wurde nicht erlaubt.")
-
-    target_rel_path = normalize_rel_path(posixpath.join(dir_rel_path, filename))
-    return target_path, target_rel_path
-
-
-def extract_zip_file(root_key: str, archive_rel_path: str, destination_rel_path: str = "/", overwrite: bool = False) -> dict:
-    archive_path, archive_rel_path = resolve_safe_path(root_key, archive_rel_path)
-    destination_path, destination_rel_path = resolve_safe_path(root_key, destination_rel_path)
-
-    if not os.path.isfile(archive_path):
-        raise FileNotFoundError("ZIP-Datei nicht gefunden.")
-
-    if file_extension(archive_path) not in ZIP_EXTRACT_EXTENSIONS:
-        raise ValueError("Nur .zip-Dateien können entpackt werden.")
-
-    if not os.path.isdir(destination_path):
-        raise ValueError("Ziel zum Entpacken ist kein Ordner.")
-
-    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
-    extracted_files = 0
-    extracted_dirs = 0
-    total_size = 0
-
-    with zipfile.ZipFile(archive_path, "r") as archive:
-        for member in archive.infolist():
-            total_size += int(member.file_size or 0)
-            if total_size > MAX_ZIP_UNPACK_BYTES:
-                raise ValueError("ZIP ist zu groß zum Entpacken.")
-
-        for member in archive.infolist():
-            raw_name = str(member.filename or "").replace("\\", "/")
-
-            if not raw_name or raw_name.startswith("/") or raw_name.startswith("../") or "/../" in raw_name:
-                raise ValueError(f"Unsicherer ZIP-Pfad blockiert: {raw_name}")
-
-            normalized_name = posixpath.normpath(raw_name)
-
-            if normalized_name in ("", ".") or normalized_name.startswith("../") or normalized_name == "..":
-                raise ValueError(f"Unsicherer ZIP-Pfad blockiert: {raw_name}")
-
-            target_path = os.path.realpath(os.path.join(destination_path, normalized_name))
-
-            if not is_inside_base(destination_path, target_path):
-                raise ValueError(f"ZIP-Pfad außerhalb des Zielordners blockiert: {raw_name}")
-
-            if not is_inside_base(root_base, target_path):
-                raise ValueError(f"ZIP-Pfad außerhalb des erlaubten Bereichs blockiert: {raw_name}")
-
-            if member.is_dir():
-                os.makedirs(target_path, exist_ok=True)
-                extracted_dirs += 1
-                continue
-
-            if os.path.exists(target_path) and not overwrite:
-                raise FileExistsError(f"Datei existiert bereits: {normalized_name}")
-
-            os.makedirs(os.path.dirname(target_path), exist_ok=True)
-
-            with archive.open(member, "r") as source, open(target_path, "wb") as target:
-                shutil.copyfileobj(source, target, length=1024 * 1024)
-
-            extracted_files += 1
-
-    return {
-        "ok": True,
-        "root": root_key,
-        "archive": archive_rel_path,
-        "destination": destination_rel_path,
-        "files": extracted_files,
-        "directories": extracted_dirs,
-        "message": "ZIP wurde entpackt.",
-    }
-
-
-def append_console_note(message: str):
-    try:
-        with open(LOG_PATH, "a", encoding="utf-8", errors="replace") as log_handle:
-            log_handle.write(f"[WinoMC Console] {message}\n")
-    except Exception:
-        pass
-
-
-def send_internal_console_command(command: str):
-    command = sanitize_command(command)
-    write_command(command)
-
-
-def create_safe_world_export(world_rel_path: str = "/world", save_to_export: bool = True) -> dict:
-    world_rel_path = normalize_rel_path(world_rel_path)
-    world_path, _ = resolve_safe_path("worlds", world_rel_path)
-
-    if not os.path.isdir(world_path):
-        raise FileNotFoundError("Weltordner wurde nicht gefunden.")
-
-    hold_sent = False
-
-    try:
-        append_console_note("Sicherer Welt-Export gestartet.")
-        send_internal_console_command("save hold")
-        hold_sent = True
-
-        time.sleep(1.0)
-
-        send_internal_console_command("save query")
-
-        time.sleep(2.0)
-
-        zip_info = create_zip_from_paths("worlds", [world_rel_path], save_to_export=save_to_export)
-
-        append_console_note("Sicherer Welt-Export wurde erstellt.")
-        return zip_info
-
-    finally:
-        if hold_sent:
-            try:
-                send_internal_console_command("save resume")
-                append_console_note("save resume nach sicherem Welt-Export ausgeführt.")
-            except Exception as exc:
-                append_console_note(f"WARNUNG: save resume konnte nicht automatisch ausgeführt werden: {exc}")
+FILE_ROOTS = {
+    "config": {"label": "Serverdaten", "path": DATA_DIR, "description": "Hauptordner des Bedrock Servers"},
+    "worlds": {"label": "Welten", "path": WORLDS_DIR, "description": "Minecraft-Welten"},
+    "resource_packs": {"label": "Resource Packs", "path": RESOURCE_PACKS_DIR, "description": "Ressourcenpakete"},
+    "behavior_packs": {"label": "Behavior Packs", "path": BEHAVIOR_PACKS_DIR, "description": "Verhaltenspakete"},
+    "world_templates": {"label": "World Templates", "path": WORLD_TEMPLATES_DIR, "description": "Weltvorlagen"},
+    "import": {"label": "Import", "path": IMPORT_DIR, "description": "Importordner unter /share/winomc/import"},
+    "export": {"label": "Export", "path": EXPORT_DIR, "description": "Exportordner unter /share/winomc/export"},
+}
+
+EDITABLE_TEXT_EXTENSIONS = {
+    ".json", ".properties", ".txt", ".log", ".mcfunction", ".yml", ".yaml", ".lang", ".md", ".cfg", ".conf"
+}
+JSON_EXTENSIONS = {".json"}
+ZIP_EXTENSIONS = {".zip", ".mcpack", ".mcaddon", ".mcworld", ".mctemplate"}
 
 INDEX_HTML = r"""<!doctype html>
 <html lang="de">
@@ -566,9 +89,7 @@ INDEX_HTML = r"""<!doctype html>
       --blue-soft: rgba(96, 165, 250, .10);
       --console-height: 330px;
     }
-
     * { box-sizing: border-box; }
-
     body {
       margin: 0;
       min-height: 100vh;
@@ -580,10 +101,8 @@ INDEX_HTML = r"""<!doctype html>
         var(--bg);
       color: var(--text);
     }
-
     body.console-compact { --console-height: 245px; }
     body.console-large { --console-height: 440px; }
-
     header {
       padding: 14px 18px;
       background: rgba(15, 23, 42, .92);
@@ -598,135 +117,30 @@ INDEX_HTML = r"""<!doctype html>
       z-index: 5;
       backdrop-filter: blur(12px);
     }
-
     h1 { margin: 0; font-size: 18px; font-weight: 760; letter-spacing: .01em; }
     h2 { margin: 0 0 6px; font-size: 18px; }
     h3 { margin: 0 0 4px; font-size: 15px; }
     p { margin: 0; color: var(--muted); line-height: 1.45; }
-
-    .status {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      color: var(--muted);
-    }
-
-    .dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: var(--warn);
-      box-shadow: 0 0 0 4px rgba(245, 158, 11, .12);
-    }
-
-    .dot.ok {
-      background: var(--accent);
-      box-shadow: 0 0 0 4px rgba(34, 197, 94, .14);
-    }
-
-    .layout {
-      display: grid;
-      grid-template-columns: 255px minmax(0, 1fr);
-      gap: 14px;
-      max-width: 1500px;
-      margin: 0 auto;
-      padding: 14px;
-    }
-
-    nav {
-      background: var(--panel);
-      border: 1px solid var(--border-soft);
-      border-radius: 14px;
-      padding: 10px;
-      height: calc(100vh - var(--console-height) - 92px);
-      min-height: 320px;
-      position: sticky;
-      top: 74px;
-      overflow: auto;
-    }
-
-    .nav-title {
-      padding: 10px 10px 12px;
-      color: var(--muted-2);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-    }
-
-    .tab-button {
-      width: 100%;
-      border: 1px solid transparent;
-      background: transparent;
-      color: var(--text);
-      border-radius: 10px;
-      padding: 11px 12px;
-      cursor: pointer;
-      text-align: left;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      font-weight: 680;
-    }
-
+    .status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 4px rgba(245, 158, 11, .12); }
+    .dot.ok { background: var(--accent); box-shadow: 0 0 0 4px rgba(34, 197, 94, .14); }
+    .layout { display: grid; grid-template-columns: 255px minmax(0, 1fr); gap: 14px; max-width: 1500px; margin: 0 auto; padding: 14px; }
+    nav { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 14px; padding: 10px; height: calc(100vh - var(--console-height) - 92px); min-height: 320px; position: sticky; top: 74px; overflow: auto; }
+    .nav-title { padding: 10px 10px 12px; color: var(--muted-2); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .tab-button { width: 100%; border: 1px solid transparent; background: transparent; color: var(--text); border-radius: 10px; padding: 11px 12px; cursor: pointer; text-align: left; display: flex; gap: 10px; align-items: center; font-weight: 680; }
     .tab-button:hover { background: rgba(148, 163, 184, .10); }
-    .tab-button.active {
-      background: var(--accent-soft);
-      border-color: rgba(34, 197, 94, .38);
-      color: #dcfce7;
-    }
-
+    .tab-button.active { background: var(--accent-soft); border-color: rgba(34, 197, 94, .38); color: #dcfce7; }
     .tab-button .icon { width: 24px; text-align: center; }
-
     .content { min-width: 0; display: grid; gap: 14px; align-content: start; }
-
-    .hero {
-      background: var(--panel);
-      border: 1px solid var(--border-soft);
-      border-radius: 14px;
-      padding: 14px;
-      display: grid;
-      gap: 14px;
+    .hero, .card { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 14px; padding: 14px; min-width: 0; }
+    .hero { display: grid; gap: 14px; }
+    .hero-top, .card-header, .dashboard-toolbar { display: flex; gap: 12px; align-items: start; justify-content: space-between; flex-wrap: wrap; }
+    .hero-actions, .actions, .pill-group, .file-toolbar, .breadcrumb, .module-jump { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    input, select, textarea {
+      min-width: 120px; border: 1px solid var(--border); background: #0f172a; color: var(--text); border-radius: 10px; padding: 11px 12px; font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; outline: none;
     }
-
-    .hero-top {
-      display: flex;
-      gap: 12px;
-      align-items: start;
-      justify-content: space-between;
-      flex-wrap: wrap;
-    }
-
-    .hero-actions, .actions, .pill-group {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    input, select {
-      min-width: 120px;
-      border: 1px solid var(--border);
-      background: #0f172a;
-      color: var(--text);
-      border-radius: 10px;
-      padding: 11px 12px;
-      font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      outline: none;
-    }
-
-    input:focus, select:focus { border-color: #64748b; box-shadow: 0 0 0 3px rgba(100, 116, 139, .18); }
-
-    button {
-      border: 1px solid var(--border);
-      background: #1e293b;
-      color: #f8fafc;
-      border-radius: 10px;
-      padding: 10px 13px;
-      cursor: pointer;
-      font-weight: 720;
-    }
-
+    input:focus, select:focus, textarea:focus { border-color: #64748b; box-shadow: 0 0 0 3px rgba(100, 116, 139, .18); }
+    button { border: 1px solid var(--border); background: #1e293b; color: #f8fafc; border-radius: 10px; padding: 10px 13px; cursor: pointer; font-weight: 720; }
     button:hover { background: #334155; }
     button:disabled { opacity: .48; cursor: not-allowed; }
     button.primary { border-color: rgba(34, 197, 94, .55); background: #166534; }
@@ -737,447 +151,94 @@ INDEX_HTML = r"""<!doctype html>
     button.danger:hover { background: #7f1d1d; }
     button.warning { border-color: rgba(245, 158, 11, .55); background: #451a03; }
     button.warning:hover { background: #78350f; }
-
     .tab-panel { display: none; }
     .tab-panel.active { display: grid; gap: 14px; }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-    }
-
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--border-soft);
-      border-radius: 14px;
-      padding: 14px;
-      min-width: 0;
-    }
-
-    .card-header {
-      margin-bottom: 12px;
-      display: flex;
-      gap: 10px;
-      align-items: start;
-      justify-content: space-between;
-    }
-
-    .badge {
-      color: #bbf7d0;
-      background: var(--accent-soft);
-      border: 1px solid rgba(34, 197, 94, .30);
-      border-radius: 999px;
-      padding: 4px 8px;
-      font-size: 12px;
-      white-space: nowrap;
-    }
-
-    .badge.warn {
-      color: #ffedd5;
-      background: var(--warn-soft);
-      border-color: rgba(245, 158, 11, .32);
-    }
-
-    .setting {
-      padding: 12px 0;
-      border-top: 1px solid rgba(51, 65, 85, .65);
-      display: grid;
-      gap: 8px;
-    }
-
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .badge { color: #bbf7d0; background: var(--accent-soft); border: 1px solid rgba(34, 197, 94, .30); border-radius: 999px; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
+    .badge.warn { color: #ffedd5; background: var(--warn-soft); border-color: rgba(245, 158, 11, .32); }
+    .badge.danger { color: #fee2e2; background: var(--danger-soft); border-color: rgba(239, 68, 68, .32); }
+    .setting { padding: 12px 0; border-top: 1px solid rgba(51, 65, 85, .65); display: grid; gap: 8px; }
     .setting:first-child { border-top: 0; padding-top: 0; }
-
-    .setting-title {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      font-weight: 760;
-    }
-
-    .setting-desc {
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.45;
-    }
-
-    .split-actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-
+    .setting-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 760; }
+    .setting-desc { color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .split-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .pill-group button { flex: 1 1 auto; min-width: 92px; }
-
-    .info {
-      border: 1px solid rgba(96, 165, 250, .30);
-      background: var(--blue-soft);
-      color: #dbeafe;
-      border-radius: 12px;
-      padding: 12px;
-      font-size: 13px;
-      line-height: 1.45;
-    }
-
-    .info.warning-box {
-      border-color: rgba(245, 158, 11, .35);
-      background: var(--warn-soft);
-      color: #ffedd5;
-    }
-
-    .info.danger-box {
-      border-color: rgba(239, 68, 68, .35);
-      background: var(--danger-soft);
-      color: #fee2e2;
-    }
-
-    details {
-      border: 1px solid rgba(51, 65, 85, .75);
-      border-radius: 12px;
-      padding: 12px;
-      background: rgba(15, 23, 42, .55);
-    }
-
+    .info { border: 1px solid rgba(96, 165, 250, .30); background: var(--blue-soft); color: #dbeafe; border-radius: 12px; padding: 12px; font-size: 13px; line-height: 1.45; }
+    .info.warning-box { border-color: rgba(245, 158, 11, .35); background: var(--warn-soft); color: #ffedd5; }
+    .info.danger-box { border-color: rgba(239, 68, 68, .35); background: var(--danger-soft); color: #fee2e2; }
+    details { border: 1px solid rgba(51, 65, 85, .75); border-radius: 12px; padding: 12px; background: rgba(15, 23, 42, .55); }
     summary { cursor: pointer; font-weight: 760; }
-
-    .dashboard-toolbar {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-    }
-
-    .dashboard-grid {
-      display: grid;
-      grid-template-columns: repeat(var(--dashboard-columns, 3), minmax(0, 1fr));
-      gap: 12px;
-    }
-
+    .dashboard-grid { display: grid; grid-template-columns: repeat(var(--dashboard-columns, 3), minmax(0, 1fr)); gap: 12px; }
     .dashboard-grid.auto { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-
-    .tile {
-      display: grid;
-      gap: 10px;
-      padding: 13px;
-      border: 1px solid rgba(51, 65, 85, .74);
-      border-radius: 14px;
-      background: rgba(15, 23, 42, .60);
-      min-height: 132px;
-    }
-
-    .tile-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-      gap: 10px;
-    }
-
+    .tile { display: grid; gap: 10px; padding: 13px; border: 1px solid rgba(51, 65, 85, .74); border-radius: 14px; background: rgba(15, 23, 42, .60); min-height: 132px; }
+    .tile-top { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
     .tile-title { font-weight: 780; }
     .tile-desc { color: var(--muted); font-size: 13px; line-height: 1.38; }
     .tile-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
     .tile-actions button { padding: 8px 10px; }
-    .tile-action-main { align-self: end; }
-
-    .picker-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-      gap: 10px;
-      margin-top: 12px;
-    }
-
-    .picker-item {
-      border: 1px solid rgba(51, 65, 85, .65);
-      border-radius: 12px;
-      background: rgba(15, 23, 42, .52);
-      padding: 11px;
-      display: grid;
-      gap: 8px;
-    }
-
-    .picker-meta {
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .category-label {
-      color: #cbd5e1;
-      font-size: 12px;
-      background: rgba(148, 163, 184, .11);
-      border: 1px solid rgba(148, 163, 184, .18);
-      border-radius: 999px;
-      padding: 3px 7px;
-    }
-
-    .console-dock {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 10;
-      height: var(--console-height);
-      background: rgba(2, 6, 23, .96);
-      border-top: 1px solid var(--border);
-      box-shadow: 0 -20px 55px rgba(0, 0, 0, .42);
-      backdrop-filter: blur(12px);
-    }
-
-    .console-inner {
-      max-width: 1500px;
-      height: 100%;
-      margin: 0 auto;
-      padding: 10px 14px 12px;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
-      gap: 8px;
-    }
-
-    .console-head {
-      display: flex;
-      gap: 10px;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
+    .category-label { color: #cbd5e1; font-size: 12px; background: rgba(148, 163, 184, .11); border: 1px solid rgba(148, 163, 184, .18); border-radius: 999px; padding: 3px 7px; }
+    .picker-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 12px; }
+    .picker-item { border: 1px solid rgba(51, 65, 85, .65); border-radius: 12px; background: rgba(15, 23, 42, .52); padding: 11px; display: grid; gap: 8px; }
+    .picker-meta { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .stat-value { font-size: 22px; font-weight: 800; color: #f8fafc; }
+    .stat-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .file-manager-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(340px, .88fr); gap: 14px; }
+    .file-toolbar select, .file-toolbar input { min-width: 180px; }
+    .file-toolbar input { flex: 1 1 300px; }
+    .file-path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #cbd5e1; background: rgba(15, 23, 42, .72); border: 1px solid rgba(51, 65, 85, .70); border-radius: 10px; padding: 10px 12px; overflow: auto; white-space: nowrap; }
+    .breadcrumb { margin-top: 10px; }
+    .breadcrumb button { padding: 7px 9px; font-size: 12px; }
+    .drop-zone { border: 1px dashed rgba(148, 163, 184, .45); background: rgba(15, 23, 42, .48); border-radius: 14px; padding: 18px; text-align: center; color: var(--muted); transition: border-color .15s ease, background .15s ease; }
+    .drop-zone.dragover { border-color: rgba(34, 197, 94, .75); background: rgba(34, 197, 94, .10); color: #dcfce7; }
+    .file-table-wrap { overflow: auto; border: 1px solid rgba(51, 65, 85, .70); border-radius: 12px; background: rgba(15, 23, 42, .45); }
+    .file-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .file-table th, .file-table td { padding: 9px 10px; border-bottom: 1px solid rgba(51, 65, 85, .55); text-align: left; vertical-align: middle; white-space: nowrap; }
+    .file-table th { color: var(--muted-2); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; background: rgba(15, 23, 42, .62); }
+    .file-table tr:hover td { background: rgba(148, 163, 184, .07); }
+    .file-name-button { border: 0; background: transparent; padding: 0; color: #dbeafe; font-weight: 740; cursor: pointer; }
+    .file-name-button:hover { text-decoration: underline; background: transparent; }
+    .file-row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
+    .file-row-actions button { padding: 6px 8px; font-size: 12px; }
+    .editor-box { width: 100%; min-height: 390px; resize: vertical; border: 1px solid var(--border); background: #020617; color: #e5e7eb; border-radius: 12px; padding: 12px; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; outline: none; }
+    .file-meta { display: flex; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 8px; }
+    .console-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; height: var(--console-height); background: rgba(2, 6, 23, .96); border-top: 1px solid var(--border); box-shadow: 0 -20px 55px rgba(0, 0, 0, .42); backdrop-filter: blur(12px); }
+    .console-inner { max-width: 1500px; height: 100%; margin: 0 auto; padding: 10px 14px 12px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; }
+    .console-head { display: flex; gap: 10px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
     .console-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-
-    #log {
-      min-height: 0;
-      overflow: auto;
-      padding: 12px;
-      background: #020617;
-      border: 1px solid var(--border-soft);
-      border-radius: 12px;
-      white-space: pre-wrap;
-      word-break: break-word;
-      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
-
+    #log { min-height: 0; overflow: auto; padding: 12px; background: #020617; border: 1px solid var(--border-soft); border-radius: 12px; white-space: pre-wrap; word-break: break-word; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     .line { min-height: 18px; }
     .line.command { color: #93c5fd; }
     .line.error { color: #fca5a5; }
     .line.ok { color: #86efac; }
-
     .command-row { display: flex; gap: 8px; }
     .command-row input { flex: 1; }
-
-    .modal-backdrop {
-      display: none;
-      position: fixed;
-      inset: 0;
-      z-index: 30;
-      background: rgba(2, 6, 23, .76);
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-    }
-
+    .modal-backdrop { display: none; position: fixed; inset: 0; z-index: 30; background: rgba(2, 6, 23, .76); align-items: center; justify-content: center; padding: 16px; }
     .modal-backdrop.open { display: flex; }
-
-    .modal {
-      width: min(520px, 100%);
-      background: #111827;
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 16px;
-      box-shadow: 0 24px 70px rgba(0, 0, 0, .45);
-    }
-
+    .modal { width: min(520px, 100%); background: #111827; border: 1px solid var(--border); border-radius: 16px; padding: 16px; box-shadow: 0 24px 70px rgba(0, 0, 0, .45); }
     .modal h2 { margin-bottom: 8px; }
-    .modal .modal-actions {
-      margin-top: 12px;
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
+    .modal .modal-actions { margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
     .modal input { width: 100%; margin-top: 12px; }
-
-    .file-toolbar {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .file-toolbar select,
-    .file-toolbar input {
-      min-width: 180px;
-    }
-
-    .file-path {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      color: #cbd5e1;
-      background: rgba(15, 23, 42, .72);
-      border: 1px solid rgba(51, 65, 85, .70);
-      border-radius: 10px;
-      padding: 10px 12px;
-      overflow: auto;
-      white-space: nowrap;
-    }
-
-    .file-manager-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
-      gap: 14px;
-    }
-
-    .drop-zone {
-      border: 1px dashed rgba(148, 163, 184, .45);
-      background: rgba(15, 23, 42, .48);
-      border-radius: 14px;
-      padding: 18px;
-      text-align: center;
-      color: var(--muted);
-      transition: border-color .15s ease, background .15s ease;
-    }
-
-    .drop-zone.dragover {
-      border-color: rgba(34, 197, 94, .75);
-      background: rgba(34, 197, 94, .10);
-      color: #dcfce7;
-    }
-
-    .file-table-wrap {
-      overflow: auto;
-      border: 1px solid rgba(51, 65, 85, .70);
-      border-radius: 12px;
-      background: rgba(15, 23, 42, .45);
-    }
-
-    .file-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-
-    .file-table th,
-    .file-table td {
-      padding: 9px 10px;
-      border-bottom: 1px solid rgba(51, 65, 85, .55);
-      text-align: left;
-      vertical-align: middle;
-      white-space: nowrap;
-    }
-
-    .file-table th {
-      color: var(--muted-2);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      background: rgba(15, 23, 42, .62);
-    }
-
-    .file-table tr:hover td {
-      background: rgba(148, 163, 184, .07);
-    }
-
-    .file-name-button {
-      border: 0;
-      background: transparent;
-      padding: 0;
-      color: #dbeafe;
-      font-weight: 740;
-      cursor: pointer;
-    }
-
-    .file-name-button:hover {
-      text-decoration: underline;
-      background: transparent;
-    }
-
-    .file-row-actions {
-      display: flex;
-      gap: 6px;
-      flex-wrap: nowrap;
-    }
-
-    .file-row-actions button {
-      padding: 6px 8px;
-      font-size: 12px;
-    }
-
-    .editor-box {
-      width: 100%;
-      min-height: 390px;
-      resize: vertical;
-      border: 1px solid var(--border);
-      background: #020617;
-      color: #e5e7eb;
-      border-radius: 12px;
-      padding: 12px;
-      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      outline: none;
-    }
-
-    .editor-box:focus {
-      border-color: #64748b;
-      box-shadow: 0 0 0 3px rgba(100, 116, 139, .18);
-    }
-
-    .file-meta {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: 8px;
-    }
-
-    @media (max-width: 1050px) {
-      .file-manager-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-    
-    @media (max-width: 1050px) {
-      .layout { grid-template-columns: 1fr; }
-      nav {
-        position: static;
-        height: auto;
-        min-height: 0;
-        display: flex;
-        overflow-x: auto;
-        gap: 6px;
-      }
-      .nav-title { display: none; }
-      .tab-button { width: auto; min-width: max-content; }
-      .grid { grid-template-columns: 1fr; }
-      .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
-    }
-
-    @media (max-width: 720px) {
-      body { --console-height: 310px; }
-      body.console-compact { --console-height: 235px; }
-      body.console-large { --console-height: 390px; }
-      .hero-actions button, .command-row button { width: 100%; }
-      .split-actions { grid-template-columns: 1fr; }
-      .command-row { flex-direction: column; }
-      .console-controls button { padding: 8px 10px; }
-    }
+    @media (max-width: 1050px) { .layout { grid-template-columns: 1fr; } nav { position: static; height: auto; min-height: 0; display: flex; overflow-x: auto; gap: 6px; } .nav-title { display: none; } .tab-button { width: auto; min-width: max-content; } .grid, .grid-3, .file-manager-grid { grid-template-columns: 1fr; } .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); } }
+    @media (max-width: 720px) { body { --console-height: 310px; } body.console-compact { --console-height: 235px; } body.console-large { --console-height: 390px; } .hero-actions button, .command-row button { width: 100%; } .split-actions { grid-template-columns: 1fr; } .command-row { flex-direction: column; } .console-controls button { padding: 8px 10px; } }
   </style>
 </head>
 <body>
   <header>
-    <h1>WinoMC Bedrock Live Console</h1>
+    <h1>WinoMC Bedrock Control Center</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
   </header>
 
   <div class="layout">
-    <nav aria-label="WinoMC Einstellungen">
+    <nav aria-label="WinoMC Menü">
       <div class="nav-title">Menü</div>
-      <button class="tab-button active" data-tab="dashboard"><span class="icon">🧩</span> Dashboard</button>
-      <button class="tab-button" data-tab="overview"><span class="icon">🏠</span> Übersicht</button>
-      <button class="tab-button" data-tab="general"><span class="icon">🌍</span> Allgemein</button>
-      <button class="tab-button" data-tab="advanced"><span class="icon">⚙️</span> Fortgeschritten</button>
-      <button class="tab-button" data-tab="multiplayer"><span class="icon">👥</span> Mehrspieler</button>
-      <button class="tab-button" data-tab="cheats"><span class="icon">🎮</span> Spielregeln</button>
-      <button class="tab-button" data-tab="packs"><span class="icon">📦</span> Pakete</button>
+      <button class="tab-button active" data-tab="overview"><span class="icon">🏠</span> Übersicht</button>
+      <button class="tab-button" data-tab="dashboard"><span class="icon">🧩</span> Mein Dashboard</button>
+      <button class="tab-button" data-tab="console"><span class="icon">💻</span> Konsole</button>
+      <button class="tab-button" data-tab="server"><span class="icon">🌍</span> Server</button>
+      <button class="tab-button" data-tab="packs"><span class="icon">📦</span> Packs & Add-ons</button>
+      <button class="tab-button" data-tab="backups"><span class="icon">💾</span> Backups</button>
+      <button class="tab-button" data-tab="network"><span class="icon">🛜</span> Netzwerk</button>
       <button class="tab-button" data-tab="files"><span class="icon">📁</span> Dateien</button>
       <button class="tab-button" data-tab="expert"><span class="icon">🧰</span> Experten</button>
     </nav>
@@ -1187,7 +248,7 @@ INDEX_HTML = r"""<!doctype html>
         <div class="hero-top">
           <div>
             <h2>Serversteuerung</h2>
-            <p>Realm-ähnliche Bedienung für sinnvolle Live-Einstellungen. Die Konsole bleibt unten immer sichtbar.</p>
+            <p>Übersicht, Konsole, Dateien, Packs, Backups und Diagnose in einer Web Console. Die Live Console bleibt unten immer sichtbar.</p>
           </div>
           <div class="hero-actions">
             <button data-action-id="list">Spieler anzeigen</button>
@@ -1197,519 +258,109 @@ INDEX_HTML = r"""<!doctype html>
         </div>
       </section>
 
-      <section class="tab-panel active" data-panel="dashboard">
+      <section class="tab-panel active" data-panel="overview">
+        <div class="grid-3" id="globalStats">
+          <div class="card"><div class="stat-label">Server</div><div class="stat-value" id="statServerName">-</div><p id="statLevelName">Welt: -</p></div>
+          <div class="card"><div class="stat-label">Version</div><div class="stat-value" id="statVersion">-</div><p id="statRuntime">Runtime: native</p></div>
+          <div class="card"><div class="stat-label">Netzwerk</div><div class="stat-value" id="statPorts">-</div><p id="statLan">LAN: -</p></div>
+        </div>
+        <div class="grid">
+          <div class="card">
+            <div class="card-header"><div><h3>Schnellstart</h3><p>Die wichtigsten Module für den Alltag.</p></div><span class="badge">Global</span></div>
+            <div class="module-jump">
+              <button data-jump-tab="files">Dateimanager öffnen</button>
+              <button data-jump-tab="backups">Backups</button>
+              <button data-jump-tab="packs">Packs & Add-ons</button>
+              <button data-jump-tab="network">Netzwerkdiagnose</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div><h3>Live Status</h3><p>Technische Web-Console-Verbindung.</p></div></div>
+            <div class="setting"><div class="setting-title">FIFO</div><div id="statFifo" class="setting-desc">-</div></div>
+            <div class="setting"><div class="setting-title">Log</div><div id="statLog" class="setting-desc">-</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-panel="dashboard">
         <div class="card">
           <div class="dashboard-toolbar">
-            <div>
-              <h2>Mein Dashboard</h2>
-              <p>Stelle dir eigene Kacheln zusammen. Die Auswahl wird im Browser gespeichert und bleibt beim nächsten Öffnen erhalten.</p>
-            </div>
+            <div><h2>Mein Dashboard</h2><p>Stelle dir eigene Kacheln zusammen. Die Auswahl wird im Browser gespeichert.</p></div>
             <div class="actions">
-              <label class="status">Layout
-                <select id="dashboardColumns" aria-label="Dashboard Layout">
-                  <option value="auto">Auto</option>
-                  <option value="2">2 Spalten</option>
-                  <option value="3">3 Spalten</option>
-                  <option value="4">4 Spalten</option>
-                </select>
-              </label>
+              <label class="status">Layout <select id="dashboardColumns" aria-label="Dashboard Layout"><option value="auto">Auto</option><option value="2">2 Spalten</option><option value="3">3 Spalten</option><option value="4">4 Spalten</option></select></label>
               <button class="soft" id="resetDashboard" type="button">Standard wiederherstellen</button>
             </div>
           </div>
         </div>
-
         <div id="dashboardGrid" class="dashboard-grid auto" aria-live="polite"></div>
-
-        <details class="card" open>
-          <summary>Aktionen hinzufügen</summary>
-          <p style="margin-top:8px">Füge nur das hinzu, was du wirklich brauchst. Kritische Aktionen bleiben markiert.</p>
-          <div id="actionPicker" class="picker-grid"></div>
-        </details>
+        <details class="card" open><summary>Aktionen hinzufügen</summary><p style="margin-top:8px">Füge nur hinzu, was du wirklich brauchst. Kritische Aktionen bleiben markiert.</p><div id="actionPicker" class="picker-grid"></div></details>
       </section>
 
-      <section class="tab-panel" data-panel="overview">
+      <section class="tab-panel" data-panel="console">
         <div class="grid">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Schnellaktionen</h3>
-                <p>Häufige Aktionen ohne langes Tippen.</p>
-              </div>
-              <span class="badge">Empfohlen</span>
-            </div>
-            <div class="setting">
-              <div class="setting-title">Zeit & Wetter</div>
-              <div class="pill-group">
-                <button data-action-id="time-day">Tag</button>
-                <button data-action-id="time-night">Nacht</button>
-                <button data-action-id="weather-clear">Wetter klar</button>
-                <button data-action-id="weather-rain">Regen</button>
-              </div>
-            </div>
-            <div class="setting">
-              <div class="setting-title">Spieler</div>
-              <div class="pill-group">
-                <button data-action-id="list">Liste</button>
-                <button data-action-id="op-add">OP geben</button>
-                <button data-action-id="op-remove">OP entfernen</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Bedienidee</h3>
-                <p>Oben werden Einstellungen gewählt, unten laufen Log und freie Befehle weiter.</p>
-              </div>
-            </div>
-            <div class="setting">
-              <div class="setting-title">Dashboard zuerst</div>
-              <div class="setting-desc">Lege dort deine Favoriten ab: zum Beispiel Keep Inventory, Koordinaten, Tag, Wetter, OP-Rechte oder Stop.</div>
-            </div>
-            <div class="setting">
-              <div class="setting-title">Kategorien für Ordnung</div>
-              <div class="setting-desc">Die Menüpunkte bleiben für volle Kontrolle erhalten, das Dashboard ist dein persönlicher Schnellzugriff.</div>
-            </div>
-          </div>
+          <div class="card"><div class="card-header"><div><h3>Vollständige Live Console</h3><p>Die große Konsole ist unten angedockt und bleibt in allen Modulen sichtbar.</p></div><span class="badge">Immer aktiv</span></div><div class="pill-group"><button data-console-size="compact">Kompakt</button><button data-console-size="normal">Normal</button><button data-console-size="large">Groß</button><button id="focusConsoleInput">Eingabe fokussieren</button></div></div>
+          <div class="card"><div class="card-header"><div><h3>Häufige Befehle</h3><p>Direkt senden oder unten frei eingeben.</p></div></div><div class="pill-group"><button data-action-id="list">list</button><button data-action-id="say">say</button><button data-action-id="save-query">save query</button><button data-action-id="stop" class="danger">stop</button></div></div>
         </div>
       </section>
 
-      <section class="tab-panel" data-panel="general">
+      <section class="tab-panel" data-panel="server">
         <div class="grid">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Spielmodus</h3>
-                <p>Ändert den Standard-Spielmodus für neue bzw. wiederbeitretende Spieler.</p>
-              </div>
-            </div>
-            <div class="pill-group">
-              <button data-action-id="mode-survival">Überleben</button>
-              <button data-action-id="mode-creative">Kreativ</button>
-              <button data-action-id="mode-adventure">Abenteuer</button>
-            </div>
-            <div class="info warning-box">Bereits verbundene Spieler können ihren aktuellen Modus behalten. Einzelne Spieler kannst du unten über einen freien Befehl ändern, z. B. <b>gamemode survival Spielername</b>.</div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Schwierigkeit</h3>
-                <p>Entspricht dem Ingame-Menü Friedlich, Einfach, Normal und Schwer.</p>
-              </div>
-            </div>
-            <div class="pill-group">
-              <button data-action-id="difficulty-peaceful">Friedlich</button>
-              <button data-action-id="difficulty-easy">Einfach</button>
-              <button data-action-id="difficulty-normal">Normal</button>
-              <button data-action-id="difficulty-hard">Schwer</button>
-            </div>
-          </div>
+          <div class="card"><div class="card-header"><div><h3>Server & Spielmodus</h3><p>Live-Befehle für Standardmodus und Schwierigkeit.</p></div></div><div class="setting"><div class="setting-title">Spielmodus</div><div class="pill-group"><button data-action-id="mode-survival">Überleben</button><button data-action-id="mode-creative">Kreativ</button><button data-action-id="mode-adventure">Abenteuer</button></div></div><div class="setting"><div class="setting-title">Schwierigkeit</div><div class="pill-group"><button data-action-id="difficulty-peaceful">Friedlich</button><button data-action-id="difficulty-easy">Einfach</button><button data-action-id="difficulty-normal">Normal</button><button data-action-id="difficulty-hard">Schwer</button></div></div></div>
+          <div class="card"><div class="card-header"><div><h3>Spielregeln</h3><p>Realm-nahe Schnellschalter.</p></div></div><div class="setting"><div class="setting-title">Koordinaten</div><div class="split-actions"><button data-action-id="coordinates-on">An</button><button data-action-id="coordinates-off">Aus</button></div></div><div class="setting"><div class="setting-title">Inventar behalten</div><div class="split-actions"><button data-action-id="keepinventory-on">An</button><button data-action-id="keepinventory-off">Aus</button></div></div><div class="setting"><div class="setting-title">Schlafende Spieler</div><div class="pill-group"><button data-action-id="sleep-0">0%</button><button data-action-id="sleep-50">50%</button><button data-action-id="sleep-100">100%</button><button data-action-id="sleep-custom">Eigener Wert</button></div></div></div>
         </div>
-      </section>
-
-      <section class="tab-panel" data-panel="advanced">
         <div class="grid">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Anzeige & Weltverhalten</h3>
-                <p>Laufzeit-Regeln, die per Konsole sinnvoll änderbar sind.</p>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Koordinaten anzeigen</div>
-              <div class="split-actions">
-                <button data-action-id="coordinates-on">An</button>
-                <button data-action-id="coordinates-off">Aus</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Gespielte Tage anzeigen</div>
-              <div class="setting-desc">Nur nutzen, wenn deine Bedrock-Version diese Spielregel unterstützt.</div>
-              <div class="split-actions">
-                <button data-action-id="days-on">An</button>
-                <button data-action-id="days-off">Aus</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Erforderliche schlafende Spieler</div>
-              <div class="setting-desc">Prozentwert: 0 bis 100. 100 bedeutet: alle müssen schlafen.</div>
-              <div class="pill-group">
-                <button data-action-id="sleep-0">0%</button>
-                <button data-action-id="sleep-50">50%</button>
-                <button data-action-id="sleep-100">100%</button>
-                <button data-action-id="sleep-custom">Eigener Wert</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Wiederbeleben-Radius</div>
-              <div class="setting-desc">Radius um den Weltspawn.</div>
-              <div class="pill-group">
-                <button data-action-id="spawnradius-0">0</button>
-                <button data-action-id="spawnradius-10">10</button>
-                <button data-action-id="spawnradius-custom">Eigener Wert</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Weltregeln</h3>
-                <p>Entspricht vielen Fortgeschritten-Optionen aus dem Weltmenü.</p>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Feuer breitet sich aus</div>
-              <div class="split-actions">
-                <button data-action-id="fire-on">An</button>
-                <button data-action-id="fire-off">Aus</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">TNT explodiert</div>
-              <div class="split-actions">
-                <button data-action-id="tnt-on">An</button>
-                <button data-action-id="tnt-off">Aus</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Kreaturenbeute</div>
-              <div class="split-actions">
-                <button data-action-id="mobloot-on">An</button>
-                <button data-action-id="mobloot-off">Aus</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Natürliche Regeneration</div>
-              <div class="split-actions">
-                <button data-action-id="regen-on">An</button>
-                <button data-action-id="regen-off">Aus</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Feldertrag / Blockdrops</div>
-              <div class="split-actions">
-                <button data-action-id="tiledrops-on">An</button>
-                <button data-action-id="tiledrops-off">Aus</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Sofortiges Wiederbeleben</div>
-              <div class="split-actions">
-                <button data-action-id="immediate-respawn-on">An</button>
-                <button data-action-id="immediate-respawn-off">Aus</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="tab-panel" data-panel="multiplayer">
-        <div class="grid">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Spieler & Rechte</h3>
-                <p>Schneller Zugriff auf häufige Admin-Aktionen.</p>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Spielerliste</div>
-              <button data-action-id="list">Spieler anzeigen</button>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Operator-Rechte</div>
-              <div class="pill-group">
-                <button data-action-id="op-add">OP geben</button>
-                <button data-action-id="op-remove">OP entfernen</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Nachricht an alle</div>
-              <button data-action-id="say">Nachricht senden</button>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Mehrspieler-Spielregeln</h3>
-                <p>Live-Regeln für laufende Welten.</p>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Friendly Fire / PvP</div>
-              <div class="setting-desc">Nur nutzen, wenn deine Bedrock-Version diese Spielregel unterstützt.</div>
-              <div class="split-actions">
-                <button data-action-id="pvp-on">An</button>
-                <button data-action-id="pvp-off">Aus</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="tab-panel" data-panel="cheats">
-        <div class="grid">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Zeit, Inventar & Kreaturen</h3>
-                <p>Die wichtigsten Cheat-/Spielregel-Schalter aus dem Ingame-Menü.</p>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Tageslichtzyklus</div>
-              <div class="split-actions">
-                <button data-action-id="daycycle-on">Normal</button>
-                <button data-action-id="daycycle-off">Zeit einfrieren</button>
-              </div>
-              <div class="pill-group">
-                <button data-action-id="time-day">Tag setzen</button>
-                <button data-action-id="time-night">Nacht setzen</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Inventar behalten</div>
-              <div class="split-actions">
-                <button data-action-id="keepinventory-on">An</button>
-                <button data-action-id="keepinventory-off">Aus</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Kreaturen-Spawn</div>
-              <div class="split-actions">
-                <button data-action-id="mobspawning-on">An</button>
-                <button data-action-id="mobspawning-off">Aus</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Kreaturen-Griefing</div>
-              <div class="split-actions">
-                <button data-action-id="mobgriefing-on">An</button>
-                <button data-action-id="mobgriefing-off">Aus</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Weitere Spielregeln</h3>
-                <p>Schnelle Anpassung ohne Tipparbeit.</p>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Entitäten lassen Beute fallen</div>
-              <div class="split-actions">
-                <button data-action-id="entitydrops-on">An</button>
-                <button data-action-id="entitydrops-off">Aus</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Wetterzyklus</div>
-              <div class="split-actions">
-                <button data-action-id="weathercycle-on">An</button>
-                <button data-action-id="weathercycle-off">Aus</button>
-              </div>
-              <div class="pill-group">
-                <button data-action-id="weather-clear">Klar</button>
-                <button data-action-id="weather-rain">Regen</button>
-                <button data-action-id="weather-thunder">Gewitter</button>
-              </div>
-            </div>
-
-            <div class="setting">
-              <div class="setting-title">Zufällige Tick-Geschwindigkeit</div>
-              <div class="pill-group">
-                <button data-action-id="randomtick-1">1</button>
-                <button data-action-id="randomtick-3">3</button>
-                <button data-action-id="randomtick-custom">Eigener Wert</button>
-              </div>
-              <div class="info warning-box">Hohe Werte können Welt, Farmen und Serverlast stark beeinflussen. Für normale Welten vorsichtig nutzen.</div>
-            </div>
-
-            <div class="info warning-box">Der globale Cheats-Schalter selbst bleibt Welt-/Serverkonfiguration. Die Konsole ist bereits ein Admin-Werkzeug.</div>
-          </div>
+          <div class="card"><h3>Mehrspieler</h3><div class="pill-group" style="margin-top:10px"><button data-action-id="list">Spielerliste</button><button data-action-id="op-add">OP geben</button><button data-action-id="op-remove">OP entfernen</button><button data-action-id="say">Nachricht</button></div></div>
+          <div class="card"><h3>Weitere Regeln</h3><div class="pill-group" style="margin-top:10px"><button data-action-id="time-day">Tag</button><button data-action-id="time-night">Nacht</button><button data-action-id="weather-clear">Wetter klar</button><button data-action-id="randomtick-custom" class="warning">Random Tick</button></div></div>
         </div>
       </section>
 
       <section class="tab-panel" data-panel="packs">
         <div class="grid">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Ressourcenpakete</h3>
-                <p>Packs werden über Dateien und Welt-Metadaten verwaltet.</p>
-              </div>
-            </div>
-            <div class="info warning-box">Resource Packs sollten über <b>/config/resource_packs</b>, Weltdateien und anschließend mit einem Server-Neustart eingebunden werden. Eine Live-Schaltung per Konsole wäre unzuverlässig.</div>
-          </div>
+          <div class="card"><div class="card-header"><div><h3>Resource Packs</h3><p>Dateien und Manifest prüfen, Packs in den passenden Ordner legen.</p></div></div><div class="pill-group"><button data-open-root="resource_packs">Resource Packs öffnen</button><button data-open-root="import">Import öffnen</button></div><div class="info warning-box" style="margin-top:12px">Marketplace-Inhalte sind oft account-/plattformgebunden. WinoMC verwaltet lokal importierte .mcpack, .mcaddon, .mcworld, .mctemplate und .zip.</div></div>
+          <div class="card"><div class="card-header"><div><h3>Behavior Packs & Add-ons</h3><p>Behavior Packs verändern Welt-Metadaten und sollten kontrolliert importiert werden.</p></div></div><div class="pill-group"><button data-open-root="behavior_packs">Behavior Packs öffnen</button><button data-open-root="worlds">Weltdateien öffnen</button></div></div>
+        </div>
+      </section>
 
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Verhaltenspakete & Experimente</h3>
-                <p>Bewusst nur als Hinweis, nicht als Schnellschalter.</p>
-              </div>
-            </div>
-            <div class="info warning-box">Behavior Packs und Experimente verändern Welt-Metadaten. Die Aktivierung sollte vor dem Start bzw. über Import/Dateien erfolgen, damit die Welt konsistent bleibt.</div>
-          </div>
+      <section class="tab-panel" data-panel="backups">
+        <div class="grid">
+          <div class="card"><div class="card-header"><div><h3>Sicherer Welt-Export</h3><p>Erstellt ein ZIP mit save hold, save query und save resume.</p></div><span class="badge warn">Empfohlen</span></div><div class="pill-group"><button class="primary" id="backupSafeWorldExport">Sicheren Welt-Export starten</button><button data-open-root="export">Exportordner öffnen</button></div><div class="info warning-box" style="margin-top:12px">Während des Exports kann der Server kurz verzögert reagieren. save resume wird automatisch im finally-Block ausgeführt.</div></div>
+          <div class="card"><div class="card-header"><div><h3>Export & Retention</h3><p>Exporte liegen unter /share/winomc/export. Alte BDS-Pakete werden über PACKAGE_BACKUP_KEEP begrenzt.</p></div></div><div class="pill-group"><button data-open-root="export">Exporte anzeigen</button><button data-jump-tab="files">Dateimanager</button></div></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-panel="network">
+        <div class="grid">
+          <div class="card"><div class="card-header"><div><h3>Ports</h3><p>Aktuelle Bedrock-Portkonfiguration.</p></div></div><div class="setting"><div class="setting-title">IPv4</div><div id="networkIpv4" class="setting-desc">-</div></div><div class="setting"><div class="setting-title">IPv6</div><div id="networkIpv6" class="setting-desc">-</div></div><div class="setting"><div class="setting-title">LAN Sichtbarkeit</div><div id="networkLan" class="setting-desc">-</div></div></div>
+          <div class="card"><div class="card-header"><div><h3>Diagnose</h3><p>Hinweise für Switch, iPhone, Xbox und Dual Stack.</p></div></div><div class="info">Bedrock nutzt UDP. Bei iOS muss Minecraft Zugriff auf „Lokales Netzwerk“ haben. Für Switch kann Friend Broadcast oder manuelles Hinzufügen nötig sein.</div><div class="info warning-box" style="margin-top:10px">Bei Dual Stack mit gleichem Port sollte ENABLE_BDS_V6BIND_FIX aktiv sein.</div></div>
         </div>
       </section>
 
       <section class="tab-panel" data-panel="files">
         <div class="card">
-          <div class="card-header">
-            <div>
-              <h2>Dateimanager</h2>
-              <p>Dateien sicher in erlaubten WinoMC-Ordnern verwalten, herunterladen, hochladen, bearbeiten und als ZIP exportieren.</p>
-            </div>
-            <span class="badge warn" id="filesStatus">Noch nicht geladen</span>
-          </div>
-
+          <div class="card-header"><div><h2>Dateimanager</h2><p>Dateien in erlaubten WinoMC-Ordnern verwalten, herunterladen, hochladen, bearbeiten, entpacken und exportieren.</p></div><span class="badge warn" id="filesStatus">Noch nicht geladen</span></div>
           <div class="file-toolbar">
-            <label class="status">Bereich
-              <select id="fileRootSelect" aria-label="Dateibereich"></select>
-            </label>
+            <label class="status">Bereich <select id="fileRootSelect" aria-label="Dateibereich"></select></label>
+            <input id="filePathInput" aria-label="Pfad" placeholder="/worlds/world/db">
+            <button type="button" id="fileOpenPath">Pfad öffnen</button>
             <button type="button" id="fileRefresh">Aktualisieren</button>
             <button type="button" id="fileParent">Nach oben</button>
             <button type="button" id="fileZipCurrent">Ordner als ZIP</button>
             <button type="button" id="fileZipExportCurrent">ZIP nach Export</button>
             <button type="button" class="primary" id="safeWorldExport">Sicherer Welt-Export</button>
           </div>
-
-          <div class="file-path" id="fileCurrentPath">/</div>
+          <div class="file-path" id="fileCurrentPath">config:/</div>
+          <div class="breadcrumb" id="fileBreadcrumb"></div>
         </div>
-
         <div class="file-manager-grid">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Explorer</h3>
-                <p>Ordner öffnen, Dateien downloaden, ZIPs erstellen oder ZIPs sicher entpacken.</p>
-              </div>
-            </div>
-
-            <div class="drop-zone" id="fileDropZone">
-              Dateien hierher ziehen oder klicken zum Hochladen
-              <input type="file" id="fileUploadInput" hidden multiple>
-            </div>
-
-            <div style="height:12px"></div>
-
-            <div class="file-table-wrap">
-              <table class="file-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Typ</th>
-                    <th>Größe</th>
-                    <th>Geändert</th>
-                    <th>Aktionen</th>
-                  </tr>
-                </thead>
-                <tbody id="fileTableBody">
-                  <tr>
-                    <td colspan="5">Dateimanager wird geladen...</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Editor</h3>
-                <p>Textdateien bearbeiten. JSON wird vor dem Speichern geprüft, vorher wird automatisch ein Backup erstellt.</p>
-              </div>
-            </div>
-
-            <div class="file-path" id="editorPath">Keine Datei geöffnet</div>
-
-            <div class="file-meta">
-              <span id="editorMeta">Bereit</span>
-            </div>
-
-            <div style="height:10px"></div>
-
-            <textarea id="fileEditor" class="editor-box" spellcheck="false" placeholder="Wähle links eine Textdatei aus."></textarea>
-
-            <div class="actions" style="margin-top:10px">
-              <button type="button" class="primary" id="fileSave">Speichern</button>
-              <button type="button" class="soft" id="fileCloseEditor">Editor leeren</button>
-            </div>
-
-            <div class="info warning-box" style="margin-top:12px">
-              Änderungen an <b>server.properties</b>, Packs oder Weltdateien brauchen je nach Datei einen Server-Neustart. Bei JSON-Dateien wird fehlerhaftes JSON blockiert.
-            </div>
-          </div>
+          <div class="card"><div class="card-header"><div><h3>Explorer</h3><p>Ordner öffnen, Dateien downloaden, ZIPs erstellen oder ZIPs sicher entpacken.</p></div></div><div class="drop-zone" id="fileDropZone">Dateien hierher ziehen oder klicken zum Hochladen<input type="file" id="fileUploadInput" hidden multiple></div><div style="height:12px"></div><div class="file-table-wrap"><table class="file-table"><thead><tr><th>Name</th><th>Typ</th><th>Größe</th><th>Geändert</th><th>Aktionen</th></tr></thead><tbody id="fileTableBody"><tr><td colspan="5">Dateimanager wird geladen...</td></tr></tbody></table></div></div>
+          <div class="card"><div class="card-header"><div><h3>Editor</h3><p>Textdateien bearbeiten. JSON wird vor dem Speichern geprüft, vorher wird automatisch ein Backup erstellt.</p></div></div><div class="file-path" id="editorPath">Keine Datei geöffnet</div><div class="file-meta"><span id="editorMeta">Bereit</span></div><div style="height:10px"></div><textarea id="fileEditor" class="editor-box" spellcheck="false" placeholder="Wähle links eine Textdatei aus."></textarea><div class="actions" style="margin-top:10px"><button type="button" class="primary" id="fileSave">Speichern</button><button type="button" class="soft" id="fileCloseEditor">Editor leeren</button></div><div class="info warning-box" style="margin-top:12px">Änderungen an server.properties, Packs oder Weltdateien brauchen je nach Datei einen Server-Neustart. Fehlerhaftes JSON wird blockiert.</div></div>
         </div>
       </section>
-      
+
       <section class="tab-panel" data-panel="expert">
         <div class="grid">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Backup-Flow</h3>
-                <p>Nur für manuelle Datei-Backups während der Server läuft.</p>
-              </div>
-              <span class="badge warn">Experten</span>
-            </div>
-
-            <div class="info danger-box">Wenn <b>save hold</b> genutzt wird, muss danach unbedingt <b>save resume</b> folgen. Sonst kann der Server nicht normal weiterspeichern.</div>
-
-            <details>
-              <summary>Backup-Befehle anzeigen</summary>
-              <div class="setting">
-                <div class="setting-title">1. Speichern pausieren</div>
-                <button class="warning" data-action-id="save-hold">save hold</button>
-              </div>
-              <div class="setting">
-                <div class="setting-title">2. Backup-Status prüfen</div>
-                <button data-action-id="save-query">save query</button>
-              </div>
-              <div class="setting">
-                <div class="setting-title">3. Speichern fortsetzen</div>
-                <button class="primary" data-action-id="save-resume">save resume</button>
-              </div>
-            </details>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3>Freier Admin-Befehl</h3>
-                <p>Für alles, was bewusst nicht als UI-Schalter existiert.</p>
-              </div>
-            </div>
-            <div class="info">Die freie Eingabe befindet sich dauerhaft unten in der Konsole. Dadurch bleibt der Log sichtbar, während du oben im Menü arbeitest.</div>
-          </div>
+          <div class="card"><div class="card-header"><div><h3>Backup-Flow</h3><p>Manuelle Expertenbefehle für Datei-Backups während der Server läuft.</p></div><span class="badge warn">Experten</span></div><div class="info danger-box">Wenn save hold genutzt wird, muss danach unbedingt save resume folgen.</div><details style="margin-top:12px"><summary>Backup-Befehle anzeigen</summary><div class="setting"><div class="setting-title">1. Speichern pausieren</div><button class="warning" data-action-id="save-hold">save hold</button></div><div class="setting"><div class="setting-title">2. Status prüfen</div><button data-action-id="save-query">save query</button></div><div class="setting"><div class="setting-title">3. Speichern fortsetzen</div><button class="primary" data-action-id="save-resume">save resume</button></div></details></div>
+          <div class="card"><div class="card-header"><div><h3>Debug & Systeminfos</h3><p>Technische Hinweise für Fehleranalyse.</p></div></div><div class="pill-group"><button data-open-root="config">/config öffnen</button><button data-open-root="export">/share/winomc/export öffnen</button><button data-action-id="list">list</button></div><div class="info" style="margin-top:12px">Logs können im Dateimanager heruntergeladen oder als ZIP exportiert werden, sofern sie im erlaubten WinoMC-Bereich liegen.</div></div>
         </div>
       </section>
     </main>
@@ -1717,39 +368,13 @@ INDEX_HTML = r"""<!doctype html>
 
   <section class="console-dock" aria-label="Live Console">
     <div class="console-inner">
-      <div class="console-head">
-        <div>
-          <h3>Live Console</h3>
-          <p>Serverausgabe und freie Befehle bleiben immer erreichbar.</p>
-        </div>
-        <div class="console-controls">
-          <button class="soft" type="button" data-console-size="compact">Kompakt</button>
-          <button class="soft" type="button" data-console-size="normal">Normal</button>
-          <button class="soft" type="button" data-console-size="large">Groß</button>
-          <button class="ghost" type="button" id="clearLog">Anzeige leeren</button>
-        </div>
-      </div>
-
+      <div class="console-head"><div><h3>Live Console</h3><p>Serverausgabe und freie Befehle bleiben immer erreichbar.</p></div><div class="console-controls"><button class="soft" type="button" data-console-size="compact">Kompakt</button><button class="soft" type="button" data-console-size="normal">Normal</button><button class="soft" type="button" data-console-size="large">Groß</button><button class="ghost" type="button" id="clearLog">Anzeige leeren</button></div></div>
       <div id="log" aria-live="polite"></div>
-
-      <form id="commandForm" autocomplete="off" class="command-row">
-        <input id="command" name="command" placeholder="Freien Befehl eingeben, z. B. list, say Hallo, gamerule keepinventory true" autofocus>
-        <button type="submit" class="primary">Senden</button>
-      </form>
+      <form id="commandForm" autocomplete="off" class="command-row"><input id="command" name="command" placeholder="Freien Befehl eingeben, z. B. list, say Hallo, gamerule keepinventory true" autofocus><button type="submit" class="primary">Senden</button></form>
     </div>
   </section>
 
-  <div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal">
-      <h2 id="modalTitle">Wert eingeben</h2>
-      <p id="modalLabel">Bitte Wert eingeben.</p>
-      <input id="modalInput" autocomplete="off">
-      <div class="modal-actions">
-        <button type="button" class="soft" id="modalCancel">Abbrechen</button>
-        <button type="button" class="primary" id="modalSend">Senden</button>
-      </div>
-    </div>
-  </div>
+  <div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-hidden="true"><div class="modal"><h2 id="modalTitle">Wert eingeben</h2><p id="modalLabel">Bitte Wert eingeben.</p><input id="modalInput" autocomplete="off"><div class="modal-actions"><button type="button" class="soft" id="modalCancel">Abbrechen</button><button type="button" class="primary" id="modalSend">Senden</button></div></div></div>
 
   <script>
     const log = document.getElementById('log');
@@ -1770,12 +395,16 @@ INDEX_HTML = r"""<!doctype html>
     const clearLog = document.getElementById('clearLog');
     const filesStatus = document.getElementById('filesStatus');
     const fileRootSelect = document.getElementById('fileRootSelect');
+    const filePathInput = document.getElementById('filePathInput');
+    const fileOpenPath = document.getElementById('fileOpenPath');
     const fileRefresh = document.getElementById('fileRefresh');
     const fileParent = document.getElementById('fileParent');
     const fileZipCurrent = document.getElementById('fileZipCurrent');
     const fileZipExportCurrent = document.getElementById('fileZipExportCurrent');
     const safeWorldExport = document.getElementById('safeWorldExport');
+    const backupSafeWorldExport = document.getElementById('backupSafeWorldExport');
     const fileCurrentPath = document.getElementById('fileCurrentPath');
+    const fileBreadcrumb = document.getElementById('fileBreadcrumb');
     const fileDropZone = document.getElementById('fileDropZone');
     const fileUploadInput = document.getElementById('fileUploadInput');
     const fileTableBody = document.getElementById('fileTableBody');
@@ -1784,83 +413,47 @@ INDEX_HTML = r"""<!doctype html>
     const fileEditor = document.getElementById('fileEditor');
     const fileSave = document.getElementById('fileSave');
     const fileCloseEditor = document.getElementById('fileCloseEditor');
+    const focusConsoleInput = document.getElementById('focusConsoleInput');
 
-    const STORE_DASHBOARD = 'winomcDashboardActionsV1';
+    const STORE_DASHBOARD = 'winomcDashboardActionsV2';
     const STORE_COLUMNS = 'winomcDashboardColumnsV1';
     const STORE_CONSOLE_SIZE = 'winomcConsoleSizeV1';
+    const MAX_JSON_UPLOAD_SIZE = 48 * 1024 * 1024;
 
     const ACTIONS = [
       { id: 'list', category: 'Übersicht', label: 'Spieler anzeigen', description: 'Zeigt aktuell verbundene Spieler.', command: 'list' },
       { id: 'say', category: 'Übersicht', label: 'Nachricht senden', description: 'Sendet eine Nachricht an alle Spieler.', template: 'say {value}', promptTitle: 'Nachricht senden', promptLabel: 'Nachricht an alle Spieler', placeholder: 'Hallo zusammen' },
-      { id: 'stop', category: 'Experten', label: 'Server stoppen', description: 'Stoppt den Bedrock Server kontrolliert.', command: 'stop', variant: 'danger', confirm: 'Server wirklich stoppen? Der Server wird beendet und muss je nach Add-on-Setup neu gestartet werden.' },
-
-      { id: 'time-day', category: 'Übersicht', label: 'Tag setzen', description: 'Setzt die Zeit auf Tag.', command: 'time set day' },
-      { id: 'time-night', category: 'Übersicht', label: 'Nacht setzen', description: 'Setzt die Zeit auf Nacht.', command: 'time set night' },
-      { id: 'weather-clear', category: 'Übersicht', label: 'Wetter klar', description: 'Setzt das Wetter auf klar.', command: 'weather clear' },
-      { id: 'weather-rain', category: 'Übersicht', label: 'Regen', description: 'Startet Regen.', command: 'weather rain' },
-      { id: 'weather-thunder', category: 'Übersicht', label: 'Gewitter', description: 'Startet Gewitter.', command: 'weather thunder' },
-
-      { id: 'mode-survival', category: 'Allgemein', label: 'Überleben', description: 'Setzt den Standard-Spielmodus auf Survival.', command: 'defaultgamemode survival' },
-      { id: 'mode-creative', category: 'Allgemein', label: 'Kreativ', description: 'Setzt den Standard-Spielmodus auf Creative.', command: 'defaultgamemode creative' },
-      { id: 'mode-adventure', category: 'Allgemein', label: 'Abenteuer', description: 'Setzt den Standard-Spielmodus auf Adventure.', command: 'defaultgamemode adventure' },
-      { id: 'difficulty-peaceful', category: 'Allgemein', label: 'Friedlich', description: 'Setzt Schwierigkeit auf Friedlich.', command: 'difficulty peaceful' },
-      { id: 'difficulty-easy', category: 'Allgemein', label: 'Einfach', description: 'Setzt Schwierigkeit auf Einfach.', command: 'difficulty easy' },
-      { id: 'difficulty-normal', category: 'Allgemein', label: 'Normal', description: 'Setzt Schwierigkeit auf Normal.', command: 'difficulty normal' },
-      { id: 'difficulty-hard', category: 'Allgemein', label: 'Schwer', description: 'Setzt Schwierigkeit auf Schwer.', command: 'difficulty hard' },
-
-      { id: 'coordinates-on', category: 'Fortgeschritten', label: 'Koordinaten an', description: 'Zeigt Koordinaten im Spiel an.', command: 'gamerule showcoordinates true' },
-      { id: 'coordinates-off', category: 'Fortgeschritten', label: 'Koordinaten aus', description: 'Blendet Koordinaten aus.', command: 'gamerule showcoordinates false' },
-      { id: 'days-on', category: 'Fortgeschritten', label: 'Tage anzeigen an', description: 'Zeigt gespielte Tage an, falls unterstützt.', command: 'gamerule showdaysplayed true' },
-      { id: 'days-off', category: 'Fortgeschritten', label: 'Tage anzeigen aus', description: 'Blendet gespielte Tage aus, falls unterstützt.', command: 'gamerule showdaysplayed false' },
-      { id: 'sleep-0', category: 'Fortgeschritten', label: 'Schlafen 0%', description: 'Eine Person kann die Nacht überspringen.', command: 'gamerule playerssleepingpercentage 0' },
-      { id: 'sleep-50', category: 'Fortgeschritten', label: 'Schlafen 50%', description: 'Die Hälfte der Spieler muss schlafen.', command: 'gamerule playerssleepingpercentage 50' },
-      { id: 'sleep-100', category: 'Fortgeschritten', label: 'Schlafen 100%', description: 'Alle Spieler müssen schlafen.', command: 'gamerule playerssleepingpercentage 100' },
-      { id: 'sleep-custom', category: 'Fortgeschritten', label: 'Schlafen eigener Wert', description: 'Setzt einen Prozentwert zwischen 0 und 100.', template: 'gamerule playerssleepingpercentage {value}', promptTitle: 'Schlaf-Prozent setzen', promptLabel: 'Prozentwert 0 bis 100', placeholder: '50' },
-      { id: 'spawnradius-0', category: 'Fortgeschritten', label: 'Spawnradius 0', description: 'Respawn direkt am Weltspawn.', command: 'gamerule spawnradius 0' },
-      { id: 'spawnradius-10', category: 'Fortgeschritten', label: 'Spawnradius 10', description: 'Respawn im Radius 10.', command: 'gamerule spawnradius 10' },
-      { id: 'spawnradius-custom', category: 'Fortgeschritten', label: 'Spawnradius eigener Wert', description: 'Setzt den Respawn-Radius.', template: 'gamerule spawnradius {value}', promptTitle: 'Wiederbeleben-Radius setzen', promptLabel: 'Radius', placeholder: '10' },
-      { id: 'fire-on', category: 'Fortgeschritten', label: 'Feuer ausbreiten an', description: 'Feuer kann sich ausbreiten.', command: 'gamerule dofiretick true' },
-      { id: 'fire-off', category: 'Fortgeschritten', label: 'Feuer ausbreiten aus', description: 'Feuer breitet sich nicht aus.', command: 'gamerule dofiretick false' },
-      { id: 'tnt-on', category: 'Fortgeschritten', label: 'TNT an', description: 'TNT kann explodieren.', command: 'gamerule tntexplodes true' },
-      { id: 'tnt-off', category: 'Fortgeschritten', label: 'TNT aus', description: 'TNT explodiert nicht.', command: 'gamerule tntexplodes false' },
-      { id: 'mobloot-on', category: 'Fortgeschritten', label: 'Kreaturenbeute an', description: 'Kreaturen lassen Beute fallen.', command: 'gamerule domobloot true' },
-      { id: 'mobloot-off', category: 'Fortgeschritten', label: 'Kreaturenbeute aus', description: 'Kreaturen lassen keine Beute fallen.', command: 'gamerule domobloot false' },
-      { id: 'regen-on', category: 'Fortgeschritten', label: 'Regeneration an', description: 'Natürliche Regeneration aktivieren.', command: 'gamerule naturalregeneration true' },
-      { id: 'regen-off', category: 'Fortgeschritten', label: 'Regeneration aus', description: 'Natürliche Regeneration deaktivieren.', command: 'gamerule naturalregeneration false' },
-      { id: 'tiledrops-on', category: 'Fortgeschritten', label: 'Blockdrops an', description: 'Blöcke lassen Beute fallen.', command: 'gamerule dotiledrops true' },
-      { id: 'tiledrops-off', category: 'Fortgeschritten', label: 'Blockdrops aus', description: 'Blöcke lassen keine Beute fallen.', command: 'gamerule dotiledrops false' },
-      { id: 'immediate-respawn-on', category: 'Fortgeschritten', label: 'Sofort-Respawn an', description: 'Tod-Menü überspringen.', command: 'gamerule doimmediaterespawn true' },
-      { id: 'immediate-respawn-off', category: 'Fortgeschritten', label: 'Sofort-Respawn aus', description: 'Tod-Menü normal anzeigen.', command: 'gamerule doimmediaterespawn false' },
-
+      { id: 'stop', category: 'Experten', label: 'Server stoppen', description: 'Stoppt den Bedrock Server kontrolliert.', command: 'stop', variant: 'danger', confirm: 'Server wirklich stoppen?' },
+      { id: 'time-day', category: 'Server', label: 'Tag setzen', description: 'Setzt die Zeit auf Tag.', command: 'time set day' },
+      { id: 'time-night', category: 'Server', label: 'Nacht setzen', description: 'Setzt die Zeit auf Nacht.', command: 'time set night' },
+      { id: 'weather-clear', category: 'Server', label: 'Wetter klar', description: 'Setzt das Wetter auf klar.', command: 'weather clear' },
+      { id: 'weather-rain', category: 'Server', label: 'Regen', description: 'Startet Regen.', command: 'weather rain' },
+      { id: 'weather-thunder', category: 'Server', label: 'Gewitter', description: 'Startet Gewitter.', command: 'weather thunder' },
+      { id: 'mode-survival', category: 'Server', label: 'Überleben', description: 'Setzt den Standard-Spielmodus auf Survival.', command: 'defaultgamemode survival' },
+      { id: 'mode-creative', category: 'Server', label: 'Kreativ', description: 'Setzt den Standard-Spielmodus auf Creative.', command: 'defaultgamemode creative' },
+      { id: 'mode-adventure', category: 'Server', label: 'Abenteuer', description: 'Setzt den Standard-Spielmodus auf Adventure.', command: 'defaultgamemode adventure' },
+      { id: 'difficulty-peaceful', category: 'Server', label: 'Friedlich', description: 'Setzt Schwierigkeit auf Friedlich.', command: 'difficulty peaceful' },
+      { id: 'difficulty-easy', category: 'Server', label: 'Einfach', description: 'Setzt Schwierigkeit auf Einfach.', command: 'difficulty easy' },
+      { id: 'difficulty-normal', category: 'Server', label: 'Normal', description: 'Setzt Schwierigkeit auf Normal.', command: 'difficulty normal' },
+      { id: 'difficulty-hard', category: 'Server', label: 'Schwer', description: 'Setzt Schwierigkeit auf Schwer.', command: 'difficulty hard' },
+      { id: 'coordinates-on', category: 'Server', label: 'Koordinaten an', description: 'Zeigt Koordinaten im Spiel an.', command: 'gamerule showcoordinates true' },
+      { id: 'coordinates-off', category: 'Server', label: 'Koordinaten aus', description: 'Blendet Koordinaten aus.', command: 'gamerule showcoordinates false' },
+      { id: 'sleep-0', category: 'Server', label: 'Schlafen 0%', description: 'Eine Person kann die Nacht überspringen.', command: 'gamerule playerssleepingpercentage 0' },
+      { id: 'sleep-50', category: 'Server', label: 'Schlafen 50%', description: 'Die Hälfte der Spieler muss schlafen.', command: 'gamerule playerssleepingpercentage 50' },
+      { id: 'sleep-100', category: 'Server', label: 'Schlafen 100%', description: 'Alle Spieler müssen schlafen.', command: 'gamerule playerssleepingpercentage 100' },
+      { id: 'sleep-custom', category: 'Server', label: 'Schlafen eigener Wert', description: 'Setzt einen Prozentwert zwischen 0 und 100.', template: 'gamerule playerssleepingpercentage {value}', promptTitle: 'Schlaf-Prozent setzen', promptLabel: 'Prozentwert 0 bis 100', placeholder: '50' },
+      { id: 'keepinventory-on', category: 'Server', label: 'Inventar behalten an', description: 'Spieler behalten Inventar nach Tod.', command: 'gamerule keepinventory true' },
+      { id: 'keepinventory-off', category: 'Server', label: 'Inventar behalten aus', description: 'Inventar wird nach Tod normal gedroppt.', command: 'gamerule keepinventory false' },
+      { id: 'randomtick-custom', category: 'Server', label: 'Random Tick eigener Wert', description: 'Vorsichtig nutzen: hohe Werte belasten den Server.', template: 'gamerule randomtickspeed {value}', promptTitle: 'Random Tick Speed setzen', promptLabel: 'Wert', placeholder: '1', variant: 'warning' },
       { id: 'op-add', category: 'Mehrspieler', label: 'OP geben', description: 'Gibt einem Spieler Operator-Rechte.', template: 'op {value}', promptTitle: 'Operator hinzufügen', promptLabel: 'Spielername', placeholder: 'PlayerName' },
       { id: 'op-remove', category: 'Mehrspieler', label: 'OP entfernen', description: 'Entzieht einem Spieler Operator-Rechte.', template: 'deop {value}', promptTitle: 'Operator entfernen', promptLabel: 'Spielername', placeholder: 'PlayerName' },
-      { id: 'pvp-on', category: 'Mehrspieler', label: 'PvP an', description: 'Aktiviert PvP, falls unterstützt.', command: 'gamerule pvp true' },
-      { id: 'pvp-off', category: 'Mehrspieler', label: 'PvP aus', description: 'Deaktiviert PvP, falls unterstützt.', command: 'gamerule pvp false' },
-
-      { id: 'daycycle-on', category: 'Spielregeln', label: 'Tageslicht normal', description: 'Zeit läuft normal weiter.', command: 'gamerule dodaylightcycle true' },
-      { id: 'daycycle-off', category: 'Spielregeln', label: 'Zeit einfrieren', description: 'Tageslichtzyklus anhalten.', command: 'gamerule dodaylightcycle false' },
-      { id: 'keepinventory-on', category: 'Spielregeln', label: 'Inventar behalten an', description: 'Spieler behalten Inventar nach Tod.', command: 'gamerule keepinventory true' },
-      { id: 'keepinventory-off', category: 'Spielregeln', label: 'Inventar behalten aus', description: 'Inventar wird nach Tod normal gedroppt.', command: 'gamerule keepinventory false' },
-      { id: 'mobspawning-on', category: 'Spielregeln', label: 'Kreaturen-Spawn an', description: 'Kreaturen spawnen natürlich.', command: 'gamerule domobspawning true' },
-      { id: 'mobspawning-off', category: 'Spielregeln', label: 'Kreaturen-Spawn aus', description: 'Natürlicher Spawn wird deaktiviert.', command: 'gamerule domobspawning false' },
-      { id: 'mobgriefing-on', category: 'Spielregeln', label: 'Mob-Griefing an', description: 'Kreaturen können Blöcke beeinflussen.', command: 'gamerule mobgriefing true' },
-      { id: 'mobgriefing-off', category: 'Spielregeln', label: 'Mob-Griefing aus', description: 'Kreaturen-Griefing deaktivieren.', command: 'gamerule mobgriefing false' },
-      { id: 'entitydrops-on', category: 'Spielregeln', label: 'Entitätsdrops an', description: 'Entitäten lassen Gegenstände fallen.', command: 'gamerule doentitydrops true' },
-      { id: 'entitydrops-off', category: 'Spielregeln', label: 'Entitätsdrops aus', description: 'Entitäten lassen keine Gegenstände fallen.', command: 'gamerule doentitydrops false' },
-      { id: 'weathercycle-on', category: 'Spielregeln', label: 'Wetterzyklus an', description: 'Wetter ändert sich natürlich.', command: 'gamerule doweathercycle true' },
-      { id: 'weathercycle-off', category: 'Spielregeln', label: 'Wetterzyklus aus', description: 'Wetter bleibt stabil.', command: 'gamerule doweathercycle false' },
-      { id: 'randomtick-1', category: 'Spielregeln', label: 'Random Tick 1', description: 'Standardnah und schonend.', command: 'gamerule randomtickspeed 1' },
-      { id: 'randomtick-3', category: 'Spielregeln', label: 'Random Tick 3', description: 'Schneller, aber noch moderat.', command: 'gamerule randomtickspeed 3' },
-      { id: 'randomtick-custom', category: 'Spielregeln', label: 'Random Tick eigener Wert', description: 'Vorsichtig nutzen: hohe Werte belasten den Server.', template: 'gamerule randomtickspeed {value}', promptTitle: 'Random Tick Speed setzen', promptLabel: 'Wert', placeholder: '1', variant: 'warning' },
-
-      { id: 'save-hold', category: 'Experten', label: 'Backup: speichern pausieren', description: 'Pausiert Welt-Schreibvorgänge für Datei-Backups.', command: 'save hold', variant: 'warning', confirm: 'Speichern wirklich pausieren? Danach bitte save query prüfen und am Ende save resume ausführen.' },
+      { id: 'save-hold', category: 'Experten', label: 'Backup: speichern pausieren', description: 'Pausiert Welt-Schreibvorgänge für Datei-Backups.', command: 'save hold', variant: 'warning', confirm: 'Speichern wirklich pausieren? Danach save resume ausführen.' },
       { id: 'save-query', category: 'Experten', label: 'Backup: Status prüfen', description: 'Fragt den Backup-/Speicherstatus ab.', command: 'save query' },
       { id: 'save-resume', category: 'Experten', label: 'Backup: speichern fortsetzen', description: 'Setzt normales Speichern nach save hold fort.', command: 'save resume', variant: 'primary' }
     ];
 
     const ACTION_BY_ID = Object.fromEntries(ACTIONS.map(action => [action.id, action]));
     const DEFAULT_DASHBOARD = ['list', 'say', 'time-day', 'weather-clear', 'coordinates-on', 'keepinventory-on', 'sleep-50', 'difficulty-normal', 'stop'];
-
     let history = JSON.parse(localStorage.getItem('winomcCommandHistory') || '[]');
     let historyIndex = history.length;
     let pendingTemplate = null;
@@ -1869,761 +462,104 @@ INDEX_HTML = r"""<!doctype html>
     let currentFileRoot = 'config';
     let currentFilePath = '/';
     let currentEditorFile = null;
+    let latestStatus = null;
 
-    function appendLine(text, cls) {
-      const div = document.createElement('div');
-      div.className = 'line' + (cls ? ' ' + cls : '');
-      div.textContent = text;
-      const stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
-      log.appendChild(div);
-      while (log.children.length > 1600) log.removeChild(log.firstChild);
-      if (stick) log.scrollTop = log.scrollHeight;
-    }
+    function appendLine(text, cls) { const div = document.createElement('div'); div.className = 'line' + (cls ? ' ' + cls : ''); div.textContent = text; const stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 20; log.appendChild(div); while (log.children.length > 1600) log.removeChild(log.firstChild); if (stick) log.scrollTop = log.scrollHeight; }
+    function saveHistory(command) { history = history.filter(item => item !== command); history.push(command); history = history.slice(-50); historyIndex = history.length; localStorage.setItem('winomcCommandHistory', JSON.stringify(history)); }
+    async function sendCommand(command) { command = String(command || '').trim(); if (!command) return; appendLine('> ' + command, 'command'); saveHistory(command); input.value = ''; try { const endpoint = './api/command?command=' + encodeURIComponent(command); const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command }) }); const data = await res.json(); if (!res.ok || !data.ok) appendLine('Fehler: ' + (data.error || res.statusText), 'error'); else appendLine('Befehl gesendet', 'ok'); } catch (err) { appendLine('Fehler beim Senden: ' + err.message, 'error'); } }
+    function runAction(action) { if (!action) return; if (action.confirm && !window.confirm(action.confirm)) return; if (action.template) { openPromptForAction(action); return; } sendCommand(action.command); }
+    function openPromptForAction(action) { pendingTemplate = action.template; modalTitle.textContent = action.promptTitle || action.label || 'Wert eingeben'; modalLabel.textContent = action.promptLabel || action.description || 'Bitte Wert eingeben.'; modalInput.value = ''; modalInput.placeholder = action.placeholder || ''; modalBackdrop.classList.add('open'); modalBackdrop.setAttribute('aria-hidden', 'false'); setTimeout(() => modalInput.focus(), 0); }
+    function closePrompt() { modalBackdrop.classList.remove('open'); modalBackdrop.setAttribute('aria-hidden', 'true'); pendingTemplate = null; }
+    function sendPromptValue() { const value = modalInput.value.trim(); if (!value || !pendingTemplate) return; const command = pendingTemplate.replaceAll('{value}', value); closePrompt(); sendCommand(command); }
+    function loadDashboard() { try { const saved = JSON.parse(localStorage.getItem(STORE_DASHBOARD) || 'null'); if (Array.isArray(saved) && saved.length) return saved.filter(id => ACTION_BY_ID[id]); } catch (_) {} return [...DEFAULT_DASHBOARD]; }
+    function saveDashboard() { localStorage.setItem(STORE_DASHBOARD, JSON.stringify(dashboardActions)); }
+    function createButtonForAction(action, label) { const button = document.createElement('button'); button.type = 'button'; button.textContent = label || action.label; if (action.variant) button.classList.add(action.variant); button.addEventListener('click', () => runAction(action)); return button; }
+    function renderDashboard() { dashboardGrid.innerHTML = ''; const columns = localStorage.getItem(STORE_COLUMNS) || 'auto'; dashboardColumns.value = columns; dashboardGrid.classList.toggle('auto', columns === 'auto'); if (columns === 'auto') dashboardGrid.style.removeProperty('--dashboard-columns'); else dashboardGrid.style.setProperty('--dashboard-columns', columns); dashboardActions.forEach((id, index) => { const action = ACTION_BY_ID[id]; if (!action) return; const tile = document.createElement('article'); tile.className = 'tile'; const top = document.createElement('div'); top.className = 'tile-top'; const text = document.createElement('div'); const title = document.createElement('div'); title.className = 'tile-title'; title.textContent = action.label; const desc = document.createElement('div'); desc.className = 'tile-desc'; desc.textContent = action.description || ''; text.append(title, desc); const tag = document.createElement('span'); tag.className = 'category-label'; tag.textContent = action.category; top.append(text, tag); const actionButton = createButtonForAction(action, action.template ? 'Ausführen…' : 'Ausführen'); const controls = document.createElement('div'); controls.className = 'tile-actions'; const up = document.createElement('button'); up.type = 'button'; up.textContent = '↑'; up.disabled = index === 0; up.addEventListener('click', () => moveDashboardAction(index, -1)); const down = document.createElement('button'); down.type = 'button'; down.textContent = '↓'; down.disabled = index === dashboardActions.length - 1; down.addEventListener('click', () => moveDashboardAction(index, 1)); const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Entfernen'; remove.className = 'ghost'; remove.addEventListener('click', () => removeDashboardAction(id)); controls.append(up, down, remove); tile.append(top, actionButton, controls); dashboardGrid.appendChild(tile); }); renderActionPicker(); }
+    function renderActionPicker() { actionPicker.innerHTML = ''; ACTIONS.forEach(action => { const item = document.createElement('div'); item.className = 'picker-item'; const meta = document.createElement('div'); meta.className = 'picker-meta'; const title = document.createElement('strong'); title.textContent = action.label; const cat = document.createElement('span'); cat.className = 'category-label'; cat.textContent = action.category; meta.append(title, cat); const desc = document.createElement('div'); desc.className = 'tile-desc'; desc.textContent = action.description || ''; const add = document.createElement('button'); add.type = 'button'; add.textContent = dashboardActions.includes(action.id) ? 'Bereits im Dashboard' : 'Hinzufügen'; add.disabled = dashboardActions.includes(action.id); add.addEventListener('click', () => addDashboardAction(action.id)); item.append(meta, desc, add); actionPicker.appendChild(item); }); }
+    function addDashboardAction(id) { if (!ACTION_BY_ID[id] || dashboardActions.includes(id)) return; dashboardActions.push(id); saveDashboard(); renderDashboard(); }
+    function removeDashboardAction(id) { dashboardActions = dashboardActions.filter(item => item !== id); saveDashboard(); renderDashboard(); }
+    function moveDashboardAction(index, direction) { const next = index + direction; if (next < 0 || next >= dashboardActions.length) return; [dashboardActions[index], dashboardActions[next]] = [dashboardActions[next], dashboardActions[index]]; saveDashboard(); renderDashboard(); }
+    function applyConsoleSize(size) { document.body.classList.toggle('console-compact', size === 'compact'); document.body.classList.toggle('console-large', size === 'large'); localStorage.setItem(STORE_CONSOLE_SIZE, size); }
 
-    function saveHistory(command) {
-      history = history.filter(item => item !== command);
-      history.push(command);
-      history = history.slice(-50);
-      historyIndex = history.length;
-      localStorage.setItem('winomcCommandHistory', JSON.stringify(history));
-    }
+    function apiUrl(path, params = {}) { const query = new URLSearchParams(params); const suffix = query.toString() ? '?' + query.toString() : ''; return './' + path.replace(/^\/+/, '') + suffix; }
+    async function fetchJson(path, params = {}) { const res = await fetch(apiUrl(path, params), { cache: 'no-store' }); const data = await res.json(); if (!res.ok || !data.ok) throw new Error(data.error || res.statusText); return data; }
+    async function postJson(path, payload = {}) { const res = await fetch('./' + path.replace(/^\/+/, ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); const data = await res.json(); if (!res.ok || !data.ok) throw new Error(data.error || res.statusText); return data; }
+    function setFilesStatus(text, variant) { filesStatus.textContent = text; filesStatus.classList.toggle('warn', variant === 'warn'); }
+    function formatBytes(value) { const bytes = Number(value || 0); if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB'; return (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB'; }
+    function formatUnixTime(value) { if (!value) return '-'; return new Date(Number(value) * 1000).toLocaleString(); }
+    function normalizeUiPath(path) { path = String(path || '/').replaceAll('\\', '/'); if (!path.startsWith('/')) path = '/' + path; path = path.replace(/\/+/g, '/'); return path || '/'; }
+    function parentUiPath(path) { path = normalizeUiPath(path); if (path === '/') return '/'; const parts = path.split('/').filter(Boolean); parts.pop(); return '/' + parts.join('/'); }
+    function escapeHtml(value) { return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;'); }
+    function activateTab(tab) { document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); }
+    function openRoot(root, path = '/') { activateTab('files'); setTimeout(async () => { await initFileManager(); currentFileRoot = root; fileRootSelect.value = root; await loadFileList(path); }, 0); }
 
-    async function sendCommand(command) {
-      command = String(command || '').trim();
-      if (!command) return;
-      appendLine('> ' + command, 'command');
-      saveHistory(command);
-      input.value = '';
+    async function loadStatus() { try { const data = await fetchJson('/api/status'); latestStatus = data; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
 
-      try {
-        const endpoint = './api/command?command=' + encodeURIComponent(command);
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command })
-        });
-        const data = await res.json();
-        if (!res.ok || !data.ok) {
-          appendLine('Fehler: ' + (data.error || res.statusText), 'error');
-        } else {
-          appendLine('Befehl gesendet', 'ok');
-        }
-      } catch (err) {
-        appendLine('Fehler beim Senden: ' + err.message, 'error');
-      }
-    }
+    async function initFileManager() { if (filesInitialized) { await loadFileList(); return; } filesInitialized = true; try { setFilesStatus('Lade Bereiche...', 'warn'); const data = await fetchJson('/api/files/roots'); fileRootSelect.innerHTML = ''; data.roots.forEach(root => { const option = document.createElement('option'); option.value = root.key; option.textContent = root.label + (root.exists ? '' : ' (fehlt)'); option.disabled = !root.exists || !root.readable; fileRootSelect.appendChild(option); }); const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled); if (![...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) currentFileRoot = firstEnabled ? firstEnabled.value : 'config'; fileRootSelect.value = currentFileRoot; await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
+    async function loadFileList(path) { if (path !== undefined) currentFilePath = normalizeUiPath(path); currentFileRoot = fileRootSelect.value || currentFileRoot; try { setFilesStatus('Lade...', 'warn'); updatePathDisplay(); const data = await fetchJson('/api/files/list', { root: currentFileRoot, path: currentFilePath }); currentFilePath = data.path || '/'; fileParent.disabled = currentFilePath === '/'; updatePathDisplay(); renderFileEntries(data.entries || []); setFilesStatus('Bereit', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
+    function updatePathDisplay() { const full = currentFileRoot + ':' + currentFilePath; fileCurrentPath.textContent = full; filePathInput.value = currentFilePath; fileBreadcrumb.innerHTML = ''; const rootButton = document.createElement('button'); rootButton.type = 'button'; rootButton.textContent = currentFileRoot + ':/'; rootButton.addEventListener('click', () => loadFileList('/')); fileBreadcrumb.appendChild(rootButton); let current = ''; currentFilePath.split('/').filter(Boolean).forEach(part => { current += '/' + part; const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = part; const target = current; btn.addEventListener('click', () => loadFileList(target)); fileBreadcrumb.appendChild(btn); }); }
+    function renderFileEntries(entries) { if (!entries.length) { fileTableBody.innerHTML = '<tr><td colspan="5">Dieser Ordner ist leer.</td></tr>'; return; } fileTableBody.innerHTML = ''; entries.forEach(entry => { const tr = document.createElement('tr'); const nameTd = document.createElement('td'); const nameButton = document.createElement('button'); nameButton.type = 'button'; nameButton.className = 'file-name-button'; nameButton.textContent = (entry.type === 'directory' ? '📁 ' : '📄 ') + entry.name; nameButton.addEventListener('click', () => entry.type === 'directory' ? loadFileList(entry.path) : openFileInEditor(entry.path)); nameTd.appendChild(nameButton); const typeTd = document.createElement('td'); typeTd.textContent = entry.type === 'directory' ? 'Ordner' : 'Datei'; const sizeTd = document.createElement('td'); sizeTd.textContent = entry.type === 'directory' ? '-' : formatBytes(entry.size); const modifiedTd = document.createElement('td'); modifiedTd.textContent = formatUnixTime(entry.modified); const actionsTd = document.createElement('td'); const actions = document.createElement('div'); actions.className = 'file-row-actions'; if (entry.type === 'directory') { const open = document.createElement('button'); open.type = 'button'; open.textContent = 'Öffnen'; open.addEventListener('click', () => loadFileList(entry.path)); const zip = document.createElement('button'); zip.type = 'button'; zip.textContent = 'ZIP'; zip.addEventListener('click', () => downloadZip(entry.path)); const exportZip = document.createElement('button'); exportZip.type = 'button'; exportZip.textContent = 'Export'; exportZip.addEventListener('click', () => saveZipToExport(entry.path)); actions.append(open, zip, exportZip); } else { const download = document.createElement('button'); download.type = 'button'; download.textContent = 'Download'; download.addEventListener('click', () => downloadFile(entry.path)); const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'Editor'; edit.addEventListener('click', () => openFileInEditor(entry.path)); actions.append(download, edit); if (['.zip', '.mcpack', '.mcaddon', '.mcworld', '.mctemplate'].some(ext => entry.name.toLowerCase().endsWith(ext))) { const unzip = document.createElement('button'); unzip.type = 'button'; unzip.textContent = 'Entpacken'; unzip.addEventListener('click', () => unzipFile(entry.path)); actions.appendChild(unzip); } } actionsTd.appendChild(actions); tr.append(nameTd, typeTd, sizeTd, modifiedTd, actionsTd); fileTableBody.appendChild(tr); }); }
+    function downloadFile(path) { window.location.href = apiUrl('/api/files/download', { root: currentFileRoot, path }); }
+    function downloadZip(path) { window.location.href = apiUrl('/api/files/zip', { root: currentFileRoot, path }); }
+    async function saveZipToExport(path) { try { setFilesStatus('Erstelle ZIP...', 'warn'); const data = await postJson('/api/files/zip', { root: currentFileRoot, paths: [path], save_to_export: true }); appendLine('[WinoMC Dateien] ZIP exportiert: ' + data.filename, 'ok'); setFilesStatus('ZIP exportiert', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] ZIP-Fehler: ' + err.message, 'error'); alert(err.message); } }
+    async function openFileInEditor(path) { try { setFilesStatus('Öffne Datei...', 'warn'); const data = await fetchJson('/api/files/read', { root: currentFileRoot, path }); currentEditorFile = { root: data.root, path: data.path }; editorPath.textContent = data.root + ':' + data.path; editorMeta.textContent = formatBytes(data.size) + ' · geändert: ' + formatUnixTime(data.modified) + (data.json ? ' · JSON-Prüfung aktiv' : ''); fileEditor.value = data.content || ''; setFilesStatus('Datei geöffnet', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Editor-Fehler: ' + err.message, 'error'); alert(err.message); } }
+    async function saveEditorFile() { if (!currentEditorFile) { alert('Keine Datei geöffnet.'); return; } try { setFilesStatus('Speichere...', 'warn'); const data = await postJson('/api/files/write', { root: currentEditorFile.root, path: currentEditorFile.path, content: fileEditor.value }); appendLine('[WinoMC Dateien] Datei gespeichert: ' + currentEditorFile.path, 'ok'); if (data.backup_created) appendLine('[WinoMC Dateien] Backup erstellt: ' + data.backup_path, 'ok'); setFilesStatus('Gespeichert', ''); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Speichern fehlgeschlagen: ' + err.message, 'error'); alert(err.message); } }
+    function clearEditor() { currentEditorFile = null; editorPath.textContent = 'Keine Datei geöffnet'; editorMeta.textContent = 'Bereit'; fileEditor.value = ''; }
+    async function uploadFiles(files) { files = Array.from(files || []); if (!files.length) return; for (const file of files) { try { setFilesStatus('Upload: ' + file.name, 'warn'); let data; try { data = await uploadFileBinary(file); } catch (binaryErr) { if (file.size > MAX_JSON_UPLOAD_SIZE) throw binaryErr; appendLine('[WinoMC Dateien] Binary Upload fehlgeschlagen, nutze JSON-Fallback: ' + binaryErr.message, 'error'); data = await uploadFileJson(file); } appendLine('[WinoMC Dateien] Hochgeladen: ' + data.path, 'ok'); } catch (err) { appendLine('[WinoMC Dateien] Upload fehlgeschlagen: ' + file.name + ' · ' + err.message, 'error'); alert('Upload fehlgeschlagen: ' + file.name + '\n\n' + err.message); } } setFilesStatus('Upload fertig', ''); await loadFileList(currentFilePath); }
+    async function uploadFileBinary(file) { const res = await fetch(apiUrl('/api/files/upload', { root: currentFileRoot, path: currentFilePath, filename: file.name, overwrite: 'false' }), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-WinoMC-Upload-Size': String(file.size), 'X-WinoMC-Filename': encodeURIComponent(file.name) }, body: file }); const data = await res.json(); if (!res.ok || !data.ok) throw new Error(data.error || res.statusText); return data; }
+    function readFileAsBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '').split(',', 2)[1] || ''); reader.onerror = () => reject(reader.error || new Error('Datei konnte nicht gelesen werden.')); reader.readAsDataURL(file); }); }
+    async function uploadFileJson(file) { const base64 = await readFileAsBase64(file); return postJson('/api/files/upload-json', { root: currentFileRoot, path: currentFilePath, filename: file.name, overwrite: false, content_base64: base64 }); }
+    async function unzipFile(path) { const destination = window.prompt('In welchen Ordner entpacken?', currentFilePath || '/'); if (destination === null) return; const overwrite = window.confirm('Vorhandene Dateien überschreiben?'); try { setFilesStatus('Entpacke ZIP...', 'warn'); const data = await postJson('/api/files/unzip', { root: currentFileRoot, path, destination, overwrite }); appendLine('[WinoMC Dateien] Entpackt: ' + data.files + ' Dateien, ' + data.directories + ' Ordner', 'ok'); setFilesStatus('ZIP entpackt', ''); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Entpacken fehlgeschlagen: ' + err.message, 'error'); alert(err.message); } }
+    async function runSafeWorldExport() { const defaultWorld = latestStatus && latestStatus.env && latestStatus.env.LEVEL_NAME ? '/' + latestStatus.env.LEVEL_NAME : '/world'; const worldPath = window.prompt('Welche Welt sicher exportieren?', defaultWorld); if (!worldPath) return; if (!window.confirm('Sicheren Welt-Export starten?\n\nAblauf: save hold → save query → ZIP → save resume')) return; try { setFilesStatus('Welt-Export läuft...', 'warn'); const data = await postJson('/api/worlds/export-safe', { path: worldPath, save_to_export: true }); appendLine('[WinoMC Dateien] Sicherer Welt-Export erstellt: ' + data.filename, 'ok'); setFilesStatus('Welt exportiert', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Welt-Export fehlgeschlagen: ' + err.message, 'error'); alert(err.message); } }
 
-    function runAction(action) {
-      if (!action) return;
-      if (action.confirm && !window.confirm(action.confirm)) return;
-      if (action.template) {
-        openPromptForAction(action);
-        return;
-      }
-      sendCommand(action.command);
-    }
-
-    function openPromptForAction(action) {
-      pendingTemplate = action.template;
-      modalTitle.textContent = action.promptTitle || action.label || 'Wert eingeben';
-      modalLabel.textContent = action.promptLabel || action.description || 'Bitte Wert eingeben.';
-      modalInput.value = '';
-      modalInput.placeholder = action.placeholder || '';
-      modalBackdrop.classList.add('open');
-      modalBackdrop.setAttribute('aria-hidden', 'false');
-      setTimeout(() => modalInput.focus(), 0);
-    }
-
-    function closePrompt() {
-      modalBackdrop.classList.remove('open');
-      modalBackdrop.setAttribute('aria-hidden', 'true');
-      pendingTemplate = null;
-    }
-
-    function sendPromptValue() {
-      const value = modalInput.value.trim();
-      if (!value || !pendingTemplate) return;
-      const command = pendingTemplate.replaceAll('{value}', value);
-      closePrompt();
-      sendCommand(command);
-    }
-
-    function loadDashboard() {
-      try {
-        const saved = JSON.parse(localStorage.getItem(STORE_DASHBOARD) || 'null');
-        if (Array.isArray(saved) && saved.length) {
-          return saved.filter(id => ACTION_BY_ID[id]);
-        }
-      } catch (_) {}
-      return [...DEFAULT_DASHBOARD];
-    }
-
-    function saveDashboard() {
-      localStorage.setItem(STORE_DASHBOARD, JSON.stringify(dashboardActions));
-    }
-
-    function createButtonForAction(action, label) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = label || action.label;
-      if (action.variant) button.classList.add(action.variant);
-      button.addEventListener('click', () => runAction(action));
-      return button;
-    }
-
-    function renderDashboard() {
-      dashboardGrid.innerHTML = '';
-      const columns = localStorage.getItem(STORE_COLUMNS) || 'auto';
-      dashboardColumns.value = columns;
-      dashboardGrid.classList.toggle('auto', columns === 'auto');
-      if (columns === 'auto') {
-        dashboardGrid.style.removeProperty('--dashboard-columns');
-      } else {
-        dashboardGrid.style.setProperty('--dashboard-columns', columns);
-      }
-
-      dashboardActions.forEach((id, index) => {
-        const action = ACTION_BY_ID[id];
-        if (!action) return;
-        const tile = document.createElement('article');
-        tile.className = 'tile';
-
-        const top = document.createElement('div');
-        top.className = 'tile-top';
-        const text = document.createElement('div');
-        const title = document.createElement('div');
-        title.className = 'tile-title';
-        title.textContent = action.label;
-        const desc = document.createElement('div');
-        desc.className = 'tile-desc';
-        desc.textContent = action.description || '';
-        text.appendChild(title);
-        text.appendChild(desc);
-        const tag = document.createElement('span');
-        tag.className = 'category-label';
-        tag.textContent = action.category;
-        top.appendChild(text);
-        top.appendChild(tag);
-
-        const actionButton = createButtonForAction(action, action.template ? 'Ausführen…' : 'Ausführen');
-        actionButton.classList.add('tile-action-main');
-
-        const controls = document.createElement('div');
-        controls.className = 'tile-actions';
-        const up = document.createElement('button');
-        up.type = 'button';
-        up.textContent = '↑';
-        up.title = 'Nach oben';
-        up.disabled = index === 0;
-        up.addEventListener('click', () => moveDashboardAction(index, -1));
-        const down = document.createElement('button');
-        down.type = 'button';
-        down.textContent = '↓';
-        down.title = 'Nach unten';
-        down.disabled = index === dashboardActions.length - 1;
-        down.addEventListener('click', () => moveDashboardAction(index, 1));
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.textContent = 'Entfernen';
-        remove.className = 'ghost';
-        remove.addEventListener('click', () => removeDashboardAction(id));
-        controls.append(up, down, remove);
-
-        tile.append(top, actionButton, controls);
-        dashboardGrid.appendChild(tile);
-      });
-
-      renderActionPicker();
-    }
-
-    function renderActionPicker() {
-      actionPicker.innerHTML = '';
-      ACTIONS.forEach(action => {
-        const item = document.createElement('div');
-        item.className = 'picker-item';
-        const meta = document.createElement('div');
-        meta.className = 'picker-meta';
-        const title = document.createElement('strong');
-        title.textContent = action.label;
-        const cat = document.createElement('span');
-        cat.className = 'category-label';
-        cat.textContent = action.category;
-        meta.append(title, cat);
-        const desc = document.createElement('div');
-        desc.className = 'tile-desc';
-        desc.textContent = action.description || '';
-        const add = document.createElement('button');
-        add.type = 'button';
-        add.textContent = dashboardActions.includes(action.id) ? 'Bereits im Dashboard' : 'Hinzufügen';
-        add.disabled = dashboardActions.includes(action.id);
-        add.addEventListener('click', () => addDashboardAction(action.id));
-        item.append(meta, desc, add);
-        actionPicker.appendChild(item);
-      });
-    }
-
-    function addDashboardAction(id) {
-      if (!ACTION_BY_ID[id] || dashboardActions.includes(id)) return;
-      dashboardActions.push(id);
-      saveDashboard();
-      renderDashboard();
-    }
-
-    function removeDashboardAction(id) {
-      dashboardActions = dashboardActions.filter(item => item !== id);
-      saveDashboard();
-      renderDashboard();
-    }
-
-    function moveDashboardAction(index, direction) {
-      const next = index + direction;
-      if (next < 0 || next >= dashboardActions.length) return;
-      [dashboardActions[index], dashboardActions[next]] = [dashboardActions[next], dashboardActions[index]];
-      saveDashboard();
-      renderDashboard();
-    }
-
-    function applyConsoleSize(size) {
-      document.body.classList.toggle('console-compact', size === 'compact');
-      document.body.classList.toggle('console-large', size === 'large');
-      localStorage.setItem(STORE_CONSOLE_SIZE, size);
-    }
-
-    form.addEventListener('submit', (event) => {
-      event.preventDefault();
-      sendCommand(input.value);
-    });
-
-    document.addEventListener('click', event => {
-      const button = event.target.closest('[data-action-id]');
-      if (!button) return;
-      runAction(ACTION_BY_ID[button.dataset.actionId]);
-    });
-
-    document.querySelectorAll('[data-tab]').forEach(button => {
-      button.addEventListener('click', () => {
-        const tab = button.dataset.tab;
-        document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item === button));
-        document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab));
-
-        if (tab === 'files') {
-          initFileManager();
-        }
-      });
-    });
-
-    dashboardColumns.addEventListener('change', () => {
-      localStorage.setItem(STORE_COLUMNS, dashboardColumns.value);
-      renderDashboard();
-    });
-
-    resetDashboard.addEventListener('click', () => {
-      dashboardActions = [...DEFAULT_DASHBOARD];
-      saveDashboard();
-      renderDashboard();
-    });
-
-    document.querySelectorAll('[data-console-size]').forEach(button => {
-      button.addEventListener('click', () => applyConsoleSize(button.dataset.consoleSize));
-    });
-
-    clearLog.addEventListener('click', () => {
-      log.innerHTML = '';
-      appendLine('[WinoMC Console] Anzeige geleert. Der echte Server-Log bleibt erhalten.', 'ok');
-    });
-
-    fileRootSelect.addEventListener('change', () => {
-      currentFileRoot = fileRootSelect.value;
-      currentFilePath = '/';
-      clearEditor();
-      loadFileList('/');
-    });
-
+    form.addEventListener('submit', event => { event.preventDefault(); sendCommand(input.value); });
+    document.addEventListener('click', event => { const actionBtn = event.target.closest('[data-action-id]'); if (actionBtn) { runAction(ACTION_BY_ID[actionBtn.dataset.actionId]); return; } const jump = event.target.closest('[data-jump-tab]'); if (jump) { activateTab(jump.dataset.jumpTab); return; } const openRootBtn = event.target.closest('[data-open-root]'); if (openRootBtn) { openRoot(openRootBtn.dataset.openRoot, '/'); return; } });
+    document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => activateTab(button.dataset.tab)));
+    document.querySelectorAll('[data-console-size]').forEach(button => button.addEventListener('click', () => applyConsoleSize(button.dataset.consoleSize)));
+    dashboardColumns.addEventListener('change', () => { localStorage.setItem(STORE_COLUMNS, dashboardColumns.value); renderDashboard(); });
+    resetDashboard.addEventListener('click', () => { dashboardActions = [...DEFAULT_DASHBOARD]; saveDashboard(); renderDashboard(); });
+    clearLog.addEventListener('click', () => { log.innerHTML = ''; appendLine('[WinoMC Console] Anzeige geleert. Der echte Server-Log bleibt erhalten.', 'ok'); });
+    focusConsoleInput.addEventListener('click', () => input.focus());
+    modalCancel.addEventListener('click', closePrompt); modalSend.addEventListener('click', sendPromptValue); modalBackdrop.addEventListener('click', event => { if (event.target === modalBackdrop) closePrompt(); }); modalInput.addEventListener('keydown', event => { if (event.key === 'Enter') sendPromptValue(); if (event.key === 'Escape') closePrompt(); });
+    input.addEventListener('keydown', event => { if (event.key === 'ArrowUp') { if (historyIndex > 0) historyIndex--; input.value = history[historyIndex] || input.value; event.preventDefault(); } if (event.key === 'ArrowDown') { if (historyIndex < history.length) historyIndex++; input.value = history[historyIndex] || ''; event.preventDefault(); } });
+    fileRootSelect.addEventListener('change', () => { currentFileRoot = fileRootSelect.value; currentFilePath = '/'; clearEditor(); loadFileList('/'); });
+    fileOpenPath.addEventListener('click', () => loadFileList(filePathInput.value));
+    filePathInput.addEventListener('keydown', event => { if (event.key === 'Enter') loadFileList(filePathInput.value); });
     fileRefresh.addEventListener('click', () => loadFileList(currentFilePath));
-
-    fileParent.addEventListener('click', () => {
-      loadFileList(parentUiPath(currentFilePath));
-    });
-
-    fileZipCurrent.addEventListener('click', () => {
-      downloadZip(currentFilePath);
-    });
-
-    fileZipExportCurrent.addEventListener('click', () => {
-      saveZipToExport(currentFilePath);
-    });
-
-    safeWorldExport.addEventListener('click', runSafeWorldExport);
-
-    fileSave.addEventListener('click', saveEditorFile);
-    fileCloseEditor.addEventListener('click', clearEditor);
-
+    fileParent.addEventListener('click', () => loadFileList(parentUiPath(currentFilePath)));
+    fileZipCurrent.addEventListener('click', () => downloadZip(currentFilePath));
+    fileZipExportCurrent.addEventListener('click', () => saveZipToExport(currentFilePath));
+    safeWorldExport.addEventListener('click', runSafeWorldExport); backupSafeWorldExport.addEventListener('click', runSafeWorldExport);
+    fileSave.addEventListener('click', saveEditorFile); fileCloseEditor.addEventListener('click', clearEditor);
     fileDropZone.addEventListener('click', () => fileUploadInput.click());
-
-    fileUploadInput.addEventListener('change', () => {
-      uploadFiles(fileUploadInput.files);
-      fileUploadInput.value = '';
-    });
-
-    fileDropZone.addEventListener('dragover', event => {
-      event.preventDefault();
-      fileDropZone.classList.add('dragover');
-    });
-
-    fileDropZone.addEventListener('dragleave', () => {
-      fileDropZone.classList.remove('dragover');
-    });
-
-    fileDropZone.addEventListener('drop', event => {
-      event.preventDefault();
-      fileDropZone.classList.remove('dragover');
-      uploadFiles(event.dataTransfer.files);
-    });
-    
-    modalCancel.addEventListener('click', closePrompt);
-    modalSend.addEventListener('click', sendPromptValue);
-    modalBackdrop.addEventListener('click', (event) => {
-      if (event.target === modalBackdrop) closePrompt();
-    });
-    modalInput.addEventListener('keydown', event => {
-      if (event.key === 'Enter') sendPromptValue();
-      if (event.key === 'Escape') closePrompt();
-    });
-
-    input.addEventListener('keydown', event => {
-      if (event.key === 'ArrowUp') {
-        if (historyIndex > 0) historyIndex--;
-        input.value = history[historyIndex] || input.value;
-        event.preventDefault();
-      }
-      if (event.key === 'ArrowDown') {
-        if (historyIndex < history.length) historyIndex++;
-        input.value = history[historyIndex] || '';
-        event.preventDefault();
-      }
-    });
-
-    function apiUrl(path, params = {}) {
-      const query = new URLSearchParams(params);
-      const suffix = query.toString() ? '?' + query.toString() : '';
-      return './' + path.replace(/^\/+/, '') + suffix;
-    }
-
-    async function fetchJson(path, params = {}) {
-      const res = await fetch(apiUrl(path, params), { cache: 'no-store' });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || res.statusText);
-      return data;
-    }
-
-    async function postJson(path, payload = {}) {
-      const res = await fetch('./' + path.replace(/^\/+/, ''), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || res.statusText);
-      return data;
-    }
-
-    function setFilesStatus(text, variant) {
-      filesStatus.textContent = text;
-      filesStatus.classList.toggle('warn', variant === 'warn');
-    }
-
-    function formatBytes(value) {
-      const bytes = Number(value || 0);
-      if (bytes < 1024) return bytes + ' B';
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-      if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
-      return (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB';
-    }
-
-    function formatUnixTime(value) {
-      if (!value) return '-';
-      return new Date(Number(value) * 1000).toLocaleString();
-    }
-
-    function normalizeUiPath(path) {
-      path = String(path || '/').replaceAll('\\', '/');
-      if (!path.startsWith('/')) path = '/' + path;
-      path = path.replace(/\/+/g, '/');
-      return path || '/';
-    }
-
-    function parentUiPath(path) {
-      path = normalizeUiPath(path);
-      if (path === '/') return '/';
-      const parts = path.split('/').filter(Boolean);
-      parts.pop();
-      return '/' + parts.join('/');
-    }
-
-    async function initFileManager() {
-      if (filesInitialized) {
-        await loadFileList();
-        return;
-      }
-
-      filesInitialized = true;
-
-      try {
-        setFilesStatus('Lade Bereiche...', 'warn');
-        const data = await fetchJson('/api/files/roots');
-
-        fileRootSelect.innerHTML = '';
-        data.roots.forEach(root => {
-          const option = document.createElement('option');
-          option.value = root.key;
-          option.textContent = root.label + (root.exists ? '' : ' (fehlt)');
-          option.disabled = !root.exists || !root.readable;
-          fileRootSelect.appendChild(option);
-        });
-
-        if ([...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) {
-          fileRootSelect.value = currentFileRoot;
-        } else {
-          const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled);
-          currentFileRoot = firstEnabled ? firstEnabled.value : 'config';
-          fileRootSelect.value = currentFileRoot;
-        }
-
-        await loadFileList();
-      } catch (err) {
-        setFilesStatus('Fehler', 'warn');
-        fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>';
-      }
-    }
-
-    async function loadFileList(path) {
-      if (path !== undefined) currentFilePath = normalizeUiPath(path);
-      currentFileRoot = fileRootSelect.value || currentFileRoot;
-
-      try {
-        setFilesStatus('Lade...', 'warn');
-        fileCurrentPath.textContent = currentFileRoot + ':' + currentFilePath;
-
-        const data = await fetchJson('/api/files/list', {
-          root: currentFileRoot,
-          path: currentFilePath
-        });
-
-        currentFilePath = data.path || '/';
-        fileCurrentPath.textContent = currentFileRoot + ':' + currentFilePath;
-        fileParent.disabled = currentFilePath === '/';
-
-        renderFileEntries(data.entries || []);
-        setFilesStatus('Bereit', '');
-      } catch (err) {
-        setFilesStatus('Fehler', 'warn');
-        fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>';
-      }
-    }
-
-    function escapeHtml(value) {
-      return String(value ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
-    }
-
-    function renderFileEntries(entries) {
-      if (!entries.length) {
-        fileTableBody.innerHTML = '<tr><td colspan="5">Dieser Ordner ist leer.</td></tr>';
-        return;
-      }
-
-      fileTableBody.innerHTML = '';
-
-      entries.forEach(entry => {
-        const tr = document.createElement('tr');
-
-        const nameTd = document.createElement('td');
-        const nameButton = document.createElement('button');
-        nameButton.type = 'button';
-        nameButton.className = 'file-name-button';
-        nameButton.textContent = (entry.type === 'directory' ? '📁 ' : '📄 ') + entry.name;
-        nameButton.addEventListener('click', () => {
-          if (entry.type === 'directory') {
-            loadFileList(entry.path);
-          } else {
-            openFileInEditor(entry.path);
-          }
-        });
-        nameTd.appendChild(nameButton);
-
-        const typeTd = document.createElement('td');
-        typeTd.textContent = entry.type === 'directory' ? 'Ordner' : 'Datei';
-
-        const sizeTd = document.createElement('td');
-        sizeTd.textContent = entry.type === 'directory' ? '-' : formatBytes(entry.size);
-
-        const modifiedTd = document.createElement('td');
-        modifiedTd.textContent = formatUnixTime(entry.modified);
-
-        const actionsTd = document.createElement('td');
-        const actions = document.createElement('div');
-        actions.className = 'file-row-actions';
-
-        if (entry.type === 'directory') {
-          const open = document.createElement('button');
-          open.type = 'button';
-          open.textContent = 'Öffnen';
-          open.addEventListener('click', () => loadFileList(entry.path));
-          actions.appendChild(open);
-
-          const zip = document.createElement('button');
-          zip.type = 'button';
-          zip.textContent = 'ZIP';
-          zip.addEventListener('click', () => downloadZip(entry.path));
-          actions.appendChild(zip);
-        } else {
-          const download = document.createElement('button');
-          download.type = 'button';
-          download.textContent = 'Download';
-          download.addEventListener('click', () => downloadFile(entry.path));
-          actions.appendChild(download);
-
-          const edit = document.createElement('button');
-          edit.type = 'button';
-          edit.textContent = 'Editor';
-          edit.addEventListener('click', () => openFileInEditor(entry.path));
-          actions.appendChild(edit);
-
-          if (entry.name.toLowerCase().endsWith('.zip')) {
-            const unzip = document.createElement('button');
-            unzip.type = 'button';
-            unzip.textContent = 'Entpacken';
-            unzip.addEventListener('click', () => unzipFile(entry.path));
-            actions.appendChild(unzip);
-          }
-        }
-
-        actionsTd.appendChild(actions);
-        tr.append(nameTd, typeTd, sizeTd, modifiedTd, actionsTd);
-        fileTableBody.appendChild(tr);
-      });
-    }
-
-    function downloadFile(path) {
-      window.location.href = apiUrl('/api/files/download', {
-        root: currentFileRoot,
-        path
-      });
-    }
-
-    function downloadZip(path) {
-      window.location.href = apiUrl('/api/files/zip', {
-        root: currentFileRoot,
-        path
-      });
-    }
-
-    async function saveZipToExport(path) {
-      try {
-        setFilesStatus('Erstelle ZIP...', 'warn');
-        const data = await postJson('/api/files/zip', {
-          root: currentFileRoot,
-          paths: [path],
-          save_to_export: true
-        });
-        appendLine('[WinoMC Dateien] ZIP exportiert: ' + data.filename, 'ok');
-        setFilesStatus('ZIP exportiert', '');
-        await loadFileList();
-      } catch (err) {
-        setFilesStatus('Fehler', 'warn');
-        appendLine('[WinoMC Dateien] ZIP-Fehler: ' + err.message, 'error');
-        alert(err.message);
-      }
-    }
-
-    async function openFileInEditor(path) {
-      try {
-        setFilesStatus('Öffne Datei...', 'warn');
-        const data = await fetchJson('/api/files/read', {
-          root: currentFileRoot,
-          path
-        });
-
-        currentEditorFile = {
-          root: data.root,
-          path: data.path
-        };
-
-        editorPath.textContent = data.root + ':' + data.path;
-        editorMeta.textContent = formatBytes(data.size) + ' · geändert: ' + formatUnixTime(data.modified) + (data.json ? ' · JSON-Prüfung aktiv' : '');
-        fileEditor.value = data.content || '';
-        setFilesStatus('Datei geöffnet', '');
-      } catch (err) {
-        setFilesStatus('Fehler', 'warn');
-        appendLine('[WinoMC Dateien] Editor-Fehler: ' + err.message, 'error');
-        alert(err.message);
-      }
-    }
-
-    async function saveEditorFile() {
-      if (!currentEditorFile) {
-        alert('Keine Datei geöffnet.');
-        return;
-      }
-
-      try {
-        setFilesStatus('Speichere...', 'warn');
-        const data = await postJson('/api/files/write', {
-          root: currentEditorFile.root,
-          path: currentEditorFile.path,
-          content: fileEditor.value
-        });
-
-        appendLine('[WinoMC Dateien] Datei gespeichert: ' + currentEditorFile.path, 'ok');
-
-        if (data.backup_created) {
-          appendLine('[WinoMC Dateien] Backup erstellt: ' + data.backup_path, 'ok');
-        }
-
-        setFilesStatus('Gespeichert', '');
-        await loadFileList(currentFilePath);
-      } catch (err) {
-        setFilesStatus('Fehler', 'warn');
-        appendLine('[WinoMC Dateien] Speichern fehlgeschlagen: ' + err.message, 'error');
-        alert(err.message);
-      }
-    }
-
-    function clearEditor() {
-      currentEditorFile = null;
-      editorPath.textContent = 'Keine Datei geöffnet';
-      editorMeta.textContent = 'Bereit';
-      fileEditor.value = '';
-    }
-
-    async function uploadFiles(files) {
-      files = Array.from(files || []);
-      if (!files.length) return;
-
-      for (const file of files) {
-        try {
-          setFilesStatus('Upload: ' + file.name, 'warn');
-
-          const res = await fetch(apiUrl('/api/files/upload', {
-            root: currentFileRoot,
-            path: currentFilePath,
-            filename: file.name,
-            overwrite: 'false'
-          }), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/octet-stream' },
-            body: file
-          });
-
-          const data = await res.json();
-
-          if (!res.ok || !data.ok) {
-            throw new Error(data.error || res.statusText);
-          }
-
-          appendLine('[WinoMC Dateien] Hochgeladen: ' + data.path, 'ok');
-        } catch (err) {
-          appendLine('[WinoMC Dateien] Upload fehlgeschlagen: ' + file.name + ' · ' + err.message, 'error');
-          alert('Upload fehlgeschlagen: ' + file.name + '\n\n' + err.message);
-        }
-      }
-
-      setFilesStatus('Upload fertig', '');
-      await loadFileList(currentFilePath);
-    }
-
-    async function unzipFile(path) {
-      const destination = window.prompt('In welchen Ordner entpacken?', currentFilePath || '/');
-      if (destination === null) return;
-
-      const overwrite = window.confirm('Vorhandene Dateien überschreiben?');
-
-      try {
-        setFilesStatus('Entpacke ZIP...', 'warn');
-        const data = await postJson('/api/files/unzip', {
-          root: currentFileRoot,
-          path,
-          destination,
-          overwrite
-        });
-
-        appendLine('[WinoMC Dateien] ZIP entpackt: ' + data.files + ' Dateien', 'ok');
-        setFilesStatus('ZIP entpackt', '');
-        await loadFileList(currentFilePath);
-      } catch (err) {
-        setFilesStatus('Fehler', 'warn');
-        appendLine('[WinoMC Dateien] Entpacken fehlgeschlagen: ' + err.message, 'error');
-        alert(err.message);
-      }
-    }
-
-    async function runSafeWorldExport() {
-      const worldPath = window.prompt('Welche Welt sicher exportieren?', '/world');
-      if (!worldPath) return;
-
-      if (!window.confirm('Sicheren Welt-Export starten?\n\nAblauf: save hold → save query → ZIP → save resume')) {
-        return;
-      }
-
-      try {
-        setFilesStatus('Welt-Export läuft...', 'warn');
-        const data = await postJson('/api/worlds/export-safe', {
-          path: worldPath,
-          save_to_export: true
-        });
-
-        appendLine('[WinoMC Dateien] Sicherer Welt-Export erstellt: ' + data.filename, 'ok');
-        setFilesStatus('Welt exportiert', '');
-
-        if (currentFileRoot === 'export') {
-          await loadFileList('/');
-        }
-      } catch (err) {
-        setFilesStatus('Fehler', 'warn');
-        appendLine('[WinoMC Dateien] Welt-Export fehlgeschlagen: ' + err.message, 'error');
-        alert(err.message);
-      }
-    }
-
-    function connectLogs() {
-      const source = new EventSource('./api/logs');
-      source.onopen = () => {
-        statusEl.textContent = 'Live verbunden';
-        statusDot.classList.add('ok');
-      };
-      source.onmessage = event => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.line) appendLine(data.line);
-        } catch (_) {}
-      };
-      source.onerror = () => {
-        statusEl.textContent = 'Verbindung wird neu aufgebaut...';
-        statusDot.classList.remove('ok');
-      };
-    }
-
-    applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal');
-    renderDashboard();
-    connectLogs();
+    fileUploadInput.addEventListener('change', () => { uploadFiles(fileUploadInput.files); fileUploadInput.value = ''; });
+    fileDropZone.addEventListener('dragover', event => { event.preventDefault(); fileDropZone.classList.add('dragover'); });
+    fileDropZone.addEventListener('dragleave', () => fileDropZone.classList.remove('dragover'));
+    fileDropZone.addEventListener('drop', event => { event.preventDefault(); fileDropZone.classList.remove('dragover'); uploadFiles(event.dataTransfer.files); });
+
+    function connectLogs() { const source = new EventSource('./api/logs'); source.onopen = () => { statusEl.textContent = 'Live verbunden'; statusDot.classList.add('ok'); }; source.onmessage = event => { try { const data = JSON.parse(event.data); if (data.line) appendLine(data.line); } catch (_) {} }; source.onerror = () => { statusEl.textContent = 'Verbindung wird neu aufgebaut...'; statusDot.classList.remove('ok'); }; }
+    applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal'); renderDashboard(); connectLogs(); loadStatus();
   </script>
 </body>
 </html>
 """
 
 
-def client_allowed(client_ip: str) -> bool:
+def ensure_directories():
+    for path in (DATA_DIR, WORLDS_DIR, RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR, WORLD_TEMPLATES_DIR, IMPORT_DIR, EXPORT_DIR, FILE_BACKUP_DIR):
+        try:
+            os.makedirs(path, exist_ok=True)
+        except Exception:
+            pass
+
+
+def client_allowed(client_ip):
     if not ALLOWED_PROXIES:
         return True
     return client_ip in ALLOWED_PROXIES
 
 
-def read_recent_lines(path: str, limit: int):
+def read_recent_lines(path, limit):
     lines = deque(maxlen=max(1, limit))
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as handle:
@@ -2634,42 +570,329 @@ def read_recent_lines(path: str, limit: int):
     return list(lines)
 
 
-def sanitize_command(command: str) -> str:
-    command = command.replace("\x00", "").strip()
+def sanitize_command(command):
+    command = str(command or "").replace("\x00", "").strip()
     if command.startswith("/"):
         command = command[1:].strip()
     command = "".join(ch for ch in command if ch == "\t" or ord(ch) >= 32)
     if len(command) > MAX_COMMAND_LENGTH:
-        raise ValueError(f"Befehl ist zu lang. Maximum: {MAX_COMMAND_LENGTH} Zeichen.")
+        raise ValueError("Befehl ist zu lang. Maximum: %s Zeichen." % MAX_COMMAND_LENGTH)
     if not command:
         raise ValueError("Leerer Befehl.")
     return command
 
 
-def write_command(command: str):
+def write_command(command):
     if not os.path.exists(FIFO_PATH):
         raise RuntimeError("Console FIFO existiert noch nicht. Läuft der Bedrock Server bereits?")
     if not os.path.exists(LOG_PATH):
         open(LOG_PATH, "a", encoding="utf-8").close()
-
     fd = os.open(FIFO_PATH, os.O_WRONLY | os.O_NONBLOCK)
     try:
         os.write(fd, (command + "\n").encode("utf-8"))
     finally:
         os.close(fd)
+    append_console_note("> " + command)
 
-    with open(LOG_PATH, "a", encoding="utf-8", errors="replace") as log_handle:
-        log_handle.write(f"[WinoMC Console] > {command}\n")
+
+def append_console_note(message):
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8", errors="replace") as log_handle:
+            log_handle.write("[WinoMC Console] %s\n" % message)
+    except Exception:
+        pass
+
+
+def normalize_rel_path(rel_path):
+    rel_path = unquote(str(rel_path or "/")).replace("\\", "/").replace("\x00", "")
+    rel_path = posixpath.normpath("/" + rel_path.lstrip("/"))
+    if rel_path == "/.":
+        rel_path = "/"
+    return rel_path
+
+
+def is_inside_base(base_path, candidate_path):
+    base_path = os.path.realpath(base_path)
+    candidate_path = os.path.realpath(candidate_path)
+    return candidate_path == base_path or candidate_path.startswith(base_path + os.sep)
+
+
+def resolve_safe_path(root_key, rel_path="/"):
+    if root_key not in FILE_ROOTS:
+        raise ValueError("Unbekannter Dateibereich.")
+    rel_path = normalize_rel_path(rel_path)
+    base_path = os.path.realpath(FILE_ROOTS[root_key]["path"])
+    candidate_path = os.path.realpath(os.path.join(base_path, rel_path.lstrip("/")))
+    if not is_inside_base(base_path, candidate_path):
+        raise ValueError("Pfad außerhalb des erlaubten Bereichs blockiert.")
+    return candidate_path, rel_path
+
+
+def safe_download_name(name, fallback="winomc-download"):
+    name = str(name or fallback).strip()
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
+    name = name.strip("._-")
+    return name or fallback
+
+
+def parse_bool(value, default=False):
+    if value is None:
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "on", "ja")
+
+
+def file_extension(path):
+    return os.path.splitext(str(path or ""))[1].lower()
+
+
+def is_editable_text_file(path):
+    name = os.path.basename(path).lower()
+    ext = file_extension(path)
+    if ext in EDITABLE_TEXT_EXTENSIONS:
+        return True
+    return name in {
+        "server.properties", "allowlist.json", "permissions.json", "valid_known_packs.json",
+        "world_resource_packs.json", "world_behavior_packs.json", "manifest.json"
+    }
+
+
+def validate_json_if_needed(path, content):
+    if file_extension(path) not in JSON_EXTENSIONS:
+        return
+    try:
+        json.loads(content or "")
+    except json.JSONDecodeError as exc:
+        raise ValueError("JSON ist ungültig: Zeile %s, Spalte %s: %s" % (exc.lineno, exc.colno, exc.msg))
+
+
+def make_file_backup(file_path, root_key, rel_path):
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
+        return None
+    os.makedirs(FILE_BACKUP_DIR, exist_ok=True)
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    rel_name = normalize_rel_path(rel_path).replace("/", "__")
+    backup_name = safe_download_name("%s-%s-%s" % (timestamp, root_key, rel_name), "winomc-file-backup")
+    backup_path = os.path.join(FILE_BACKUP_DIR, backup_name)
+    if os.path.exists(backup_path):
+        backup_path += ".bak"
+    shutil.copy2(file_path, backup_path)
+    return backup_path
+
+
+def list_file_roots():
+    roots = []
+    for key, info in FILE_ROOTS.items():
+        path = os.path.realpath(info["path"])
+        roots.append({"key": key, "label": info["label"], "description": info.get("description", ""), "path": path, "exists": os.path.exists(path), "readable": os.path.isdir(path) and os.access(path, os.R_OK)})
+    return roots
+
+
+def list_directory(root_key, rel_path="/"):
+    full_path, rel_path = resolve_safe_path(root_key, rel_path)
+    if not os.path.exists(full_path):
+        raise FileNotFoundError("Pfad existiert nicht.")
+    if not os.path.isdir(full_path):
+        raise ValueError("Pfad ist kein Ordner.")
+    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
+    entries = []
+    for name in sorted(os.listdir(full_path), key=lambda item: item.lower()):
+        child_path = os.path.join(full_path, name)
+        if os.path.islink(child_path):
+            continue
+        if not is_inside_base(root_base, child_path):
+            continue
+        try:
+            stat = os.stat(child_path)
+        except OSError:
+            continue
+        is_dir = os.path.isdir(child_path)
+        child_rel_path = normalize_rel_path(posixpath.join(rel_path, name))
+        entries.append({"name": name, "path": child_rel_path, "type": "directory" if is_dir else "file", "size": stat.st_size, "modified": int(stat.st_mtime), "downloadable": not is_dir, "zipable": True, "editable": (not is_dir and is_editable_text_file(child_path)), "extractable": (not is_dir and file_extension(child_path) in ZIP_EXTENSIONS)})
+    entries.sort(key=lambda item: (item["type"] != "directory", item["name"].lower()))
+    parent = None if rel_path == "/" else normalize_rel_path(posixpath.dirname(rel_path))
+    return {"ok": True, "root": root_key, "path": rel_path, "parent": parent, "entries": entries}
+
+
+def read_text_file(root_key, rel_path):
+    file_path, rel_path = resolve_safe_path(root_key, rel_path)
+    if not os.path.exists(file_path):
+        raise FileNotFoundError("Datei existiert nicht.")
+    if not os.path.isfile(file_path):
+        raise ValueError("Nur Dateien können im Editor geöffnet werden.")
+    if not is_editable_text_file(file_path):
+        raise ValueError("Dieser Dateityp ist nicht für den Texteditor freigegeben.")
+    size = os.path.getsize(file_path)
+    if size > MAX_TEXT_FILE_BYTES:
+        raise ValueError("Datei ist zu groß für den Editor. Maximum: %s Bytes." % MAX_TEXT_FILE_BYTES)
+    with open(file_path, "r", encoding="utf-8", errors="replace") as handle:
+        content = handle.read()
+    stat = os.stat(file_path)
+    return {"ok": True, "root": root_key, "path": rel_path, "name": os.path.basename(file_path), "size": stat.st_size, "modified": int(stat.st_mtime), "editable": True, "json": file_extension(file_path) in JSON_EXTENSIONS, "content": content}
+
+
+def write_text_file(root_key, rel_path, content):
+    file_path, rel_path = resolve_safe_path(root_key, rel_path)
+    if os.path.isdir(file_path):
+        raise ValueError("Ordner können nicht als Datei gespeichert werden.")
+    parent = os.path.dirname(file_path)
+    if not os.path.isdir(parent):
+        raise FileNotFoundError("Zielordner existiert nicht.")
+    if not is_editable_text_file(file_path):
+        raise ValueError("Dieser Dateityp ist nicht für den Texteditor freigegeben.")
+    content = str(content or "")
+    validate_json_if_needed(file_path, content)
+    backup_path = make_file_backup(file_path, root_key, rel_path)
+    fd, temp_path = tempfile.mkstemp(prefix=".winomc-edit-", dir=parent)
+    os.close(fd)
+    try:
+        with open(temp_path, "w", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+        os.replace(temp_path, file_path)
+    except Exception:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+        raise
+    return {"ok": True, "root": root_key, "path": rel_path, "backup_created": bool(backup_path), "backup_path": backup_path, "message": "Datei gespeichert."}
+
+
+def prepare_upload_target(root_key, dir_rel_path, filename, overwrite=False):
+    dir_path, dir_rel_path = resolve_safe_path(root_key, dir_rel_path)
+    if not os.path.exists(dir_path):
+        raise FileNotFoundError("Upload-Zielordner existiert nicht.")
+    if not os.path.isdir(dir_path):
+        raise ValueError("Upload-Ziel ist kein Ordner.")
+    filename = safe_download_name(unquote(filename or ""), "upload.bin")
+    target_path = os.path.realpath(os.path.join(dir_path, filename))
+    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
+    if not is_inside_base(root_base, target_path):
+        raise ValueError("Upload-Ziel außerhalb des erlaubten Bereichs blockiert.")
+    if os.path.exists(target_path) and not overwrite:
+        raise FileExistsError("Datei existiert bereits. Überschreiben wurde nicht erlaubt.")
+    target_rel_path = normalize_rel_path(posixpath.join(dir_rel_path, filename))
+    return target_path, target_rel_path
+
+
+def create_zip_from_paths(root_key, rel_paths, save_to_export=False):
+    if not rel_paths:
+        raise ValueError("Keine Dateien oder Ordner ausgewählt.")
+    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    zip_name = safe_download_name("winomc-%s-%s.zip" % (root_key, timestamp))
+    if save_to_export:
+        export_dir, _ = resolve_safe_path("export", "/")
+        os.makedirs(export_dir, exist_ok=True)
+        zip_path = os.path.join(export_dir, zip_name)
+        cleanup = False
+    else:
+        fd, zip_path = tempfile.mkstemp(prefix="winomc-", suffix=".zip")
+        os.close(fd)
+        cleanup = True
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for rel_path in rel_paths:
+            source_path, normalized_rel_path = resolve_safe_path(root_key, rel_path)
+            if not os.path.exists(source_path):
+                raise FileNotFoundError("Nicht gefunden: %s" % normalized_rel_path)
+            if os.path.islink(source_path):
+                continue
+            if not is_inside_base(root_base, source_path):
+                raise ValueError("Pfad außerhalb des erlaubten Bereichs blockiert.")
+            source_name = safe_download_name(os.path.basename(source_path.rstrip(os.sep)) or FILE_ROOTS[root_key]["label"], "winomc-files")
+            if os.path.isfile(source_path):
+                archive.write(source_path, source_name)
+                continue
+            parent_path = os.path.dirname(source_path.rstrip(os.sep))
+            for current_root, dirs, files in os.walk(source_path, followlinks=False):
+                dirs[:] = [dirname for dirname in dirs if not os.path.islink(os.path.join(current_root, dirname)) and is_inside_base(root_base, os.path.join(current_root, dirname))]
+                for filename in files:
+                    file_path = os.path.join(current_root, filename)
+                    if os.path.islink(file_path) or not is_inside_base(root_base, file_path):
+                        continue
+                    archive_name = os.path.relpath(file_path, parent_path)
+                    archive.write(file_path, archive_name)
+    return {"zip_path": zip_path, "zip_name": zip_name, "cleanup": cleanup, "saved_to_export": save_to_export, "export_path": normalize_rel_path("/" + zip_name) if save_to_export else None}
+
+
+def extract_zip_file(root_key, archive_rel_path, destination_rel_path="/", overwrite=False):
+    archive_path, archive_rel_path = resolve_safe_path(root_key, archive_rel_path)
+    destination_path, destination_rel_path = resolve_safe_path(root_key, destination_rel_path)
+    if not os.path.isfile(archive_path):
+        raise FileNotFoundError("ZIP-Datei nicht gefunden.")
+    if file_extension(archive_path) not in ZIP_EXTENSIONS:
+        raise ValueError("Nur .zip, .mcpack, .mcaddon, .mcworld und .mctemplate können entpackt werden.")
+    if not os.path.isdir(destination_path):
+        raise ValueError("Ziel zum Entpacken ist kein Ordner.")
+    root_base = os.path.realpath(FILE_ROOTS[root_key]["path"])
+    extracted_files = 0
+    extracted_dirs = 0
+    total_size = 0
+    with zipfile.ZipFile(archive_path, "r") as archive:
+        for member in archive.infolist():
+            total_size += int(member.file_size or 0)
+            if total_size > MAX_ZIP_UNPACK_BYTES:
+                raise ValueError("Archiv ist zu groß zum Entpacken.")
+        for member in archive.infolist():
+            raw_name = str(member.filename or "").replace("\\", "/")
+            if not raw_name or raw_name.startswith("/") or raw_name.startswith("../") or "/../" in raw_name:
+                raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw_name)
+            normalized_name = posixpath.normpath(raw_name)
+            if normalized_name in ("", ".") or normalized_name.startswith("../") or normalized_name == "..":
+                raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw_name)
+            target_path = os.path.realpath(os.path.join(destination_path, normalized_name))
+            if not is_inside_base(destination_path, target_path) or not is_inside_base(root_base, target_path):
+                raise ValueError("Archiv-Pfad außerhalb des erlaubten Bereichs blockiert: %s" % raw_name)
+            if member.is_dir():
+                os.makedirs(target_path, exist_ok=True)
+                extracted_dirs += 1
+                continue
+            if os.path.exists(target_path) and not overwrite:
+                raise FileExistsError("Datei existiert bereits: %s" % normalized_name)
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            with archive.open(member, "r") as source, open(target_path, "wb") as target:
+                shutil.copyfileobj(source, target, length=1024 * 1024)
+            extracted_files += 1
+    return {"ok": True, "root": root_key, "archive": archive_rel_path, "destination": destination_rel_path, "files": extracted_files, "directories": extracted_dirs, "message": "Archiv wurde entpackt."}
+
+
+def create_safe_world_export(world_rel_path="/world", save_to_export=True):
+    world_rel_path = normalize_rel_path(world_rel_path)
+    world_path, _ = resolve_safe_path("worlds", world_rel_path)
+    if not os.path.isdir(world_path):
+        raise FileNotFoundError("Weltordner wurde nicht gefunden.")
+    hold_sent = False
+    try:
+        append_console_note("Sicherer Welt-Export gestartet.")
+        write_command("save hold")
+        hold_sent = True
+        time.sleep(1.0)
+        write_command("save query")
+        time.sleep(2.0)
+        zip_info = create_zip_from_paths("worlds", [world_rel_path], save_to_export=save_to_export)
+        append_console_note("Sicherer Welt-Export wurde erstellt.")
+        return zip_info
+    finally:
+        if hold_sent:
+            try:
+                write_command("save resume")
+                append_console_note("save resume nach sicherem Welt-Export ausgeführt.")
+            except Exception as exc:
+                append_console_note("WARNUNG: save resume konnte nicht automatisch ausgeführt werden: %s" % exc)
+
+
+def status_payload():
+    env_keys = ["SERVER_NAME", "LEVEL_NAME", "VERSION", "BDS_AUTO_UPDATE", "SERVER_PORT", "SERVER_PORT_V6", "ENABLE_LAN_VISIBILITY", "ENABLE_BDS_V6BIND_FIX", "GAMEMODE", "DIFFICULTY", "ALLOW_CHEATS", "ALLOW_LIST", "MAX_PLAYERS", "TEXTUREPACK_REQUIRED", "PACKAGE_BACKUP_KEEP"]
+    return {"ok": True, "fifo_exists": os.path.exists(FIFO_PATH), "log_exists": os.path.exists(LOG_PATH), "env": {key: os.environ.get(key, "") for key in env_keys}, "roots": list_file_roots()}
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCConsole/1.0"
+    server_version = "WinoMCConsole/1.5.1"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
         sys.stdout.flush()
 
-    def _forbidden_if_needed(self) -> bool:
+    def _forbidden_if_needed(self):
         client_ip = self.client_address[0]
         if client_allowed(client_ip):
             return False
@@ -2679,40 +902,34 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b"Forbidden\n")
         return True
 
-    def _send_json(self, status: int, payload: dict):
-        data = json.dumps(payload).encode("utf-8")
+    def _send_json(self, status, payload):
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
 
-    def _send_file(self, file_path: str, download_name: str | None = None, content_type: str | None = None, cleanup: bool = False):
+    def _send_file(self, file_path, download_name=None, content_type=None, cleanup=False):
         try:
             if not os.path.isfile(file_path):
                 raise FileNotFoundError("Datei nicht gefunden.")
-
             download_name = safe_download_name(download_name or os.path.basename(file_path))
             content_type = content_type or mimetypes.guess_type(file_path)[0] or "application/octet-stream"
             size = os.path.getsize(file_path)
-
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(size))
-            self.send_header(
-                "Content-Disposition",
-                f"attachment; filename=\"{download_name}\"; filename*=UTF-8''{quote(download_name)}",
-            )
+            self.send_header("Content-Disposition", "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
-
             with open(file_path, "rb") as handle:
                 while True:
                     chunk = handle.read(1024 * 1024)
                     if not chunk:
                         break
                     self.wfile.write(chunk)
-
         finally:
             if cleanup:
                 try:
@@ -2720,76 +937,72 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     pass
 
-    def _read_request_body(self, max_bytes: int = 4096) -> str:
-        """Read a small request body.
+    def _read_chunked_body(self, max_bytes):
+        chunks = []
+        total = 0
+        while True:
+            size_line = self.rfile.readline().strip()
+            if not size_line:
+                continue
+            chunk_size = int(size_line.split(b";", 1)[0], 16)
+            if chunk_size == 0:
+                self.rfile.readline()
+                break
+            total += chunk_size
+            if total > max_bytes:
+                raise ValueError("Anfrage ist zu groß.")
+            chunks.append(self.rfile.read(chunk_size))
+            self.rfile.read(2)
+        return b"".join(chunks)
 
-        Home-Assistant-Ingress may proxy POST requests without a normal
-        Content-Length header. The UI therefore also sends the command as
-        query parameter, but this keeps JSON/form/plain-text bodies working.
-        """
-        content_length = self.headers.get("Content-Length")
+    def _read_request_body(self, max_bytes=4096):
+        content_length = self.headers.get("Content-Length") or self.headers.get("X-WinoMC-Body-Size")
         if content_length:
             length = int(content_length)
             if length > max_bytes:
                 raise ValueError("Anfrage ist zu groß.")
             return self.rfile.read(length).decode("utf-8", errors="replace")
-
         if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
-            chunks = []
-            total = 0
-            while True:
-                size_line = self.rfile.readline().strip()
-                if not size_line:
-                    continue
-                chunk_size = int(size_line.split(b";", 1)[0], 16)
-                if chunk_size == 0:
-                    self.rfile.readline()
-                    break
-                total += chunk_size
-                if total > max_bytes:
-                    raise ValueError("Anfrage ist zu groß.")
-                chunks.append(self.rfile.read(chunk_size))
-                self.rfile.read(2)
-            return b"".join(chunks).decode("utf-8", errors="replace")
-
+            return self._read_chunked_body(max_bytes).decode("utf-8", errors="replace")
         return ""
 
-    def _write_request_body_to_file(self, target_path: str, max_bytes: int):
+    def _write_request_body_to_file(self, target_path, max_bytes):
         content_length = self.headers.get("Content-Length")
-
-        if not content_length:
-            raise ValueError("Upload ohne Content-Length wird nicht unterstützt.")
-
-        try:
-            remaining = int(content_length)
-        except ValueError:
-            raise ValueError("Ungültige Upload-Größe.")
-
-        if remaining < 0:
-            raise ValueError("Ungültige Upload-Größe.")
-
-        if remaining > max_bytes:
-            raise ValueError(f"Upload ist zu groß. Maximum: {max_bytes} Bytes.")
-
+        upload_size = self.headers.get("X-WinoMC-Upload-Size")
         parent = os.path.dirname(target_path)
         os.makedirs(parent, exist_ok=True)
-
         fd, temp_path = tempfile.mkstemp(prefix=".winomc-upload-", dir=parent)
         os.close(fd)
-
         try:
             with open(temp_path, "wb") as handle:
-                while remaining > 0:
-                    chunk = self.rfile.read(min(1024 * 1024, remaining))
-
-                    if not chunk:
-                        raise ValueError("Upload wurde unerwartet beendet.")
-
-                    handle.write(chunk)
-                    remaining -= len(chunk)
-
+                if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+                    total = 0
+                    while True:
+                        size_line = self.rfile.readline().strip()
+                        if not size_line:
+                            continue
+                        chunk_size = int(size_line.split(b";", 1)[0], 16)
+                        if chunk_size == 0:
+                            self.rfile.readline()
+                            break
+                        total += chunk_size
+                        if total > max_bytes:
+                            raise ValueError("Upload ist zu groß. Maximum: %s Bytes." % max_bytes)
+                        handle.write(self.rfile.read(chunk_size))
+                        self.rfile.read(2)
+                else:
+                    if not content_length and not upload_size:
+                        raise ValueError("Upload ohne Content-Length wird nicht unterstützt. Aktualisiere die Web Console oder nutze den JSON-Fallback.")
+                    remaining = int(content_length or upload_size)
+                    if remaining < 0 or remaining > max_bytes:
+                        raise ValueError("Upload ist zu groß. Maximum: %s Bytes." % max_bytes)
+                    while remaining > 0:
+                        chunk = self.rfile.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            raise ValueError("Upload wurde unerwartet beendet.")
+                        handle.write(chunk)
+                        remaining -= len(chunk)
             os.replace(temp_path, target_path)
-
         except Exception:
             try:
                 os.remove(temp_path)
@@ -2797,17 +1010,15 @@ class Handler(BaseHTTPRequestHandler):
                 pass
             raise
 
-    def _extract_command(self) -> str:
+    def _extract_command(self):
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
         query_command = query.get("command", [""])[0]
         if query_command.strip():
             return query_command
-
         body = self._read_request_body()
         if not body:
             return ""
-
         content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
         if content_type == "application/json":
             payload = json.loads(body or "{}")
@@ -2819,11 +1030,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self._forbidden_if_needed():
             return
-
         parsed = urlparse(self.path)
         path = parsed.path
         query = parse_qs(parsed.query)
-
         if path in ("/", "", "/index.html"):
             data = INDEX_HTML.encode("utf-8")
             self.send_response(200)
@@ -2833,83 +1042,52 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
-
         if path.endswith("/api/status") or path == "/api/status":
-            self._send_json(200, {
-                "ok": True,
-                "fifo_exists": os.path.exists(FIFO_PATH),
-                "log_exists": os.path.exists(LOG_PATH),
-            })
+            self._send_json(200, status_payload())
             return
-
         if path.endswith("/api/logs") or path == "/api/logs":
             self._stream_logs()
             return
-
         if path.endswith("/api/files/roots") or path == "/api/files/roots":
-            self._send_json(200, {
-                "ok": True,
-                "roots": list_file_roots(),
-            })
+            self._send_json(200, {"ok": True, "roots": list_file_roots()})
             return
-
         if path.endswith("/api/files/list") or path == "/api/files/list":
             try:
-                root_key = query.get("root", ["config"])[0]
-                rel_path = query.get("path", ["/"])[0]
-                self._send_json(200, list_directory(root_key, rel_path))
+                self._send_json(200, list_directory(query.get("root", ["config"])[0], query.get("path", ["/"])[0]))
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
-
         if path.endswith("/api/files/read") or path == "/api/files/read":
             try:
-                root_key = query.get("root", ["config"])[0]
-                rel_path = query.get("path", ["/"])[0]
-                self._send_json(200, read_text_file(root_key, rel_path))
+                self._send_json(200, read_text_file(query.get("root", ["config"])[0], query.get("path", ["/"])[0]))
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
-
         if path.endswith("/api/files/download") or path == "/api/files/download":
             try:
                 root_key = query.get("root", ["config"])[0]
                 rel_path = query.get("path", ["/"])[0]
-                file_path, normalized_rel_path = resolve_safe_path(root_key, rel_path)
-
+                file_path, _ = resolve_safe_path(root_key, rel_path)
                 if os.path.isdir(file_path):
                     raise ValueError("Ordner können nur als ZIP heruntergeladen werden.")
-
-                download_name = os.path.basename(file_path)
-                self._send_file(file_path, download_name=download_name)
+                self._send_file(file_path, download_name=os.path.basename(file_path))
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
-
         if path.endswith("/api/files/zip") or path == "/api/files/zip":
             try:
-                root_key = query.get("root", ["config"])[0]
-                rel_path = query.get("path", ["/"])[0]
-                zip_info = create_zip_from_paths(root_key, [rel_path], save_to_export=False)
-                self._send_file(
-                    zip_info["zip_path"],
-                    download_name=zip_info["zip_name"],
-                    content_type="application/zip",
-                    cleanup=zip_info["cleanup"],
-                )
+                zip_info = create_zip_from_paths(query.get("root", ["config"])[0], [query.get("path", ["/"])[0]], save_to_export=False)
+                self._send_file(zip_info["zip_path"], download_name=zip_info["zip_name"], content_type="application/zip", cleanup=zip_info["cleanup"])
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
-
         self.send_error(404)
 
     def do_POST(self):
         if self._forbidden_if_needed():
             return
-
         parsed = urlparse(self.path)
         path = parsed.path
-
         if path.endswith("/api/command") or path == "/api/command":
             try:
                 command = sanitize_command(self._extract_command())
@@ -2918,148 +1096,91 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
-
         if path.endswith("/api/files/upload") or path == "/api/files/upload":
             try:
                 query = parse_qs(parsed.query)
-
                 root_key = query.get("root", ["import"])[0]
                 dir_rel_path = query.get("path", ["/"])[0]
-                filename = query.get("filename", ["upload.bin"])[0]
+                filename = query.get("filename", [self.headers.get("X-WinoMC-Filename", "upload.bin")])[0]
                 overwrite = parse_bool(query.get("overwrite", ["false"])[0], default=False)
-
-                target_path, target_rel_path = prepare_upload_target(
-                    root_key,
-                    dir_rel_path,
-                    filename,
-                    overwrite=overwrite,
-                )
-
-                backup_path = None
-                if os.path.exists(target_path):
-                    backup_path = make_file_backup(target_path, root_key, target_rel_path)
-
+                target_path, target_rel_path = prepare_upload_target(root_key, dir_rel_path, filename, overwrite=overwrite)
+                backup_path = make_file_backup(target_path, root_key, target_rel_path) if os.path.exists(target_path) else None
                 self._write_request_body_to_file(target_path, MAX_UPLOAD_BYTES)
-
-                self._send_json(200, {
-                    "ok": True,
-                    "root": root_key,
-                    "path": target_rel_path,
-                    "filename": os.path.basename(target_path),
-                    "backup_created": bool(backup_path),
-                    "backup_path": backup_path,
-                    "message": "Datei hochgeladen.",
-                })
+                self._send_json(200, {"ok": True, "root": root_key, "path": target_rel_path, "filename": os.path.basename(target_path), "backup_created": bool(backup_path), "backup_path": backup_path, "message": "Datei hochgeladen."})
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
-
+        if path.endswith("/api/files/upload-json") or path == "/api/files/upload-json":
+            try:
+                body = self._read_request_body(max_bytes=MAX_JSON_UPLOAD_BYTES * 2)
+                payload = json.loads(body or "{}")
+                root_key = str(payload.get("root", "import"))
+                dir_rel_path = str(payload.get("path", "/"))
+                filename = str(payload.get("filename", "upload.bin"))
+                overwrite = bool(payload.get("overwrite", False))
+                content_base64 = str(payload.get("content_base64", ""))
+                raw = base64.b64decode(content_base64.encode("ascii"), validate=True)
+                if len(raw) > MAX_JSON_UPLOAD_BYTES:
+                    raise ValueError("JSON-Upload ist zu groß.")
+                target_path, target_rel_path = prepare_upload_target(root_key, dir_rel_path, filename, overwrite=overwrite)
+                backup_path = make_file_backup(target_path, root_key, target_rel_path) if os.path.exists(target_path) else None
+                with open(target_path, "wb") as handle:
+                    handle.write(raw)
+                self._send_json(200, {"ok": True, "root": root_key, "path": target_rel_path, "filename": os.path.basename(target_path), "backup_created": bool(backup_path), "backup_path": backup_path, "message": "Datei hochgeladen."})
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
         if path.endswith("/api/files/write") or path == "/api/files/write":
             try:
                 body = self._read_request_body(max_bytes=MAX_TEXT_FILE_BYTES + 65536)
                 payload = json.loads(body or "{}")
-
-                root_key = str(payload.get("root", "config"))
-                rel_path = str(payload.get("path", "/"))
-                content = str(payload.get("content", ""))
-
-                self._send_json(200, write_text_file(root_key, rel_path, content))
+                self._send_json(200, write_text_file(str(payload.get("root", "config")), str(payload.get("path", "/")), str(payload.get("content", ""))))
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
-
-        if path.endswith("/api/files/unzip") or path == "/api/files/unzip":
-            try:
-                body = self._read_request_body(max_bytes=65536)
-                payload = json.loads(body or "{}")
-
-                root_key = str(payload.get("root", "import"))
-                archive_path = str(payload.get("path", "/"))
-                destination = str(payload.get("destination", "/"))
-                overwrite = bool(payload.get("overwrite", False))
-
-                self._send_json(200, extract_zip_file(
-                    root_key,
-                    archive_path,
-                    destination_rel_path=destination,
-                    overwrite=overwrite,
-                ))
-            except Exception as exc:
-                self._send_json(400, {"ok": False, "error": str(exc)})
-            return
-
-        if path.endswith("/api/worlds/export-safe") or path == "/api/worlds/export-safe":
-            try:
-                body = self._read_request_body(max_bytes=65536)
-                payload = json.loads(body or "{}")
-
-                world_path = str(payload.get("path", "/world"))
-                save_to_export = bool(payload.get("save_to_export", True))
-
-                zip_info = create_safe_world_export(world_path, save_to_export=save_to_export)
-
-                if save_to_export:
-                    self._send_json(200, {
-                        "ok": True,
-                        "saved_to_export": True,
-                        "root": "export",
-                        "path": zip_info["export_path"],
-                        "filename": zip_info["zip_name"],
-                        "message": "Sicherer Welt-Export wurde nach /share/winomc/export gespeichert.",
-                    })
-                    return
-
-                self._send_file(
-                    zip_info["zip_path"],
-                    download_name=zip_info["zip_name"],
-                    content_type="application/zip",
-                    cleanup=zip_info["cleanup"],
-                )
-            except Exception as exc:
-                self._send_json(400, {"ok": False, "error": str(exc)})
-            return
-
         if path.endswith("/api/files/zip") or path == "/api/files/zip":
             try:
                 body = self._read_request_body(max_bytes=65536)
                 payload = json.loads(body or "{}")
-
                 root_key = str(payload.get("root", "config"))
                 rel_paths = payload.get("paths")
-
                 if not isinstance(rel_paths, list) or not rel_paths:
                     rel_paths = [str(payload.get("path", "/"))]
-
                 rel_paths = [str(item) for item in rel_paths]
                 save_to_export = bool(payload.get("save_to_export", False))
-
                 zip_info = create_zip_from_paths(root_key, rel_paths, save_to_export=save_to_export)
-
                 if save_to_export:
-                    self._send_json(200, {
-                        "ok": True,
-                        "saved_to_export": True,
-                        "root": "export",
-                        "path": zip_info["export_path"],
-                        "filename": zip_info["zip_name"],
-                    })
+                    self._send_json(200, {"ok": True, "saved_to_export": True, "root": "export", "path": zip_info["export_path"], "filename": zip_info["zip_name"]})
                     return
-
-                self._send_file(
-                    zip_info["zip_path"],
-                    download_name=zip_info["zip_name"],
-                    content_type="application/zip",
-                    cleanup=zip_info["cleanup"],
-                )
+                self._send_file(zip_info["zip_path"], download_name=zip_info["zip_name"], content_type="application/zip", cleanup=zip_info["cleanup"])
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
-
+        if path.endswith("/api/files/unzip") or path == "/api/files/unzip":
+            try:
+                body = self._read_request_body(max_bytes=65536)
+                payload = json.loads(body or "{}")
+                self._send_json(200, extract_zip_file(str(payload.get("root", "import")), str(payload.get("path", "/")), destination_rel_path=str(payload.get("destination", "/")), overwrite=bool(payload.get("overwrite", False))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/worlds/export-safe") or path == "/api/worlds/export-safe":
+            try:
+                body = self._read_request_body(max_bytes=65536)
+                payload = json.loads(body or "{}")
+                zip_info = create_safe_world_export(str(payload.get("path", "/world")), save_to_export=bool(payload.get("save_to_export", True)))
+                if zip_info["saved_to_export"]:
+                    self._send_json(200, {"ok": True, "saved_to_export": True, "root": "export", "path": zip_info["export_path"], "filename": zip_info["zip_name"], "message": "Sicherer Welt-Export wurde nach /share/winomc/export gespeichert."})
+                    return
+                self._send_file(zip_info["zip_path"], download_name=zip_info["zip_name"], content_type="application/zip", cleanup=zip_info["cleanup"])
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
         self.send_error(404)
 
-    def _sse_send(self, payload: dict):
+    def _sse_send(self, payload):
         data = json.dumps(payload, ensure_ascii=False)
-        self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+        self.wfile.write(("data: %s\n\n" % data).encode("utf-8"))
         self.wfile.flush()
 
     def _stream_logs(self):
@@ -3068,50 +1189,43 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "keep-alive")
         self.end_headers()
-
         for line in read_recent_lines(LOG_PATH, HISTORY_LIMIT):
             self._sse_send({"line": line})
-
-        position = 0
         try:
             position = os.path.getsize(LOG_PATH)
         except OSError:
             position = 0
-
         last_heartbeat = time.time()
         while True:
             try:
                 size = os.path.getsize(LOG_PATH)
                 if size < position:
                     position = 0
-
                 if size > position:
                     with open(LOG_PATH, "r", encoding="utf-8", errors="replace") as handle:
                         handle.seek(position)
                         for line in handle:
                             self._sse_send({"line": line.rstrip("\n")})
                         position = handle.tell()
-
                 if time.time() - last_heartbeat > 15:
                     self.wfile.write(b": heartbeat\n\n")
                     self.wfile.flush()
                     last_heartbeat = time.time()
-
                 time.sleep(0.5)
             except (BrokenPipeError, ConnectionResetError):
                 break
             except Exception as exc:
                 try:
-                    self._sse_send({"line": f"[WinoMC Console] Log Stream Fehler: {exc}"})
+                    self._sse_send({"line": "[WinoMC Console] Log Stream Fehler: %s" % exc})
                 except Exception:
                     break
                 time.sleep(1)
 
 
 def main():
+    ensure_directories()
     os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
     open(LOG_PATH, "a", encoding="utf-8").close()
-
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
 
     def shutdown(_signum, _frame):
@@ -3119,8 +1233,7 @@ def main():
 
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
-
-    print(f"[WinoMC Console] Web console listening on {HOST}:{PORT}", flush=True)
+    print("[WinoMC Console] Web console listening on %s:%s" % (HOST, PORT), flush=True)
     httpd.serve_forever(poll_interval=0.5)
 
 

@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: Bedrock Minecraft Server auf Home Assistant
-version: 1.5.0
+version: 1.5.1
 slug: winomc-bedrock
 init: false
 boot: auto
@@ -59,6 +59,10 @@ options:
   # Web-Konsole
   ENABLE_WEB_CONSOLE: true
   WINOMC_CONSOLE_HISTORY_LIMIT: 300
+  WINOMC_FILE_EDITOR_MAX_BYTES: 2097152
+  WINOMC_FILE_UPLOAD_MAX_BYTES: 536870912
+  WINOMC_FILE_JSON_UPLOAD_MAX_BYTES: 67108864
+  WINOMC_ZIP_UNPACK_MAX_BYTES: 1073741824
 
   # Welten, Packs und Import
   MC_PACK: ""
@@ -135,6 +139,10 @@ schema:
   # Web-Konsole
   ENABLE_WEB_CONSOLE: bool?
   WINOMC_CONSOLE_HISTORY_LIMIT: int?
+  WINOMC_FILE_EDITOR_MAX_BYTES: int?
+  WINOMC_FILE_UPLOAD_MAX_BYTES: int?
+  WINOMC_FILE_JSON_UPLOAD_MAX_BYTES: int?
+  WINOMC_ZIP_UNPACK_MAX_BYTES: int?
 
   # Welten, Packs und Import
   MC_PACK: str?
@@ -185,6 +193,7 @@ backup_exclude:
   - "resource_packs/vanilla*"
   - "resource_packs/chemistry*"
   - ".winomc/bds/*"
+  - ".winomc/file_backups/*"
 
 map:
   - addons:rw

@@ -5,13 +5,42 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.1
+
+* Web Console zum WinoMC Control Center erweitert
+* Menüstruktur neu geordnet: Übersicht, Mein Dashboard, Konsole, Server, Packs & Add-ons, Backups, Netzwerk, Dateien und Experten
+* Bisheriges personalisierbares Dashboard in **Mein Dashboard** umbenannt
+* Neue globale **Übersicht** als feste Startseite für alle Nutzer ergänzt
+* Eigene **Konsole**-Seite ergänzt; die angedockte Live Console bleibt weiterhin dauerhaft unten sichtbar
+* Neues **Server**-Modul für Schnellaktionen, Spielmodus, Schwierigkeit, Spielregeln und Mehrspieler-Aktionen ergänzt
+* Neues **Packs & Add-ons**-Modul für Resource Packs, Behavior Packs, Importordner und Weltdateien ergänzt
+* Neues **Backups**-Modul mit sicherem Welt-Export vorbereitet
+* Neues **Netzwerk**-Modul mit IPv4-, IPv6-, LAN- und Dual-Stack-Hinweisen ergänzt
+* Neuer **Dateimanager** in der Web Console ergänzt
+* Dateimanager unterstützt erlaubte WinoMC-Roots: `/config`, `/config/worlds`, `/config/resource_packs`, `/config/behavior_packs`, `/config/world_templates`, `/share/winomc/import` und `/share/winomc/export`
+* Klickbarer Breadcrumb-Pfad ergänzt, z. B. `config:/worlds/world/db`
+* Direkte Pfadeingabe mit Button **Pfad öffnen** ergänzt
+* Datei-Download ergänzt
+* Ordner-Download als ZIP ergänzt
+* ZIP-Erstellung nach `/share/winomc/export` ergänzt
+* Drag-&-Drop-Upload robuster gemacht
+* Upload-Fix für Umgebungen ergänzt, in denen Home Assistant Ingress keinen normalen `Content-Length`-Header weitergibt
+* JSON-Fallback-Upload für kleinere Dateien ergänzt
+* Integrierter Texteditor für freigegebene Textdateien ergänzt
+* JSON-Prüfung vor dem Speichern von `.json`-Dateien ergänzt
+* Automatisches Datei-Backup vor dem Speichern ergänzt
+* Sicheres Entpacken von `.zip`, `.mcpack`, `.mcaddon`, `.mcworld` und `.mctemplate` ergänzt
+* Schutz vor Pfad-Ausbruch, Symlinks und unsicheren Archivpfaden ergänzt
+* Sicherer Welt-Export mit `save hold`, `save query`, ZIP-Erstellung und anschließendem `save resume` ergänzt
+* Neue optionale Limits für Web-Console-Dateifunktionen ergänzt
+
 ### 1.5.0
 
-Hinzufügen von neuen Funktionen für die Web Console.
+* Hinzufügen von neuen Funktionen für die Web Console
 
 ### 1.4.8
 
-Bereinigung und Dokumentation
+* Bereinigung und Dokumentation
 
 ### 1.4.7
 
@@ -22,7 +51,6 @@ Bereinigung und Dokumentation
 * Neue Option `USE_BOX64` ergänzt
 * `amd64` bleibt unverändert und startet weiterhin direkt über `./bedrock_server`
 * Vorbereitung für spätere eigene WinoMC-ARM64-Base fortgesetzt
-
 
 ### 1.4.6
 
@@ -43,7 +71,6 @@ Bereinigung und Dokumentation
 * Native Paket-Backups vor BDS-Updates ergänzt
 * `PACKAGE_BACKUP_KEEP` zur Begrenzung alter Paket-Backups nativ umgesetzt
 * Weitere itzg-Komfortfunktionen in die native WinoMC Runtime übernommen
-
 
 ### 1.4.3
 
