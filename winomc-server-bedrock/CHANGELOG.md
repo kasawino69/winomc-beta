@@ -5,7 +5,7 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
-### 1.4.5
+### 1.4.6
 
 * Native Unterstützung für `ENABLE_BDS_V6BIND_FIX` ergänzt
 * WinoMC-eigener IPv6-Bind-Fix wird jetzt aus Quellcode im Repository gebaut
