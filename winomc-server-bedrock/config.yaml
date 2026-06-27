@@ -24,7 +24,6 @@ ports_description:
 
 options:
   WINOMC_RUNTIME_MODE: itzg
-  BDS_DIRECT_DOWNLOAD_URL: ""
   BDS_AUTO_UPDATE: true
   VERSION: LATEST
   SERVER_NAME: WinoMC Server
@@ -79,7 +78,7 @@ options:
 
 schema:
   WINOMC_RUNTIME_MODE: list(itzg|native)
-  BDS_DIRECT_DOWNLOAD_URL: str
+  BDS_DIRECT_DOWNLOAD_URL: str?
   BDS_AUTO_UPDATE: bool
   VERSION: str
   SERVER_NAME: str
