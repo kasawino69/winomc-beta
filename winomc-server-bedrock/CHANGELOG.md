@@ -5,6 +5,10 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.3.8.1
+
+Fehlerbehebungen
+
 ### 1.3.8
 
 * `BDS_DIRECT_DOWNLOAD_URL` bleibt als optionale Expertenoption ohne Pflichtfeld erhalten

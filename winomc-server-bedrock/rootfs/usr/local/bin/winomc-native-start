@@ -291,7 +291,7 @@ if [ "${version_mode}" = "EXISTING" ]; then
   if [ ! -x "${SERVER_DATA_DIR}/bedrock_server" ]; then
     echo "ERROR: VERSION=EXISTING but no executable bedrock_server found" >&2
     echo "Using existing Bedrock Dedicated Server"
-  +  write_access_files
+    write_access_files
     /usr/local/bin/winomc-write-server-properties
     exit 1
   fi
@@ -306,7 +306,7 @@ fi
 if [ -x "${SERVER_DATA_DIR}/bedrock_server" ] && ! is_true "${BDS_AUTO_UPDATE}" && [ -z "${BDS_DIRECT_DOWNLOAD_URL}" ]; then
   echo "BDS_AUTO_UPDATE=false and existing server found. Skipping lookup and download."
   echo "BDS_AUTO_UPDATE=false and existing server found. Skipping lookup and download."
-+  write_access_files
+  write_access_files
   /usr/local/bin/winomc-write-server-properties
   /usr/local/bin/winomc-write-server-properties
   echo "Starting native Bedrock Dedicated Server"
@@ -361,7 +361,7 @@ else
   echo "BDS already installed. Skipping download."
 fi
 
-+write_access_files
+write_access_files
 /usr/local/bin/winomc-write-server-properties
 
 echo "Starting native Bedrock Dedicated Server"
