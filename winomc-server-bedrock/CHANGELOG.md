@@ -5,6 +5,17 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.4.7
+
+* Experimentelle Unterstützung für `aarch64` / ARM64 ergänzt
+* Add-on-Architektur um `aarch64` erweitert
+* Box64 wird bei ARM64-Builds installiert
+* Native Runtime erkennt ARM64 zur Laufzeit und startet den Mojang Bedrock Dedicated Server über `box64`
+* Neue Option `USE_BOX64` ergänzt
+* `amd64` bleibt unverändert und startet weiterhin direkt über `./bedrock_server`
+* Vorbereitung für spätere eigene WinoMC-ARM64-Base fortgesetzt
+
+
 ### 1.4.6
 
 * Native Unterstützung für `ENABLE_BDS_V6BIND_FIX` ergänzt

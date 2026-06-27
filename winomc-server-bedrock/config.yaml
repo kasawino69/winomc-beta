@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: Bedrock Minecraft Server auf Home Assistant
-version: 1.4.6
+version: 1.4.7
 slug: winomc-bedrock
 init: false
 boot: auto
@@ -8,6 +8,7 @@ startup: services
 stdin: true
 arch:
   - amd64
+  - aarch64
 
 host_network: true
 
@@ -57,6 +58,7 @@ options:
   SERVER_PORT: 19132
   SERVER_PORT_V6: 19133
   ENABLE_BDS_V6BIND_FIX: false
+  USE_BOX64: true
   TZ: Europe/Berlin
   PACKAGE_BACKUP_KEEP: 2
   DOWNLOAD_PROGRESS: false
@@ -112,6 +114,7 @@ schema:
   SERVER_PORT: port
   SERVER_PORT_V6: port
   ENABLE_BDS_V6BIND_FIX: bool
+  USE_BOX64: bool
   TZ: str
   PACKAGE_BACKUP_KEEP: int
   DOWNLOAD_PROGRESS: bool

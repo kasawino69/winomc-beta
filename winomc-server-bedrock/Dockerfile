@@ -1,7 +1,10 @@
 ARG BUILD_VERSION
 FROM ubuntu:22.04
 
-ENV DEBIAN_FRONTEND=noninteractive
+ARG TARGETARCH
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    BOX64_NOBANNER=1
 
 COPY rootfs/ /
 
@@ -10,6 +13,7 @@ RUN apt-get update \
         ca-certificates \
         curl \
         gcc \
+        gnupg \
         jq \
         libc6-dev \
         libcurl4 \
@@ -17,6 +21,16 @@ RUN apt-get update \
         python3 \
         tzdata \
         unzip \
+    && if [ "${TARGETARCH:-amd64}" = "arm64" ]; then \
+        echo "Installing Box64 for WinoMC ARM64 support"; \
+        curl -fsSL "https://ryanfortner.github.io/box64-debs/KEY.gpg" \
+          | gpg --dearmor \
+          > /etc/apt/trusted.gpg.d/box64-debs-archive-keyring.gpg; \
+        curl -fsSL "https://ryanfortner.github.io/box64-debs/box64.list" \
+          -o /etc/apt/sources.list.d/box64.list; \
+        apt-get update; \
+        apt-get install -y --no-install-recommends box64 libjemalloc2; \
+      fi \
     && gcc -shared -fPIC -O2 -Wall -Wextra \
         -o /opt/winomc-bds-ipv6fix.so \
         /usr/local/src/winomc-bds-ipv6fix.c \

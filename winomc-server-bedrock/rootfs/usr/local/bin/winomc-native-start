@@ -8,6 +8,7 @@ BDS_AUTO_UPDATE="${BDS_AUTO_UPDATE:-true}"
 PACKAGE_BACKUP_KEEP="${PACKAGE_BACKUP_KEEP:-2}"
 ENABLE_BDS_V6BIND_FIX="${ENABLE_BDS_V6BIND_FIX:-false}"
 BDS_IPV6FIX_SO="${BDS_IPV6FIX_SO:-/opt/winomc-bds-ipv6fix.so}"
+USE_BOX64="${USE_BOX64:-true}"
 
 DOWNLOAD_LINKS_URL="${DOWNLOAD_LINKS_URL:-https://net.web.minecraft-services.net/api/v1.0/download/links}"
 DOWNLOAD_SECONDARY_LINKS_URL="${DOWNLOAD_SECONDARY_LINKS_URL:-https://net.web.minecraft-services.net/api/v1.0/download/links}"
@@ -30,6 +31,8 @@ is_true() {
 start_bedrock_server() {
   export LD_LIBRARY_PATH="${SERVER_DATA_DIR}:${LD_LIBRARY_PATH:-}"
 
+  runtime_arch="$(uname -m)"
+
   if [ "${SERVER_PORT:-}" = "${SERVER_PORT_V6:-}" ] && ! is_true "${ENABLE_BDS_V6BIND_FIX:-false}"; then
     echo "WARN: SERVER_PORT and SERVER_PORT_V6 are equal, but ENABLE_BDS_V6BIND_FIX=false" >&2
     echo "WARN: Bedrock Dedicated Server may fail to bind both IPv4 and IPv6 on the same port" >&2
@@ -50,7 +53,28 @@ start_bedrock_server() {
   fi
 
   echo "Starting native Bedrock Dedicated Server"
-  exec ./bedrock_server
+
+  case "${runtime_arch}" in
+    aarch64|arm64)
+      if is_true "${USE_BOX64:-true}"; then
+        if command -v box64 >/dev/null 2>&1; then
+          echo "WinoMC native ARM64 mode: starting Bedrock Dedicated Server via box64"
+          exec box64 ./bedrock_server
+        fi
+
+        echo "ERROR: ARM64 runtime detected, but box64 is not installed or not in PATH" >&2
+        echo "ERROR: Set USE_BOX64=false only if you provide a native ARM64 bedrock_server binary, which Mojang currently does not provide here" >&2
+        exit 1
+      fi
+
+      echo "WARN: ARM64 runtime detected but USE_BOX64=false" >&2
+      echo "WARN: Trying direct start anyway; this will usually fail with Exec format error" >&2
+      exec ./bedrock_server
+      ;;
+    *)
+      exec ./bedrock_server
+      ;;
+  esac
 }
 
 version_upper() {
