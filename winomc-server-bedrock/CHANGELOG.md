@@ -6,6 +6,7 @@
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
 ### 1.3.7
+
 Bug fixes
 
 ### 1.3.6
