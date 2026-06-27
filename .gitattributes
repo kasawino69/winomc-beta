@@ -1,0 +1,10 @@
+* text=auto
+
+*.sh text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+Dockerfile text eol=lf
+
+winomc-friend-broadcast/rootfs/usr/local/bin/winomc-friend-broadcast text eol=lf
+winomc-server-bedrock/rootfs/usr/local/bin/winomc-bedrock-entrypoint text eol=lf
+winomc-server-bedrock/rootfs/etc/services.d/*/run text eol=lf

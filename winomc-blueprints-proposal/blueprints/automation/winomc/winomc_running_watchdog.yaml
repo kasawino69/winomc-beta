@@ -1,0 +1,121 @@
+blueprint:
+  name: WinoMC - Add-on Running Watchdog
+  description: >
+    Überwacht, ob WinoMC Bedrock und WinoMC Friend Broadcast laufen.
+    Wenn eines der Add-ons gestoppt ist, wird es automatisch wieder gestartet.
+  domain: automation
+
+  input:
+    bedrock_app:
+      name: Vollständiger Bedrock Add-on Slug
+      description: >
+        Beispiel: f2435c57_winomc-bedrock.
+        Den Slug findest du in der Add-on-URL.
+      default: ""
+      selector:
+        text:
+
+    friend_app:
+      name: Vollständiger Friend Broadcast Add-on Slug
+      description: >
+        Beispiel: f2435c57_winomc-friend-broadcast.
+        Den Slug findest du in der Add-on-URL.
+      default: ""
+      selector:
+        text:
+
+    bedrock_running_entity:
+      name: Bedrock Running Binary Sensor
+      description: >
+        Der vom Home Assistant Supervisor bereitgestellte Running-Sensor
+        für das Bedrock Add-on.
+      selector:
+        entity:
+          domain: binary_sensor
+
+    friend_running_entity:
+      name: Friend Broadcast Running Binary Sensor
+      description: >
+        Der vom Home Assistant Supervisor bereitgestellte Running-Sensor
+        für das Friend Broadcast Add-on.
+      selector:
+        entity:
+          domain: binary_sensor
+
+    check_interval:
+      name: Prüfintervall
+      description: Alle wie viele Minuten geprüft werden soll.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 30
+          unit_of_measurement: Minuten
+          mode: slider
+
+    friend_start_delay:
+      name: Wartezeit vor Friend-Start
+      description: >
+        Wenn Bedrock neu gestartet wurde, wartet der Blueprint diese Zeit,
+        bevor Friend Broadcast gestartet wird.
+      default: 90
+      selector:
+        number:
+          min: 10
+          max: 600
+          unit_of_measurement: Sekunden
+          mode: slider
+
+mode: single
+
+trigger:
+  - platform: time_pattern
+    minutes: "/1"
+
+  - platform: state
+    entity_id: !input bedrock_running_entity
+    to: "off"
+    for:
+      minutes: 1
+
+  - platform: state
+    entity_id: !input friend_running_entity
+    to: "off"
+    for:
+      minutes: 1
+
+variables:
+  bedrock_app: !input bedrock_app
+  friend_app: !input friend_app
+  bedrock_running_entity: !input bedrock_running_entity
+  friend_running_entity: !input friend_running_entity
+  check_interval: !input check_interval
+
+condition:
+  - condition: template
+    value_template: >
+      {{ (now().minute % (check_interval | int(1))) == 0 }}
+
+action:
+  - if:
+      - condition: template
+        value_template: "{{ bedrock_app | trim != '' }}"
+      - condition: template
+        value_template: "{{ states(bedrock_running_entity) != 'on' }}"
+    then:
+      - action: hassio.app_start
+        data:
+          app: "{{ bedrock_app }}"
+
+      - delay:
+          seconds: !input friend_start_delay
+
+  - if:
+      - condition: template
+        value_template: "{{ friend_app | trim != '' }}"
+      - condition: template
+        value_template: "{{ states(friend_running_entity) != 'on' }}"
+    then:
+      - action: hassio.app_start
+        data:
+          app: "{{ friend_app }}"

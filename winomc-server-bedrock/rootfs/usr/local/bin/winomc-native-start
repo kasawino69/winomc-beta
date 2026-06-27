@@ -1,0 +1,92 @@
+#!/bin/sh
+set -eu
+
+SERVER_DATA_DIR="${SERVER_DATA_DIR:-/config}"
+VERSION="${VERSION:-LATEST}"
+BDS_DIRECT_DOWNLOAD_URL="${BDS_DIRECT_DOWNLOAD_URL:-}"
+BDS_AUTO_UPDATE="${BDS_AUTO_UPDATE:-true}"
+
+BDS_STATE_DIR="${SERVER_DATA_DIR}/.winomc/bds"
+BDS_VERSION_FILE="${BDS_STATE_DIR}/installed-version"
+BDS_URL_FILE="${BDS_STATE_DIR}/installed-url"
+
+mkdir -p "${SERVER_DATA_DIR}" "${BDS_STATE_DIR}"
+
+resolve_bds_url() {
+  if [ -n "${BDS_DIRECT_DOWNLOAD_URL}" ]; then
+    echo "${BDS_DIRECT_DOWNLOAD_URL}"
+    return 0
+  fi
+
+  page="$(curl -fsSL -A "Mozilla/5.0" "https://www.minecraft.net/en-us/download/server/bedrock")"
+
+  linux_url="$(printf '%s' "${page}" \
+    | grep -Eo 'https://www\.minecraft\.net/bedrockdedicatedserver/bin-linux/bedrock-server-[^"]+\.zip' \
+    | head -n 1)"
+
+  if [ -z "${linux_url}" ]; then
+    echo "ERROR: Could not resolve latest Bedrock Dedicated Server Linux download URL" >&2
+    return 1
+  fi
+
+  echo "${linux_url}"
+}
+
+extract_version_from_url() {
+  url="$1"
+  printf '%s' "${url}" \
+    | sed -n 's#.*bedrock-server-\([0-9][0-9.]*\)\.zip.*#\1#p'
+}
+
+install_bds() {
+  url="$1"
+  version="$2"
+
+  tmp_dir="$(mktemp -d)"
+  zip_file="${tmp_dir}/bedrock-server.zip"
+
+  echo "WinoMC native BDS download: ${url}"
+  curl -fL --retry 3 --retry-delay 3 -o "${zip_file}" "${url}"
+
+  echo "WinoMC native BDS install version: ${version}"
+
+  # BDS wird direkt nach /config entpackt, weil bedrock_server seine Daten
+  # relativ zum Arbeitsverzeichnis erwartet.
+  unzip -oq "${zip_file}" -d "${SERVER_DATA_DIR}"
+
+  printf '%s\n' "${version}" > "${BDS_VERSION_FILE}"
+  printf '%s\n' "${url}" > "${BDS_URL_FILE}"
+
+  rm -rf "${tmp_dir}"
+}
+
+cd "${SERVER_DATA_DIR}"
+
+target_url="$(resolve_bds_url)"
+target_version="$(extract_version_from_url "${target_url}")"
+
+if [ -z "${target_version}" ]; then
+  target_version="${VERSION}"
+fi
+
+installed_version="$(cat "${BDS_VERSION_FILE}" 2>/dev/null || true)"
+
+echo "WinoMC native runtime"
+echo "Installed BDS version: ${installed_version:-none}"
+echo "Target BDS version: ${target_version}"
+echo "BDS auto update: ${BDS_AUTO_UPDATE}"
+
+if [ ! -x "${SERVER_DATA_DIR}/bedrock_server" ]; then
+  echo "No Bedrock server binary found. Installing BDS."
+  install_bds "${target_url}" "${target_version}"
+elif [ "${BDS_AUTO_UPDATE}" = "true" ] && [ "${installed_version}" != "${target_version}" ]; then
+  echo "BDS update detected: ${installed_version:-none} -> ${target_version}"
+  install_bds "${target_url}" "${target_version}"
+else
+  echo "BDS already installed. Skipping download."
+fi
+
+/usr/local/bin/winomc-write-server-properties
+
+echo "Starting native Bedrock Dedicated Server"
+LD_LIBRARY_PATH="${SERVER_DATA_DIR}:${LD_LIBRARY_PATH:-}" ./bedrock_server

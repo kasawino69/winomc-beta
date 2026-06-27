@@ -1,0 +1,42 @@
+blueprint:
+  name: WinoMC Friend Broadcast - Geplanter Neustart
+  description: >
+    Startet das WinoMC Friend Broadcast Add-on zu einer festgelegten Uhrzeit neu.
+    Es wird kein STDIN verwendet und es werden keine Updates installiert.
+  domain: automation
+
+  input:
+    friend_app:
+      name: Vollständiger Friend Broadcast Add-on Slug
+      description: >
+        Vollständiger Supervisor-Slug aus der Add-on-URL.
+        Beispiel: f2435c57_winomc-friend-broadcast.
+        Wichtig: Zwischen Repository-ID und Add-on-Slug steht ein Unterstrich.
+      default: ""
+      selector:
+        text:
+
+    restart_time:
+      name: Neustartzeit
+      description: Uhrzeit, zu der Friend Broadcast täglich neu gestartet wird.
+      default: "04:10:00"
+      selector:
+        time:
+
+mode: single
+
+trigger:
+  - platform: time
+    at: !input restart_time
+
+variables:
+  friend_app: !input friend_app
+
+condition:
+  - condition: template
+    value_template: "{{ friend_app | trim != '' }}"
+
+action:
+  - action: hassio.app_restart
+    data:
+      app: "{{ friend_app }}"

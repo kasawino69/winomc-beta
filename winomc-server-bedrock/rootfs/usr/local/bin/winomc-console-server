@@ -1,0 +1,1657 @@
+#!/usr/bin/env python3
+import html
+import json
+import os
+import signal
+import sys
+import time
+from collections import deque
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+HOST = "0.0.0.0"
+PORT = int(os.environ.get("WINOMC_CONSOLE_PORT", "8099"))
+FIFO_PATH = os.environ.get("WINOMC_CONSOLE_FIFO", "/tmp/winomc-bedrock-console.fifo")
+LOG_PATH = os.environ.get("WINOMC_CONSOLE_LOG", "/tmp/winomc-bedrock-console.log")
+MAX_COMMAND_LENGTH = int(os.environ.get("WINOMC_CONSOLE_MAX_COMMAND_LENGTH", "512"))
+HISTORY_LIMIT = int(os.environ.get("WINOMC_CONSOLE_HISTORY_LIMIT", "300"))
+ALLOWED_PROXIES = {
+    item.strip()
+    for item in os.environ.get(
+        "WINOMC_CONSOLE_ALLOWED_PROXIES",
+        "172.30.32.2,127.0.0.1,::1",
+    ).split(",")
+    if item.strip()
+}
+
+INDEX_HTML = r"""<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WinoMC Console</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1120;
+      --panel: rgba(17, 24, 39, .88);
+      --panel-2: rgba(23, 32, 51, .92);
+      --panel-3: #1f2937;
+      --border: #334155;
+      --border-soft: #243244;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --muted-2: #94a3b8;
+      --accent: #22c55e;
+      --accent-2: #16a34a;
+      --accent-soft: rgba(34, 197, 94, .15);
+      --warn: #f59e0b;
+      --warn-soft: rgba(245, 158, 11, .12);
+      --danger: #ef4444;
+      --danger-soft: rgba(239, 68, 68, .13);
+      --blue: #60a5fa;
+      --blue-soft: rgba(96, 165, 250, .10);
+      --console-height: 330px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding-bottom: var(--console-height);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(34, 197, 94, .13), transparent 34rem),
+        radial-gradient(circle at bottom right, rgba(96, 165, 250, .10), transparent 32rem),
+        var(--bg);
+      color: var(--text);
+    }
+
+    body.console-compact { --console-height: 245px; }
+    body.console-large { --console-height: 440px; }
+
+    header {
+      padding: 14px 18px;
+      background: rgba(15, 23, 42, .92);
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      backdrop-filter: blur(12px);
+    }
+
+    h1 { margin: 0; font-size: 18px; font-weight: 760; letter-spacing: .01em; }
+    h2 { margin: 0 0 6px; font-size: 18px; }
+    h3 { margin: 0 0 4px; font-size: 15px; }
+    p { margin: 0; color: var(--muted); line-height: 1.45; }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--warn);
+      box-shadow: 0 0 0 4px rgba(245, 158, 11, .12);
+    }
+
+    .dot.ok {
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(34, 197, 94, .14);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 255px minmax(0, 1fr);
+      gap: 14px;
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 14px;
+    }
+
+    nav {
+      background: var(--panel);
+      border: 1px solid var(--border-soft);
+      border-radius: 14px;
+      padding: 10px;
+      height: calc(100vh - var(--console-height) - 92px);
+      min-height: 320px;
+      position: sticky;
+      top: 74px;
+      overflow: auto;
+    }
+
+    .nav-title {
+      padding: 10px 10px 12px;
+      color: var(--muted-2);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .tab-button {
+      width: 100%;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 11px 12px;
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      font-weight: 680;
+    }
+
+    .tab-button:hover { background: rgba(148, 163, 184, .10); }
+    .tab-button.active {
+      background: var(--accent-soft);
+      border-color: rgba(34, 197, 94, .38);
+      color: #dcfce7;
+    }
+
+    .tab-button .icon { width: 24px; text-align: center; }
+
+    .content { min-width: 0; display: grid; gap: 14px; align-content: start; }
+
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--border-soft);
+      border-radius: 14px;
+      padding: 14px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .hero-top {
+      display: flex;
+      gap: 12px;
+      align-items: start;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    .hero-actions, .actions, .pill-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    input, select {
+      min-width: 120px;
+      border: 1px solid var(--border);
+      background: #0f172a;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 11px 12px;
+      font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      outline: none;
+    }
+
+    input:focus, select:focus { border-color: #64748b; box-shadow: 0 0 0 3px rgba(100, 116, 139, .18); }
+
+    button {
+      border: 1px solid var(--border);
+      background: #1e293b;
+      color: #f8fafc;
+      border-radius: 10px;
+      padding: 10px 13px;
+      cursor: pointer;
+      font-weight: 720;
+    }
+
+    button:hover { background: #334155; }
+    button:disabled { opacity: .48; cursor: not-allowed; }
+    button.primary { border-color: rgba(34, 197, 94, .55); background: #166534; }
+    button.primary:hover { background: #15803d; }
+    button.soft { background: rgba(30, 41, 59, .75); }
+    button.ghost { background: transparent; }
+    button.danger { border-color: rgba(239, 68, 68, .55); background: #450a0a; }
+    button.danger:hover { background: #7f1d1d; }
+    button.warning { border-color: rgba(245, 158, 11, .55); background: #451a03; }
+    button.warning:hover { background: #78350f; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: grid; gap: 14px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border-soft);
+      border-radius: 14px;
+      padding: 14px;
+      min-width: 0;
+    }
+
+    .card-header {
+      margin-bottom: 12px;
+      display: flex;
+      gap: 10px;
+      align-items: start;
+      justify-content: space-between;
+    }
+
+    .badge {
+      color: #bbf7d0;
+      background: var(--accent-soft);
+      border: 1px solid rgba(34, 197, 94, .30);
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .badge.warn {
+      color: #ffedd5;
+      background: var(--warn-soft);
+      border-color: rgba(245, 158, 11, .32);
+    }
+
+    .setting {
+      padding: 12px 0;
+      border-top: 1px solid rgba(51, 65, 85, .65);
+      display: grid;
+      gap: 8px;
+    }
+
+    .setting:first-child { border-top: 0; padding-top: 0; }
+
+    .setting-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-weight: 760;
+    }
+
+    .setting-desc {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .split-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .pill-group button { flex: 1 1 auto; min-width: 92px; }
+
+    .info {
+      border: 1px solid rgba(96, 165, 250, .30);
+      background: var(--blue-soft);
+      color: #dbeafe;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .info.warning-box {
+      border-color: rgba(245, 158, 11, .35);
+      background: var(--warn-soft);
+      color: #ffedd5;
+    }
+
+    .info.danger-box {
+      border-color: rgba(239, 68, 68, .35);
+      background: var(--danger-soft);
+      color: #fee2e2;
+    }
+
+    details {
+      border: 1px solid rgba(51, 65, 85, .75);
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(15, 23, 42, .55);
+    }
+
+    summary { cursor: pointer; font-weight: 760; }
+
+    .dashboard-toolbar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(var(--dashboard-columns, 3), minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .dashboard-grid.auto { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+    .tile {
+      display: grid;
+      gap: 10px;
+      padding: 13px;
+      border: 1px solid rgba(51, 65, 85, .74);
+      border-radius: 14px;
+      background: rgba(15, 23, 42, .60);
+      min-height: 132px;
+    }
+
+    .tile-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 10px;
+    }
+
+    .tile-title { font-weight: 780; }
+    .tile-desc { color: var(--muted); font-size: 13px; line-height: 1.38; }
+    .tile-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .tile-actions button { padding: 8px 10px; }
+    .tile-action-main { align-self: end; }
+
+    .picker-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .picker-item {
+      border: 1px solid rgba(51, 65, 85, .65);
+      border-radius: 12px;
+      background: rgba(15, 23, 42, .52);
+      padding: 11px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .picker-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .category-label {
+      color: #cbd5e1;
+      font-size: 12px;
+      background: rgba(148, 163, 184, .11);
+      border: 1px solid rgba(148, 163, 184, .18);
+      border-radius: 999px;
+      padding: 3px 7px;
+    }
+
+    .console-dock {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 10;
+      height: var(--console-height);
+      background: rgba(2, 6, 23, .96);
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -20px 55px rgba(0, 0, 0, .42);
+      backdrop-filter: blur(12px);
+    }
+
+    .console-inner {
+      max-width: 1500px;
+      height: 100%;
+      margin: 0 auto;
+      padding: 10px 14px 12px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    .console-head {
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .console-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+    #log {
+      min-height: 0;
+      overflow: auto;
+      padding: 12px;
+      background: #020617;
+      border: 1px solid var(--border-soft);
+      border-radius: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .line { min-height: 18px; }
+    .line.command { color: #93c5fd; }
+    .line.error { color: #fca5a5; }
+    .line.ok { color: #86efac; }
+
+    .command-row { display: flex; gap: 8px; }
+    .command-row input { flex: 1; }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      background: rgba(2, 6, 23, .76);
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      width: min(520px, 100%);
+      background: #111827;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .45);
+    }
+
+    .modal h2 { margin-bottom: 8px; }
+    .modal .modal-actions {
+      margin-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .modal input { width: 100%; margin-top: 12px; }
+
+    @media (max-width: 1050px) {
+      .layout { grid-template-columns: 1fr; }
+      nav {
+        position: static;
+        height: auto;
+        min-height: 0;
+        display: flex;
+        overflow-x: auto;
+        gap: 6px;
+      }
+      .nav-title { display: none; }
+      .tab-button { width: auto; min-width: max-content; }
+      .grid { grid-template-columns: 1fr; }
+      .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+    }
+
+    @media (max-width: 720px) {
+      body { --console-height: 310px; }
+      body.console-compact { --console-height: 235px; }
+      body.console-large { --console-height: 390px; }
+      .hero-actions button, .command-row button { width: 100%; }
+      .split-actions { grid-template-columns: 1fr; }
+      .command-row { flex-direction: column; }
+      .console-controls button { padding: 8px 10px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>WinoMC Bedrock Live Console</h1>
+    <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
+  </header>
+
+  <div class="layout">
+    <nav aria-label="WinoMC Einstellungen">
+      <div class="nav-title">Menü</div>
+      <button class="tab-button active" data-tab="dashboard"><span class="icon">🧩</span> Dashboard</button>
+      <button class="tab-button" data-tab="overview"><span class="icon">🏠</span> Übersicht</button>
+      <button class="tab-button" data-tab="general"><span class="icon">🌍</span> Allgemein</button>
+      <button class="tab-button" data-tab="advanced"><span class="icon">⚙️</span> Fortgeschritten</button>
+      <button class="tab-button" data-tab="multiplayer"><span class="icon">👥</span> Mehrspieler</button>
+      <button class="tab-button" data-tab="cheats"><span class="icon">🎮</span> Spielregeln</button>
+      <button class="tab-button" data-tab="packs"><span class="icon">📦</span> Pakete</button>
+      <button class="tab-button" data-tab="expert"><span class="icon">🧰</span> Experten</button>
+    </nav>
+
+    <main class="content">
+      <section class="hero">
+        <div class="hero-top">
+          <div>
+            <h2>Serversteuerung</h2>
+            <p>Realm-ähnliche Bedienung für sinnvolle Live-Einstellungen. Die Konsole bleibt unten immer sichtbar.</p>
+          </div>
+          <div class="hero-actions">
+            <button data-action-id="list">Spieler anzeigen</button>
+            <button data-action-id="say">Nachricht</button>
+            <button class="danger" data-action-id="stop">Server stoppen</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel active" data-panel="dashboard">
+        <div class="card">
+          <div class="dashboard-toolbar">
+            <div>
+              <h2>Mein Dashboard</h2>
+              <p>Stelle dir eigene Kacheln zusammen. Die Auswahl wird im Browser gespeichert und bleibt beim nächsten Öffnen erhalten.</p>
+            </div>
+            <div class="actions">
+              <label class="status">Layout
+                <select id="dashboardColumns" aria-label="Dashboard Layout">
+                  <option value="auto">Auto</option>
+                  <option value="2">2 Spalten</option>
+                  <option value="3">3 Spalten</option>
+                  <option value="4">4 Spalten</option>
+                </select>
+              </label>
+              <button class="soft" id="resetDashboard" type="button">Standard wiederherstellen</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="dashboardGrid" class="dashboard-grid auto" aria-live="polite"></div>
+
+        <details class="card" open>
+          <summary>Aktionen hinzufügen</summary>
+          <p style="margin-top:8px">Füge nur das hinzu, was du wirklich brauchst. Kritische Aktionen bleiben markiert.</p>
+          <div id="actionPicker" class="picker-grid"></div>
+        </details>
+      </section>
+
+      <section class="tab-panel" data-panel="overview">
+        <div class="grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Schnellaktionen</h3>
+                <p>Häufige Aktionen ohne langes Tippen.</p>
+              </div>
+              <span class="badge">Empfohlen</span>
+            </div>
+            <div class="setting">
+              <div class="setting-title">Zeit & Wetter</div>
+              <div class="pill-group">
+                <button data-action-id="time-day">Tag</button>
+                <button data-action-id="time-night">Nacht</button>
+                <button data-action-id="weather-clear">Wetter klar</button>
+                <button data-action-id="weather-rain">Regen</button>
+              </div>
+            </div>
+            <div class="setting">
+              <div class="setting-title">Spieler</div>
+              <div class="pill-group">
+                <button data-action-id="list">Liste</button>
+                <button data-action-id="op-add">OP geben</button>
+                <button data-action-id="op-remove">OP entfernen</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Bedienidee</h3>
+                <p>Oben werden Einstellungen gewählt, unten laufen Log und freie Befehle weiter.</p>
+              </div>
+            </div>
+            <div class="setting">
+              <div class="setting-title">Dashboard zuerst</div>
+              <div class="setting-desc">Lege dort deine Favoriten ab: zum Beispiel Keep Inventory, Koordinaten, Tag, Wetter, OP-Rechte oder Stop.</div>
+            </div>
+            <div class="setting">
+              <div class="setting-title">Kategorien für Ordnung</div>
+              <div class="setting-desc">Die Menüpunkte bleiben für volle Kontrolle erhalten, das Dashboard ist dein persönlicher Schnellzugriff.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-panel="general">
+        <div class="grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Spielmodus</h3>
+                <p>Ändert den Standard-Spielmodus für neue bzw. wiederbeitretende Spieler.</p>
+              </div>
+            </div>
+            <div class="pill-group">
+              <button data-action-id="mode-survival">Überleben</button>
+              <button data-action-id="mode-creative">Kreativ</button>
+              <button data-action-id="mode-adventure">Abenteuer</button>
+            </div>
+            <div class="info warning-box">Bereits verbundene Spieler können ihren aktuellen Modus behalten. Einzelne Spieler kannst du unten über einen freien Befehl ändern, z. B. <b>gamemode survival Spielername</b>.</div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Schwierigkeit</h3>
+                <p>Entspricht dem Ingame-Menü Friedlich, Einfach, Normal und Schwer.</p>
+              </div>
+            </div>
+            <div class="pill-group">
+              <button data-action-id="difficulty-peaceful">Friedlich</button>
+              <button data-action-id="difficulty-easy">Einfach</button>
+              <button data-action-id="difficulty-normal">Normal</button>
+              <button data-action-id="difficulty-hard">Schwer</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-panel="advanced">
+        <div class="grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Anzeige & Weltverhalten</h3>
+                <p>Laufzeit-Regeln, die per Konsole sinnvoll änderbar sind.</p>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Koordinaten anzeigen</div>
+              <div class="split-actions">
+                <button data-action-id="coordinates-on">An</button>
+                <button data-action-id="coordinates-off">Aus</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Gespielte Tage anzeigen</div>
+              <div class="setting-desc">Nur nutzen, wenn deine Bedrock-Version diese Spielregel unterstützt.</div>
+              <div class="split-actions">
+                <button data-action-id="days-on">An</button>
+                <button data-action-id="days-off">Aus</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Erforderliche schlafende Spieler</div>
+              <div class="setting-desc">Prozentwert: 0 bis 100. 100 bedeutet: alle müssen schlafen.</div>
+              <div class="pill-group">
+                <button data-action-id="sleep-0">0%</button>
+                <button data-action-id="sleep-50">50%</button>
+                <button data-action-id="sleep-100">100%</button>
+                <button data-action-id="sleep-custom">Eigener Wert</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Wiederbeleben-Radius</div>
+              <div class="setting-desc">Radius um den Weltspawn.</div>
+              <div class="pill-group">
+                <button data-action-id="spawnradius-0">0</button>
+                <button data-action-id="spawnradius-10">10</button>
+                <button data-action-id="spawnradius-custom">Eigener Wert</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Weltregeln</h3>
+                <p>Entspricht vielen Fortgeschritten-Optionen aus dem Weltmenü.</p>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Feuer breitet sich aus</div>
+              <div class="split-actions">
+                <button data-action-id="fire-on">An</button>
+                <button data-action-id="fire-off">Aus</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">TNT explodiert</div>
+              <div class="split-actions">
+                <button data-action-id="tnt-on">An</button>
+                <button data-action-id="tnt-off">Aus</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Kreaturenbeute</div>
+              <div class="split-actions">
+                <button data-action-id="mobloot-on">An</button>
+                <button data-action-id="mobloot-off">Aus</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Natürliche Regeneration</div>
+              <div class="split-actions">
+                <button data-action-id="regen-on">An</button>
+                <button data-action-id="regen-off">Aus</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Feldertrag / Blockdrops</div>
+              <div class="split-actions">
+                <button data-action-id="tiledrops-on">An</button>
+                <button data-action-id="tiledrops-off">Aus</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Sofortiges Wiederbeleben</div>
+              <div class="split-actions">
+                <button data-action-id="immediate-respawn-on">An</button>
+                <button data-action-id="immediate-respawn-off">Aus</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-panel="multiplayer">
+        <div class="grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Spieler & Rechte</h3>
+                <p>Schneller Zugriff auf häufige Admin-Aktionen.</p>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Spielerliste</div>
+              <button data-action-id="list">Spieler anzeigen</button>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Operator-Rechte</div>
+              <div class="pill-group">
+                <button data-action-id="op-add">OP geben</button>
+                <button data-action-id="op-remove">OP entfernen</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Nachricht an alle</div>
+              <button data-action-id="say">Nachricht senden</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Mehrspieler-Spielregeln</h3>
+                <p>Live-Regeln für laufende Welten.</p>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Friendly Fire / PvP</div>
+              <div class="setting-desc">Nur nutzen, wenn deine Bedrock-Version diese Spielregel unterstützt.</div>
+              <div class="split-actions">
+                <button data-action-id="pvp-on">An</button>
+                <button data-action-id="pvp-off">Aus</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-panel="cheats">
+        <div class="grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Zeit, Inventar & Kreaturen</h3>
+                <p>Die wichtigsten Cheat-/Spielregel-Schalter aus dem Ingame-Menü.</p>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Tageslichtzyklus</div>
+              <div class="split-actions">
+                <button data-action-id="daycycle-on">Normal</button>
+                <button data-action-id="daycycle-off">Zeit einfrieren</button>
+              </div>
+              <div class="pill-group">
+                <button data-action-id="time-day">Tag setzen</button>
+                <button data-action-id="time-night">Nacht setzen</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Inventar behalten</div>
+              <div class="split-actions">
+                <button data-action-id="keepinventory-on">An</button>
+                <button data-action-id="keepinventory-off">Aus</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Kreaturen-Spawn</div>
+              <div class="split-actions">
+                <button data-action-id="mobspawning-on">An</button>
+                <button data-action-id="mobspawning-off">Aus</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Kreaturen-Griefing</div>
+              <div class="split-actions">
+                <button data-action-id="mobgriefing-on">An</button>
+                <button data-action-id="mobgriefing-off">Aus</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Weitere Spielregeln</h3>
+                <p>Schnelle Anpassung ohne Tipparbeit.</p>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Entitäten lassen Beute fallen</div>
+              <div class="split-actions">
+                <button data-action-id="entitydrops-on">An</button>
+                <button data-action-id="entitydrops-off">Aus</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Wetterzyklus</div>
+              <div class="split-actions">
+                <button data-action-id="weathercycle-on">An</button>
+                <button data-action-id="weathercycle-off">Aus</button>
+              </div>
+              <div class="pill-group">
+                <button data-action-id="weather-clear">Klar</button>
+                <button data-action-id="weather-rain">Regen</button>
+                <button data-action-id="weather-thunder">Gewitter</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-title">Zufällige Tick-Geschwindigkeit</div>
+              <div class="pill-group">
+                <button data-action-id="randomtick-1">1</button>
+                <button data-action-id="randomtick-3">3</button>
+                <button data-action-id="randomtick-custom">Eigener Wert</button>
+              </div>
+              <div class="info warning-box">Hohe Werte können Welt, Farmen und Serverlast stark beeinflussen. Für normale Welten vorsichtig nutzen.</div>
+            </div>
+
+            <div class="info warning-box">Der globale Cheats-Schalter selbst bleibt Welt-/Serverkonfiguration. Die Konsole ist bereits ein Admin-Werkzeug.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-panel="packs">
+        <div class="grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Ressourcenpakete</h3>
+                <p>Packs werden über Dateien und Welt-Metadaten verwaltet.</p>
+              </div>
+            </div>
+            <div class="info warning-box">Resource Packs sollten über <b>/config/resource_packs</b>, Weltdateien und anschließend mit einem Server-Neustart eingebunden werden. Eine Live-Schaltung per Konsole wäre unzuverlässig.</div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Verhaltenspakete & Experimente</h3>
+                <p>Bewusst nur als Hinweis, nicht als Schnellschalter.</p>
+              </div>
+            </div>
+            <div class="info warning-box">Behavior Packs und Experimente verändern Welt-Metadaten. Die Aktivierung sollte vor dem Start bzw. über Import/Dateien erfolgen, damit die Welt konsistent bleibt.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-panel="expert">
+        <div class="grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Backup-Flow</h3>
+                <p>Nur für manuelle Datei-Backups während der Server läuft.</p>
+              </div>
+              <span class="badge warn">Experten</span>
+            </div>
+
+            <div class="info danger-box">Wenn <b>save hold</b> genutzt wird, muss danach unbedingt <b>save resume</b> folgen. Sonst kann der Server nicht normal weiterspeichern.</div>
+
+            <details>
+              <summary>Backup-Befehle anzeigen</summary>
+              <div class="setting">
+                <div class="setting-title">1. Speichern pausieren</div>
+                <button class="warning" data-action-id="save-hold">save hold</button>
+              </div>
+              <div class="setting">
+                <div class="setting-title">2. Backup-Status prüfen</div>
+                <button data-action-id="save-query">save query</button>
+              </div>
+              <div class="setting">
+                <div class="setting-title">3. Speichern fortsetzen</div>
+                <button class="primary" data-action-id="save-resume">save resume</button>
+              </div>
+            </details>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Freier Admin-Befehl</h3>
+                <p>Für alles, was bewusst nicht als UI-Schalter existiert.</p>
+              </div>
+            </div>
+            <div class="info">Die freie Eingabe befindet sich dauerhaft unten in der Konsole. Dadurch bleibt der Log sichtbar, während du oben im Menü arbeitest.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <section class="console-dock" aria-label="Live Console">
+    <div class="console-inner">
+      <div class="console-head">
+        <div>
+          <h3>Live Console</h3>
+          <p>Serverausgabe und freie Befehle bleiben immer erreichbar.</p>
+        </div>
+        <div class="console-controls">
+          <button class="soft" type="button" data-console-size="compact">Kompakt</button>
+          <button class="soft" type="button" data-console-size="normal">Normal</button>
+          <button class="soft" type="button" data-console-size="large">Groß</button>
+          <button class="ghost" type="button" id="clearLog">Anzeige leeren</button>
+        </div>
+      </div>
+
+      <div id="log" aria-live="polite"></div>
+
+      <form id="commandForm" autocomplete="off" class="command-row">
+        <input id="command" name="command" placeholder="Freien Befehl eingeben, z. B. list, say Hallo, gamerule keepinventory true" autofocus>
+        <button type="submit" class="primary">Senden</button>
+      </form>
+    </div>
+  </section>
+
+  <div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <h2 id="modalTitle">Wert eingeben</h2>
+      <p id="modalLabel">Bitte Wert eingeben.</p>
+      <input id="modalInput" autocomplete="off">
+      <div class="modal-actions">
+        <button type="button" class="soft" id="modalCancel">Abbrechen</button>
+        <button type="button" class="primary" id="modalSend">Senden</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const log = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+    const statusDot = document.getElementById('statusDot');
+    const form = document.getElementById('commandForm');
+    const input = document.getElementById('command');
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalLabel = document.getElementById('modalLabel');
+    const modalInput = document.getElementById('modalInput');
+    const modalCancel = document.getElementById('modalCancel');
+    const modalSend = document.getElementById('modalSend');
+    const dashboardGrid = document.getElementById('dashboardGrid');
+    const actionPicker = document.getElementById('actionPicker');
+    const dashboardColumns = document.getElementById('dashboardColumns');
+    const resetDashboard = document.getElementById('resetDashboard');
+    const clearLog = document.getElementById('clearLog');
+
+    const STORE_DASHBOARD = 'winomcDashboardActionsV1';
+    const STORE_COLUMNS = 'winomcDashboardColumnsV1';
+    const STORE_CONSOLE_SIZE = 'winomcConsoleSizeV1';
+
+    const ACTIONS = [
+      { id: 'list', category: 'Übersicht', label: 'Spieler anzeigen', description: 'Zeigt aktuell verbundene Spieler.', command: 'list' },
+      { id: 'say', category: 'Übersicht', label: 'Nachricht senden', description: 'Sendet eine Nachricht an alle Spieler.', template: 'say {value}', promptTitle: 'Nachricht senden', promptLabel: 'Nachricht an alle Spieler', placeholder: 'Hallo zusammen' },
+      { id: 'stop', category: 'Experten', label: 'Server stoppen', description: 'Stoppt den Bedrock Server kontrolliert.', command: 'stop', variant: 'danger', confirm: 'Server wirklich stoppen? Der Server wird beendet und muss je nach Add-on-Setup neu gestartet werden.' },
+
+      { id: 'time-day', category: 'Übersicht', label: 'Tag setzen', description: 'Setzt die Zeit auf Tag.', command: 'time set day' },
+      { id: 'time-night', category: 'Übersicht', label: 'Nacht setzen', description: 'Setzt die Zeit auf Nacht.', command: 'time set night' },
+      { id: 'weather-clear', category: 'Übersicht', label: 'Wetter klar', description: 'Setzt das Wetter auf klar.', command: 'weather clear' },
+      { id: 'weather-rain', category: 'Übersicht', label: 'Regen', description: 'Startet Regen.', command: 'weather rain' },
+      { id: 'weather-thunder', category: 'Übersicht', label: 'Gewitter', description: 'Startet Gewitter.', command: 'weather thunder' },
+
+      { id: 'mode-survival', category: 'Allgemein', label: 'Überleben', description: 'Setzt den Standard-Spielmodus auf Survival.', command: 'defaultgamemode survival' },
+      { id: 'mode-creative', category: 'Allgemein', label: 'Kreativ', description: 'Setzt den Standard-Spielmodus auf Creative.', command: 'defaultgamemode creative' },
+      { id: 'mode-adventure', category: 'Allgemein', label: 'Abenteuer', description: 'Setzt den Standard-Spielmodus auf Adventure.', command: 'defaultgamemode adventure' },
+      { id: 'difficulty-peaceful', category: 'Allgemein', label: 'Friedlich', description: 'Setzt Schwierigkeit auf Friedlich.', command: 'difficulty peaceful' },
+      { id: 'difficulty-easy', category: 'Allgemein', label: 'Einfach', description: 'Setzt Schwierigkeit auf Einfach.', command: 'difficulty easy' },
+      { id: 'difficulty-normal', category: 'Allgemein', label: 'Normal', description: 'Setzt Schwierigkeit auf Normal.', command: 'difficulty normal' },
+      { id: 'difficulty-hard', category: 'Allgemein', label: 'Schwer', description: 'Setzt Schwierigkeit auf Schwer.', command: 'difficulty hard' },
+
+      { id: 'coordinates-on', category: 'Fortgeschritten', label: 'Koordinaten an', description: 'Zeigt Koordinaten im Spiel an.', command: 'gamerule showcoordinates true' },
+      { id: 'coordinates-off', category: 'Fortgeschritten', label: 'Koordinaten aus', description: 'Blendet Koordinaten aus.', command: 'gamerule showcoordinates false' },
+      { id: 'days-on', category: 'Fortgeschritten', label: 'Tage anzeigen an', description: 'Zeigt gespielte Tage an, falls unterstützt.', command: 'gamerule showdaysplayed true' },
+      { id: 'days-off', category: 'Fortgeschritten', label: 'Tage anzeigen aus', description: 'Blendet gespielte Tage aus, falls unterstützt.', command: 'gamerule showdaysplayed false' },
+      { id: 'sleep-0', category: 'Fortgeschritten', label: 'Schlafen 0%', description: 'Eine Person kann die Nacht überspringen.', command: 'gamerule playerssleepingpercentage 0' },
+      { id: 'sleep-50', category: 'Fortgeschritten', label: 'Schlafen 50%', description: 'Die Hälfte der Spieler muss schlafen.', command: 'gamerule playerssleepingpercentage 50' },
+      { id: 'sleep-100', category: 'Fortgeschritten', label: 'Schlafen 100%', description: 'Alle Spieler müssen schlafen.', command: 'gamerule playerssleepingpercentage 100' },
+      { id: 'sleep-custom', category: 'Fortgeschritten', label: 'Schlafen eigener Wert', description: 'Setzt einen Prozentwert zwischen 0 und 100.', template: 'gamerule playerssleepingpercentage {value}', promptTitle: 'Schlaf-Prozent setzen', promptLabel: 'Prozentwert 0 bis 100', placeholder: '50' },
+      { id: 'spawnradius-0', category: 'Fortgeschritten', label: 'Spawnradius 0', description: 'Respawn direkt am Weltspawn.', command: 'gamerule spawnradius 0' },
+      { id: 'spawnradius-10', category: 'Fortgeschritten', label: 'Spawnradius 10', description: 'Respawn im Radius 10.', command: 'gamerule spawnradius 10' },
+      { id: 'spawnradius-custom', category: 'Fortgeschritten', label: 'Spawnradius eigener Wert', description: 'Setzt den Respawn-Radius.', template: 'gamerule spawnradius {value}', promptTitle: 'Wiederbeleben-Radius setzen', promptLabel: 'Radius', placeholder: '10' },
+      { id: 'fire-on', category: 'Fortgeschritten', label: 'Feuer ausbreiten an', description: 'Feuer kann sich ausbreiten.', command: 'gamerule dofiretick true' },
+      { id: 'fire-off', category: 'Fortgeschritten', label: 'Feuer ausbreiten aus', description: 'Feuer breitet sich nicht aus.', command: 'gamerule dofiretick false' },
+      { id: 'tnt-on', category: 'Fortgeschritten', label: 'TNT an', description: 'TNT kann explodieren.', command: 'gamerule tntexplodes true' },
+      { id: 'tnt-off', category: 'Fortgeschritten', label: 'TNT aus', description: 'TNT explodiert nicht.', command: 'gamerule tntexplodes false' },
+      { id: 'mobloot-on', category: 'Fortgeschritten', label: 'Kreaturenbeute an', description: 'Kreaturen lassen Beute fallen.', command: 'gamerule domobloot true' },
+      { id: 'mobloot-off', category: 'Fortgeschritten', label: 'Kreaturenbeute aus', description: 'Kreaturen lassen keine Beute fallen.', command: 'gamerule domobloot false' },
+      { id: 'regen-on', category: 'Fortgeschritten', label: 'Regeneration an', description: 'Natürliche Regeneration aktivieren.', command: 'gamerule naturalregeneration true' },
+      { id: 'regen-off', category: 'Fortgeschritten', label: 'Regeneration aus', description: 'Natürliche Regeneration deaktivieren.', command: 'gamerule naturalregeneration false' },
+      { id: 'tiledrops-on', category: 'Fortgeschritten', label: 'Blockdrops an', description: 'Blöcke lassen Beute fallen.', command: 'gamerule dotiledrops true' },
+      { id: 'tiledrops-off', category: 'Fortgeschritten', label: 'Blockdrops aus', description: 'Blöcke lassen keine Beute fallen.', command: 'gamerule dotiledrops false' },
+      { id: 'immediate-respawn-on', category: 'Fortgeschritten', label: 'Sofort-Respawn an', description: 'Tod-Menü überspringen.', command: 'gamerule doimmediaterespawn true' },
+      { id: 'immediate-respawn-off', category: 'Fortgeschritten', label: 'Sofort-Respawn aus', description: 'Tod-Menü normal anzeigen.', command: 'gamerule doimmediaterespawn false' },
+
+      { id: 'op-add', category: 'Mehrspieler', label: 'OP geben', description: 'Gibt einem Spieler Operator-Rechte.', template: 'op {value}', promptTitle: 'Operator hinzufügen', promptLabel: 'Spielername', placeholder: 'PlayerName' },
+      { id: 'op-remove', category: 'Mehrspieler', label: 'OP entfernen', description: 'Entzieht einem Spieler Operator-Rechte.', template: 'deop {value}', promptTitle: 'Operator entfernen', promptLabel: 'Spielername', placeholder: 'PlayerName' },
+      { id: 'pvp-on', category: 'Mehrspieler', label: 'PvP an', description: 'Aktiviert PvP, falls unterstützt.', command: 'gamerule pvp true' },
+      { id: 'pvp-off', category: 'Mehrspieler', label: 'PvP aus', description: 'Deaktiviert PvP, falls unterstützt.', command: 'gamerule pvp false' },
+
+      { id: 'daycycle-on', category: 'Spielregeln', label: 'Tageslicht normal', description: 'Zeit läuft normal weiter.', command: 'gamerule dodaylightcycle true' },
+      { id: 'daycycle-off', category: 'Spielregeln', label: 'Zeit einfrieren', description: 'Tageslichtzyklus anhalten.', command: 'gamerule dodaylightcycle false' },
+      { id: 'keepinventory-on', category: 'Spielregeln', label: 'Inventar behalten an', description: 'Spieler behalten Inventar nach Tod.', command: 'gamerule keepinventory true' },
+      { id: 'keepinventory-off', category: 'Spielregeln', label: 'Inventar behalten aus', description: 'Inventar wird nach Tod normal gedroppt.', command: 'gamerule keepinventory false' },
+      { id: 'mobspawning-on', category: 'Spielregeln', label: 'Kreaturen-Spawn an', description: 'Kreaturen spawnen natürlich.', command: 'gamerule domobspawning true' },
+      { id: 'mobspawning-off', category: 'Spielregeln', label: 'Kreaturen-Spawn aus', description: 'Natürlicher Spawn wird deaktiviert.', command: 'gamerule domobspawning false' },
+      { id: 'mobgriefing-on', category: 'Spielregeln', label: 'Mob-Griefing an', description: 'Kreaturen können Blöcke beeinflussen.', command: 'gamerule mobgriefing true' },
+      { id: 'mobgriefing-off', category: 'Spielregeln', label: 'Mob-Griefing aus', description: 'Kreaturen-Griefing deaktivieren.', command: 'gamerule mobgriefing false' },
+      { id: 'entitydrops-on', category: 'Spielregeln', label: 'Entitätsdrops an', description: 'Entitäten lassen Gegenstände fallen.', command: 'gamerule doentitydrops true' },
+      { id: 'entitydrops-off', category: 'Spielregeln', label: 'Entitätsdrops aus', description: 'Entitäten lassen keine Gegenstände fallen.', command: 'gamerule doentitydrops false' },
+      { id: 'weathercycle-on', category: 'Spielregeln', label: 'Wetterzyklus an', description: 'Wetter ändert sich natürlich.', command: 'gamerule doweathercycle true' },
+      { id: 'weathercycle-off', category: 'Spielregeln', label: 'Wetterzyklus aus', description: 'Wetter bleibt stabil.', command: 'gamerule doweathercycle false' },
+      { id: 'randomtick-1', category: 'Spielregeln', label: 'Random Tick 1', description: 'Standardnah und schonend.', command: 'gamerule randomtickspeed 1' },
+      { id: 'randomtick-3', category: 'Spielregeln', label: 'Random Tick 3', description: 'Schneller, aber noch moderat.', command: 'gamerule randomtickspeed 3' },
+      { id: 'randomtick-custom', category: 'Spielregeln', label: 'Random Tick eigener Wert', description: 'Vorsichtig nutzen: hohe Werte belasten den Server.', template: 'gamerule randomtickspeed {value}', promptTitle: 'Random Tick Speed setzen', promptLabel: 'Wert', placeholder: '1', variant: 'warning' },
+
+      { id: 'save-hold', category: 'Experten', label: 'Backup: speichern pausieren', description: 'Pausiert Welt-Schreibvorgänge für Datei-Backups.', command: 'save hold', variant: 'warning', confirm: 'Speichern wirklich pausieren? Danach bitte save query prüfen und am Ende save resume ausführen.' },
+      { id: 'save-query', category: 'Experten', label: 'Backup: Status prüfen', description: 'Fragt den Backup-/Speicherstatus ab.', command: 'save query' },
+      { id: 'save-resume', category: 'Experten', label: 'Backup: speichern fortsetzen', description: 'Setzt normales Speichern nach save hold fort.', command: 'save resume', variant: 'primary' }
+    ];
+
+    const ACTION_BY_ID = Object.fromEntries(ACTIONS.map(action => [action.id, action]));
+    const DEFAULT_DASHBOARD = ['list', 'say', 'time-day', 'weather-clear', 'coordinates-on', 'keepinventory-on', 'sleep-50', 'difficulty-normal', 'stop'];
+
+    let history = JSON.parse(localStorage.getItem('winomcCommandHistory') || '[]');
+    let historyIndex = history.length;
+    let pendingTemplate = null;
+    let dashboardActions = loadDashboard();
+
+    function appendLine(text, cls) {
+      const div = document.createElement('div');
+      div.className = 'line' + (cls ? ' ' + cls : '');
+      div.textContent = text;
+      const stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+      log.appendChild(div);
+      while (log.children.length > 1600) log.removeChild(log.firstChild);
+      if (stick) log.scrollTop = log.scrollHeight;
+    }
+
+    function saveHistory(command) {
+      history = history.filter(item => item !== command);
+      history.push(command);
+      history = history.slice(-50);
+      historyIndex = history.length;
+      localStorage.setItem('winomcCommandHistory', JSON.stringify(history));
+    }
+
+    async function sendCommand(command) {
+      command = String(command || '').trim();
+      if (!command) return;
+      appendLine('> ' + command, 'command');
+      saveHistory(command);
+      input.value = '';
+
+      try {
+        const endpoint = './api/command?command=' + encodeURIComponent(command);
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          appendLine('Fehler: ' + (data.error || res.statusText), 'error');
+        } else {
+          appendLine('Befehl gesendet', 'ok');
+        }
+      } catch (err) {
+        appendLine('Fehler beim Senden: ' + err.message, 'error');
+      }
+    }
+
+    function runAction(action) {
+      if (!action) return;
+      if (action.confirm && !window.confirm(action.confirm)) return;
+      if (action.template) {
+        openPromptForAction(action);
+        return;
+      }
+      sendCommand(action.command);
+    }
+
+    function openPromptForAction(action) {
+      pendingTemplate = action.template;
+      modalTitle.textContent = action.promptTitle || action.label || 'Wert eingeben';
+      modalLabel.textContent = action.promptLabel || action.description || 'Bitte Wert eingeben.';
+      modalInput.value = '';
+      modalInput.placeholder = action.placeholder || '';
+      modalBackdrop.classList.add('open');
+      modalBackdrop.setAttribute('aria-hidden', 'false');
+      setTimeout(() => modalInput.focus(), 0);
+    }
+
+    function closePrompt() {
+      modalBackdrop.classList.remove('open');
+      modalBackdrop.setAttribute('aria-hidden', 'true');
+      pendingTemplate = null;
+    }
+
+    function sendPromptValue() {
+      const value = modalInput.value.trim();
+      if (!value || !pendingTemplate) return;
+      const command = pendingTemplate.replaceAll('{value}', value);
+      closePrompt();
+      sendCommand(command);
+    }
+
+    function loadDashboard() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORE_DASHBOARD) || 'null');
+        if (Array.isArray(saved) && saved.length) {
+          return saved.filter(id => ACTION_BY_ID[id]);
+        }
+      } catch (_) {}
+      return [...DEFAULT_DASHBOARD];
+    }
+
+    function saveDashboard() {
+      localStorage.setItem(STORE_DASHBOARD, JSON.stringify(dashboardActions));
+    }
+
+    function createButtonForAction(action, label) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label || action.label;
+      if (action.variant) button.classList.add(action.variant);
+      button.addEventListener('click', () => runAction(action));
+      return button;
+    }
+
+    function renderDashboard() {
+      dashboardGrid.innerHTML = '';
+      const columns = localStorage.getItem(STORE_COLUMNS) || 'auto';
+      dashboardColumns.value = columns;
+      dashboardGrid.classList.toggle('auto', columns === 'auto');
+      if (columns === 'auto') {
+        dashboardGrid.style.removeProperty('--dashboard-columns');
+      } else {
+        dashboardGrid.style.setProperty('--dashboard-columns', columns);
+      }
+
+      dashboardActions.forEach((id, index) => {
+        const action = ACTION_BY_ID[id];
+        if (!action) return;
+        const tile = document.createElement('article');
+        tile.className = 'tile';
+
+        const top = document.createElement('div');
+        top.className = 'tile-top';
+        const text = document.createElement('div');
+        const title = document.createElement('div');
+        title.className = 'tile-title';
+        title.textContent = action.label;
+        const desc = document.createElement('div');
+        desc.className = 'tile-desc';
+        desc.textContent = action.description || '';
+        text.appendChild(title);
+        text.appendChild(desc);
+        const tag = document.createElement('span');
+        tag.className = 'category-label';
+        tag.textContent = action.category;
+        top.appendChild(text);
+        top.appendChild(tag);
+
+        const actionButton = createButtonForAction(action, action.template ? 'Ausführen…' : 'Ausführen');
+        actionButton.classList.add('tile-action-main');
+
+        const controls = document.createElement('div');
+        controls.className = 'tile-actions';
+        const up = document.createElement('button');
+        up.type = 'button';
+        up.textContent = '↑';
+        up.title = 'Nach oben';
+        up.disabled = index === 0;
+        up.addEventListener('click', () => moveDashboardAction(index, -1));
+        const down = document.createElement('button');
+        down.type = 'button';
+        down.textContent = '↓';
+        down.title = 'Nach unten';
+        down.disabled = index === dashboardActions.length - 1;
+        down.addEventListener('click', () => moveDashboardAction(index, 1));
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = 'Entfernen';
+        remove.className = 'ghost';
+        remove.addEventListener('click', () => removeDashboardAction(id));
+        controls.append(up, down, remove);
+
+        tile.append(top, actionButton, controls);
+        dashboardGrid.appendChild(tile);
+      });
+
+      renderActionPicker();
+    }
+
+    function renderActionPicker() {
+      actionPicker.innerHTML = '';
+      ACTIONS.forEach(action => {
+        const item = document.createElement('div');
+        item.className = 'picker-item';
+        const meta = document.createElement('div');
+        meta.className = 'picker-meta';
+        const title = document.createElement('strong');
+        title.textContent = action.label;
+        const cat = document.createElement('span');
+        cat.className = 'category-label';
+        cat.textContent = action.category;
+        meta.append(title, cat);
+        const desc = document.createElement('div');
+        desc.className = 'tile-desc';
+        desc.textContent = action.description || '';
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.textContent = dashboardActions.includes(action.id) ? 'Bereits im Dashboard' : 'Hinzufügen';
+        add.disabled = dashboardActions.includes(action.id);
+        add.addEventListener('click', () => addDashboardAction(action.id));
+        item.append(meta, desc, add);
+        actionPicker.appendChild(item);
+      });
+    }
+
+    function addDashboardAction(id) {
+      if (!ACTION_BY_ID[id] || dashboardActions.includes(id)) return;
+      dashboardActions.push(id);
+      saveDashboard();
+      renderDashboard();
+    }
+
+    function removeDashboardAction(id) {
+      dashboardActions = dashboardActions.filter(item => item !== id);
+      saveDashboard();
+      renderDashboard();
+    }
+
+    function moveDashboardAction(index, direction) {
+      const next = index + direction;
+      if (next < 0 || next >= dashboardActions.length) return;
+      [dashboardActions[index], dashboardActions[next]] = [dashboardActions[next], dashboardActions[index]];
+      saveDashboard();
+      renderDashboard();
+    }
+
+    function applyConsoleSize(size) {
+      document.body.classList.toggle('console-compact', size === 'compact');
+      document.body.classList.toggle('console-large', size === 'large');
+      localStorage.setItem(STORE_CONSOLE_SIZE, size);
+    }
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      sendCommand(input.value);
+    });
+
+    document.addEventListener('click', event => {
+      const button = event.target.closest('[data-action-id]');
+      if (!button) return;
+      runAction(ACTION_BY_ID[button.dataset.actionId]);
+    });
+
+    document.querySelectorAll('[data-tab]').forEach(button => {
+      button.addEventListener('click', () => {
+        const tab = button.dataset.tab;
+        document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item === button));
+        document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab));
+      });
+    });
+
+    dashboardColumns.addEventListener('change', () => {
+      localStorage.setItem(STORE_COLUMNS, dashboardColumns.value);
+      renderDashboard();
+    });
+
+    resetDashboard.addEventListener('click', () => {
+      dashboardActions = [...DEFAULT_DASHBOARD];
+      saveDashboard();
+      renderDashboard();
+    });
+
+    document.querySelectorAll('[data-console-size]').forEach(button => {
+      button.addEventListener('click', () => applyConsoleSize(button.dataset.consoleSize));
+    });
+
+    clearLog.addEventListener('click', () => {
+      log.innerHTML = '';
+      appendLine('[WinoMC Console] Anzeige geleert. Der echte Server-Log bleibt erhalten.', 'ok');
+    });
+
+    modalCancel.addEventListener('click', closePrompt);
+    modalSend.addEventListener('click', sendPromptValue);
+    modalBackdrop.addEventListener('click', (event) => {
+      if (event.target === modalBackdrop) closePrompt();
+    });
+    modalInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') sendPromptValue();
+      if (event.key === 'Escape') closePrompt();
+    });
+
+    input.addEventListener('keydown', event => {
+      if (event.key === 'ArrowUp') {
+        if (historyIndex > 0) historyIndex--;
+        input.value = history[historyIndex] || input.value;
+        event.preventDefault();
+      }
+      if (event.key === 'ArrowDown') {
+        if (historyIndex < history.length) historyIndex++;
+        input.value = history[historyIndex] || '';
+        event.preventDefault();
+      }
+    });
+
+    function connectLogs() {
+      const source = new EventSource('./api/logs');
+      source.onopen = () => {
+        statusEl.textContent = 'Live verbunden';
+        statusDot.classList.add('ok');
+      };
+      source.onmessage = event => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.line) appendLine(data.line);
+        } catch (_) {}
+      };
+      source.onerror = () => {
+        statusEl.textContent = 'Verbindung wird neu aufgebaut...';
+        statusDot.classList.remove('ok');
+      };
+    }
+
+    applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal');
+    renderDashboard();
+    connectLogs();
+  </script>
+</body>
+</html>
+"""
+
+
+def client_allowed(client_ip: str) -> bool:
+    if not ALLOWED_PROXIES:
+        return True
+    return client_ip in ALLOWED_PROXIES
+
+
+def read_recent_lines(path: str, limit: int):
+    lines = deque(maxlen=max(1, limit))
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                lines.append(line.rstrip("\n"))
+    except FileNotFoundError:
+        return []
+    return list(lines)
+
+
+def sanitize_command(command: str) -> str:
+    command = command.replace("\x00", "").strip()
+    if command.startswith("/"):
+        command = command[1:].strip()
+    command = "".join(ch for ch in command if ch == "\t" or ord(ch) >= 32)
+    if len(command) > MAX_COMMAND_LENGTH:
+        raise ValueError(f"Befehl ist zu lang. Maximum: {MAX_COMMAND_LENGTH} Zeichen.")
+    if not command:
+        raise ValueError("Leerer Befehl.")
+    return command
+
+
+def write_command(command: str):
+    if not os.path.exists(FIFO_PATH):
+        raise RuntimeError("Console FIFO existiert noch nicht. Läuft der Bedrock Server bereits?")
+    if not os.path.exists(LOG_PATH):
+        open(LOG_PATH, "a", encoding="utf-8").close()
+
+    fd = os.open(FIFO_PATH, os.O_WRONLY | os.O_NONBLOCK)
+    try:
+        os.write(fd, (command + "\n").encode("utf-8"))
+    finally:
+        os.close(fd)
+
+    with open(LOG_PATH, "a", encoding="utf-8", errors="replace") as log_handle:
+        log_handle.write(f"[WinoMC Console] > {command}\n")
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "WinoMCConsole/1.0"
+
+    def log_message(self, fmt, *args):
+        sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
+        sys.stdout.flush()
+
+    def _forbidden_if_needed(self) -> bool:
+        client_ip = self.client_address[0]
+        if client_allowed(client_ip):
+            return False
+        self.send_response(403)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Forbidden\n")
+        return True
+
+    def _send_json(self, status: int, payload: dict):
+        data = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+    def _read_request_body(self, max_bytes: int = 4096) -> str:
+        """Read a small request body.
+
+        Home-Assistant-Ingress may proxy POST requests without a normal
+        Content-Length header. The UI therefore also sends the command as
+        query parameter, but this keeps JSON/form/plain-text bodies working.
+        """
+        content_length = self.headers.get("Content-Length")
+        if content_length:
+            length = int(content_length)
+            if length > max_bytes:
+                raise ValueError("Anfrage ist zu groß.")
+            return self.rfile.read(length).decode("utf-8", errors="replace")
+
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            chunks = []
+            total = 0
+            while True:
+                size_line = self.rfile.readline().strip()
+                if not size_line:
+                    continue
+                chunk_size = int(size_line.split(b";", 1)[0], 16)
+                if chunk_size == 0:
+                    self.rfile.readline()
+                    break
+                total += chunk_size
+                if total > max_bytes:
+                    raise ValueError("Anfrage ist zu groß.")
+                chunks.append(self.rfile.read(chunk_size))
+                self.rfile.read(2)
+            return b"".join(chunks).decode("utf-8", errors="replace")
+
+        return ""
+
+    def _extract_command(self) -> str:
+        parsed = urlparse(self.path)
+        query = parse_qs(parsed.query)
+        query_command = query.get("command", [""])[0]
+        if query_command.strip():
+            return query_command
+
+        body = self._read_request_body()
+        if not body:
+            return ""
+
+        content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if content_type == "application/json":
+            payload = json.loads(body or "{}")
+            return str(payload.get("command", ""))
+        if content_type == "application/x-www-form-urlencoded":
+            return parse_qs(body).get("command", [""])[0]
+        return body
+
+    def do_GET(self):
+        if self._forbidden_if_needed():
+            return
+
+        path = urlparse(self.path).path
+        if path in ("/", "", "/index.html"):
+            data = INDEX_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
+        if path.endswith("/api/status") or path == "/api/status":
+            self._send_json(200, {
+                "ok": True,
+                "fifo_exists": os.path.exists(FIFO_PATH),
+                "log_exists": os.path.exists(LOG_PATH),
+            })
+            return
+
+        if path.endswith("/api/logs") or path == "/api/logs":
+            self._stream_logs()
+            return
+
+        self.send_error(404)
+
+    def do_POST(self):
+        if self._forbidden_if_needed():
+            return
+
+        path = urlparse(self.path).path
+        if not (path.endswith("/api/command") or path == "/api/command"):
+            self.send_error(404)
+            return
+
+        try:
+            command = sanitize_command(self._extract_command())
+            write_command(command)
+            self._send_json(200, {"ok": True, "command": command})
+        except Exception as exc:
+            self._send_json(400, {"ok": False, "error": str(exc)})
+
+    def _sse_send(self, payload: dict):
+        data = json.dumps(payload, ensure_ascii=False)
+        self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+        self.wfile.flush()
+
+    def _stream_logs(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+
+        for line in read_recent_lines(LOG_PATH, HISTORY_LIMIT):
+            self._sse_send({"line": line})
+
+        position = 0
+        try:
+            position = os.path.getsize(LOG_PATH)
+        except OSError:
+            position = 0
+
+        last_heartbeat = time.time()
+        while True:
+            try:
+                size = os.path.getsize(LOG_PATH)
+                if size < position:
+                    position = 0
+
+                if size > position:
+                    with open(LOG_PATH, "r", encoding="utf-8", errors="replace") as handle:
+                        handle.seek(position)
+                        for line in handle:
+                            self._sse_send({"line": line.rstrip("\n")})
+                        position = handle.tell()
+
+                if time.time() - last_heartbeat > 15:
+                    self.wfile.write(b": heartbeat\n\n")
+                    self.wfile.flush()
+                    last_heartbeat = time.time()
+
+                time.sleep(0.5)
+            except (BrokenPipeError, ConnectionResetError):
+                break
+            except Exception as exc:
+                try:
+                    self._sse_send({"line": f"[WinoMC Console] Log Stream Fehler: {exc}"})
+                except Exception:
+                    break
+                time.sleep(1)
+
+
+def main():
+    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+    open(LOG_PATH, "a", encoding="utf-8").close()
+
+    httpd = ThreadingHTTPServer((HOST, PORT), Handler)
+
+    def shutdown(_signum, _frame):
+        httpd.shutdown()
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
+    print(f"[WinoMC Console] Web console listening on {HOST}:{PORT}", flush=True)
+    httpd.serve_forever(poll_interval=0.5)
+
+
+if __name__ == "__main__":
+    main()

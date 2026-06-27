@@ -1,0 +1,129 @@
+blueprint:
+  name: WinoMC - Add-ons automatisch updaten und neu starten
+  description: >
+    Prüft täglich zu einer gewünschten Uhrzeit die Update-Entities der WinoMC
+    Add-ons. Wenn ein Update verfügbar ist, wird update.install ausgeführt.
+    Danach werden die Add-ons kontrolliert neu gestartet.
+
+    Die Update-Entity-Namen können je nach Home-Assistant-Installation anders
+    heißen. Bitte in Einstellungen -> Geräte & Dienste -> Entitäten suchen.
+  domain: automation
+  author: Kasawino / WinoMC
+  homeassistant:
+    min_version: 2024.10.0
+  input:
+    run_time:
+      name: Update-Zeitfenster
+      description: Uhrzeit, zu der Updates installiert werden sollen.
+      default: "04:30:00"
+      selector:
+        time:
+    bedrock_update_entity:
+      name: Bedrock Update-Entity
+      description: Update-Entity des WinoMC Bedrock Server Add-ons.
+      selector:
+        entity:
+          filter:
+            domain: update
+    friend_update_entity:
+      name: Friend Broadcast Update-Entity
+      description: Update-Entity des WinoMC Friend Broadcast Add-ons.
+      selector:
+        entity:
+          filter:
+            domain: update
+    bedrock_app:
+      name: Bedrock App-Slug
+      default: winomc-bedrock
+      selector:
+        text:
+    friend_app:
+      name: Friend Broadcast App-Slug
+      default: winomc-friend-broadcast
+      selector:
+        text:
+    include_bedrock:
+      name: Bedrock aktualisieren
+      default: true
+      selector:
+        boolean:
+    include_friend:
+      name: Friend Broadcast aktualisieren
+      default: true
+      selector:
+        boolean:
+    backup:
+      name: Backup vor Update anfordern
+      description: Wird an update.install übergeben. Bei Add-ons normalerweise sinnvoll.
+      default: true
+      selector:
+        boolean:
+    restart_delay:
+      name: Wartezeit vor Neustart
+      description: Kleine Pause nach update.install, bevor die Add-ons neu gestartet werden.
+      default:
+        seconds: 30
+      selector:
+        duration:
+    restart_friend_after_bedrock:
+      name: Friend Broadcast nach Bedrock ebenfalls neu starten
+      description: Sinnvoll, weil Friend Broadcast den Bedrock-Server aktiv abfragt.
+      default: true
+      selector:
+        boolean:
+
+mode: single
+
+triggers:
+  - trigger: time
+    at: !input run_time
+
+variables:
+  bedrock_update_entity: !input bedrock_update_entity
+  friend_update_entity: !input friend_update_entity
+  bedrock_app: !input bedrock_app
+  friend_app: !input friend_app
+  include_bedrock: !input include_bedrock
+  include_friend: !input include_friend
+  restart_friend_after_bedrock: !input restart_friend_after_bedrock
+
+actions:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ include_bedrock and is_state(bedrock_update_entity, 'on') }}"
+        sequence:
+          - action: update.install
+            target:
+              entity_id: "{{ bedrock_update_entity }}"
+            data:
+              backup: !input backup
+          - delay: !input restart_delay
+          - action: hassio.app_restart
+            data:
+              app: "{{ bedrock_app }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ restart_friend_after_bedrock }}"
+                sequence:
+                  - delay:
+                      seconds: 20
+                  - action: hassio.app_restart
+                    data:
+                      app: "{{ friend_app }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ include_friend and is_state(friend_update_entity, 'on') }}"
+        sequence:
+          - action: update.install
+            target:
+              entity_id: "{{ friend_update_entity }}"
+            data:
+              backup: !input backup
+          - delay: !input restart_delay
+          - action: hassio.app_restart
+            data:
+              app: "{{ friend_app }}"

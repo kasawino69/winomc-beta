@@ -1,0 +1,78 @@
+blueprint:
+  name: WinoMC - Friend Fehler Stack Neustart
+  description: >
+    Reagiert auf Health-Events aus WinoMC Friend Broadcast.
+    Wenn Friend Broadcast meldet, dass Bedrock nicht erreichbar ist,
+    wird zuerst Bedrock und danach Friend Broadcast neu gestartet.
+  domain: automation
+
+  input:
+    bedrock_app:
+      name: Vollständiger Bedrock Add-on Slug
+      default: ""
+      selector:
+        text:
+
+    friend_app:
+      name: Vollständiger Friend Broadcast Add-on Slug
+      default: ""
+      selector:
+        text:
+
+    friend_delay:
+      name: Wartezeit nach Bedrock-Neustart
+      default: 90
+      selector:
+        number:
+          min: 10
+          max: 600
+          unit_of_measurement: Sekunden
+          mode: slider
+
+    cooldown:
+      name: Cooldown nach Neustart
+      description: >
+        Verhindert Neustart-Schleifen, wenn Friend Broadcast denselben Fehler
+        mehrfach hintereinander meldet.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: Minuten
+          mode: slider
+
+mode: single
+
+trigger:
+  - platform: event
+    event_type: winomc_addon_health
+
+variables:
+  bedrock_app: !input bedrock_app
+  friend_app: !input friend_app
+
+condition:
+  - condition: template
+    value_template: "{{ trigger.event.data.addon | default('') == 'friend-broadcast' }}"
+  - condition: template
+    value_template: "{{ trigger.event.data.reason | default('') == 'bedrock_unreachable' }}"
+  - condition: template
+    value_template: "{{ bedrock_app | trim != '' }}"
+  - condition: template
+    value_template: "{{ friend_app | trim != '' }}"
+
+action:
+  - action: hassio.app_restart
+    data:
+      app: "{{ bedrock_app }}"
+
+  - delay:
+      seconds: !input friend_delay
+
+  - action: hassio.app_restart
+    data:
+      app: "{{ friend_app }}"
+
+  - delay:
+      minutes: !input cooldown

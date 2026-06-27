@@ -1,0 +1,73 @@
+blueprint:
+  name: WinoMC Bedrock - Geplanter Neustart
+  description: >
+    Startet gezielt nur das WinoMC Bedrock Server Add-on neu.
+    Es werden keine Home-Assistant-Updates und keine anderen Add-ons aktualisiert.
+    Sinnvoll, wenn der Bedrock-Server beim Start selbst seine Version oder das Docker-Image prüft.
+  domain: automation
+
+  input:
+    bedrock_app:
+      name: Bedrock Add-on Slug
+      description: >
+        Der Supervisor-Slug des Bedrock Add-ons.
+        Meist winomc-bedrock. Falls Home Assistant einen Repository-Präfix nutzt,
+        den echten Slug auf der Add-on-Seite prüfen.
+      default: winomc-bedrock
+      selector:
+        text:
+
+    restart_time:
+      name: Neustartzeit
+      description: Zeitpunkt für den täglichen Neustart.
+      default: "04:00:00"
+      selector:
+        time:
+
+    pre_restart_command:
+      name: Befehl vor Neustart
+      description: >
+        Optionaler Minecraft-Konsolenbefehl vor dem Neustart.
+        Beispiel: say Server startet in 30 Sekunden neu
+        Leer lassen, wenn nichts gesendet werden soll.
+      default: "say Server startet in 30 Sekunden neu"
+      selector:
+        text:
+
+    pre_restart_delay:
+      name: Wartezeit nach Vorab-Befehl
+      description: Sekunden zwischen Vorab-Befehl und Neustart.
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 300
+          unit_of_measurement: Sekunden
+          mode: slider
+
+mode: single
+
+trigger:
+  - platform: time
+    at: !input restart_time
+
+variables:
+  bedrock_app: !input bedrock_app
+  pre_restart_command: !input pre_restart_command
+
+action:
+  - if:
+      - condition: template
+        value_template: "{{ pre_restart_command | trim != '' }}"
+    then:
+      - action: hassio.app_stdin
+        data:
+          app: "{{ bedrock_app }}"
+          input:
+            command: "{{ pre_restart_command }}"
+      - delay:
+          seconds: !input pre_restart_delay
+
+  - action: hassio.app_restart
+    data:
+      app: "{{ bedrock_app }}"

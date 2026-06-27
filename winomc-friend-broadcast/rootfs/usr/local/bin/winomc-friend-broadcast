@@ -1,0 +1,128 @@
+#!/bin/sh
+set -eu
+
+OPTIONS_FILE="/data/options.json"
+CONFIG_DIR="/config"
+CONFIG_FILE="${CONFIG_DIR}/config.yml"
+
+mkdir -p "${CONFIG_DIR}"
+
+TARGET_IP="$(jq -r '.TARGET_IP // "127.0.0.1"' "${OPTIONS_FILE}")"
+TARGET_PORT="$(jq -r '.TARGET_PORT // 19132' "${OPTIONS_FILE}")"
+HOST_NAME="$(jq -r '.HOST_NAME // "WinoMC Server"' "${OPTIONS_FILE}")"
+WORLD_NAME="$(jq -r '.WORLD_NAME // "WinoMC"' "${OPTIONS_FILE}")"
+PLAYERS="$(jq -r '.PLAYERS // 0' "${OPTIONS_FILE}")"
+MAX_PLAYERS="$(jq -r '.MAX_PLAYERS // 10' "${OPTIONS_FILE}")"
+
+QUERY_SERVER="$(jq -r '.QUERY_SERVER // true' "${OPTIONS_FILE}")"
+WEB_QUERY_FALLBACK="$(jq -r '.WEB_QUERY_FALLBACK // false' "${OPTIONS_FILE}")"
+CONFIG_FALLBACK="$(jq -r '.CONFIG_FALLBACK // true' "${OPTIONS_FILE}")"
+SESSION_UPDATE_INTERVAL="$(jq -r '.SESSION_UPDATE_INTERVAL // 30' "${OPTIONS_FILE}")"
+
+AUTO_FOLLOW="$(jq -r '.AUTO_FOLLOW // true' "${OPTIONS_FILE}")"
+AUTO_UNFOLLOW="$(jq -r '.AUTO_UNFOLLOW // false' "${OPTIONS_FILE}")"
+INITIAL_INVITE="$(jq -r '.INITIAL_INVITE // true' "${OPTIONS_FILE}")"
+FRIEND_SYNC_UPDATE_INTERVAL="$(jq -r '.FRIEND_SYNC_UPDATE_INTERVAL // 60' "${OPTIONS_FILE}")"
+EXPIRE_FRIENDS="$(jq -r '.EXPIRE_FRIENDS // false' "${OPTIONS_FILE}")"
+EXPIRY_DAYS="$(jq -r '.EXPIRY_DAYS // 15' "${OPTIONS_FILE}")"
+EXPIRY_CHECK="$(jq -r '.EXPIRY_CHECK // 1800' "${OPTIONS_FILE}")"
+
+DEBUG_MODE="$(jq -r '.DEBUG_MODE // false' "${OPTIONS_FILE}")"
+SUPPRESS_SESSION_UPDATE_MESSAGE="$(jq -r '.SUPPRESS_SESSION_UPDATE_MESSAGE // true' "${OPTIONS_FILE}")"
+RESET_AUTH_CACHE="$(jq -r '.RESET_AUTH_CACHE // false' "${OPTIONS_FILE}")"
+
+if [ "${RESET_AUTH_CACHE}" = "true" ]; then
+  echo "RESET_AUTH_CACHE=true -> removing saved Microsoft/Xbox login cache"
+  rm -rf "${CONFIG_DIR}/cache"
+fi
+
+send_ha_health_event() {
+  reason="$1"
+  message="$2"
+
+  if [ -z "${SUPERVISOR_TOKEN:-}" ]; then
+    echo "WinoMC health event skipped: SUPERVISOR_TOKEN missing"
+    return 0
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "WinoMC health event skipped: curl not installed"
+    return 0
+  fi
+
+  payload="$(jq -n \
+    --arg addon "friend-broadcast" \
+    --arg reason "${reason}" \
+    --arg message "${message}" \
+    '{
+      addon: $addon,
+      reason: $reason,
+      message: $message
+    }'
+  )"
+
+  curl -sS \
+    -X POST \
+    -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+    -H "Content-Type: application/json" \
+    "http://supervisor/core/api/events/winomc_addon_health" \
+    -d "${payload}" >/dev/null || true
+}
+
+echo "Starting WinoMC Friend Broadcast"
+echo "Target server: ${TARGET_IP}:${TARGET_PORT}"
+echo "Host name: ${HOST_NAME}"
+echo "World name: ${WORLD_NAME}"
+echo "Query server: ${QUERY_SERVER}"
+
+cat > "${CONFIG_FILE}" <<EOF
+session:
+  update-interval: ${SESSION_UPDATE_INTERVAL}
+  query-server: ${QUERY_SERVER}
+  web-query-fallback: ${WEB_QUERY_FALLBACK}
+  config-fallback: ${CONFIG_FALLBACK}
+  session-info:
+    host-name: "${HOST_NAME}"
+    world-name: "${WORLD_NAME}"
+    players: ${PLAYERS}
+    max-players: ${MAX_PLAYERS}
+    ip: "${TARGET_IP}"
+    port: ${TARGET_PORT}
+
+friend-sync:
+  update-interval: ${FRIEND_SYNC_UPDATE_INTERVAL}
+  auto-follow: ${AUTO_FOLLOW}
+  auto-unfollow: ${AUTO_UNFOLLOW}
+  initial-invite: ${INITIAL_INVITE}
+  expiry:
+    enabled: ${EXPIRE_FRIENDS}
+    days: ${EXPIRY_DAYS}
+    check: ${EXPIRY_CHECK}
+
+notifications:
+  enabled: false
+  webhook-url: ""
+  session-expired-message: |
+    Xbox Session expired, sign in again to update it.
+
+    Use the following link to sign in: %s
+    Enter the code: %s
+  friend-restriction-message: "%s (%s) has restrictions in place that prevent them from being friends with our account."
+
+debug-mode: ${DEBUG_MODE}
+suppress-session-update-message: ${SUPPRESS_SESSION_UPDATE_MESSAGE}
+config-version: 2
+EOF
+
+cd "${CONFIG_DIR}"
+
+java -jar /opt/app/MCXboxBroadcastStandalone.jar 2>&1 | while IFS= read -r line; do
+  echo "${line}"
+
+  case "${line}" in
+    *"Failed to ping server, falling back to config values"*)
+      echo "WinoMC health: Bedrock unreachable detected"
+      send_ha_health_event "bedrock_unreachable" "${line}"
+      ;;
+  esac
+done

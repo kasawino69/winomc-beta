@@ -1,0 +1,51 @@
+blueprint:
+  name: WinoMC Bedrock - Geplanter Konsolenbefehl
+  description: >
+    Führt zu einer festen Uhrzeit einen Bedrock-Konsolenbefehl über die
+    Home-Assistant-Supervisor-Aktion hassio.app_stdin aus.
+
+    Voraussetzung:
+    Das WinoMC-Bedrock-Add-on muss stdin unterstützen. Dafür im Add-on config.yaml
+    stdin: true setzen und den Entry-Point so erweitern, dass er JSON wie
+    {"command":"say hello"} an send-command weitergibt.
+  domain: automation
+  author: Kasawino / WinoMC
+  homeassistant:
+    min_version: 2024.10.0
+  input:
+    bedrock_app:
+      name: Bedrock App-Slug
+      description: >
+        App/Add-on-Slug aus Home Assistant. Je nach Installation kann das z. B.
+        winomc-bedrock, local_winomc-bedrock oder ein Repository-Präfix plus
+        _winomc-bedrock sein. Den exakten Wert findet man auf der Add-on-Seite.
+      default: winomc-bedrock
+      selector:
+        text:
+    run_time:
+      name: Uhrzeit
+      description: Zeitpunkt der täglichen Ausführung.
+      default: "06:00:00"
+      selector:
+        time:
+    command:
+      name: Konsolenbefehl
+      description: Bedrock-Serverbefehl ohne führenden Slash, z. B. say hello.
+      default: "say hello"
+      selector:
+        text:
+          multiline: false
+
+mode: queued
+max: 5
+
+triggers:
+  - trigger: time
+    at: !input run_time
+
+actions:
+  - action: hassio.app_stdin
+    data:
+      app: !input bedrock_app
+      input:
+        command: !input command

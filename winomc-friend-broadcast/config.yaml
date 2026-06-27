@@ -1,0 +1,67 @@
+name: WinoMC Friend Broadcast
+description: Zeigt den WinoMC Bedrock Server über Xbox Live/Freunde an
+version: 1.0.1
+slug: winomc-friend-broadcast
+init: false
+boot: auto
+startup: application
+homeassistant_api: true
+arch:
+  - amd64
+  - aarch64
+host_network: true
+
+options:
+  TARGET_IP: "127.0.0.1"
+  TARGET_PORT: 19132
+  HOST_NAME: "WinoMC Server"
+  WORLD_NAME: "world"
+  PLAYERS: 0
+  MAX_PLAYERS: 10
+
+  QUERY_SERVER: true
+  WEB_QUERY_FALLBACK: false
+  CONFIG_FALLBACK: true
+  SESSION_UPDATE_INTERVAL: 30
+
+  AUTO_FOLLOW: true
+  AUTO_UNFOLLOW: false
+  INITIAL_INVITE: true
+  FRIEND_SYNC_UPDATE_INTERVAL: 60
+  EXPIRE_FRIENDS: false
+  EXPIRY_DAYS: 15
+  EXPIRY_CHECK: 1800
+
+  DEBUG_MODE: false
+  SUPPRESS_SESSION_UPDATE_MESSAGE: true
+  RESET_AUTH_CACHE: false
+
+schema:
+  TARGET_IP: str
+  TARGET_PORT: port
+  HOST_NAME: str
+  WORLD_NAME: str
+  PLAYERS: int
+  MAX_PLAYERS: int
+
+  QUERY_SERVER: bool
+  WEB_QUERY_FALLBACK: bool
+  CONFIG_FALLBACK: bool
+  SESSION_UPDATE_INTERVAL: int
+
+  AUTO_FOLLOW: bool
+  AUTO_UNFOLLOW: bool
+  INITIAL_INVITE: bool
+  FRIEND_SYNC_UPDATE_INTERVAL: int
+  EXPIRE_FRIENDS: bool
+  EXPIRY_DAYS: int
+  EXPIRY_CHECK: int
+
+  DEBUG_MODE: bool
+  SUPPRESS_SESSION_UPDATE_MESSAGE: bool
+  RESET_AUTH_CACHE: bool
+
+backup: cold
+
+map:
+  - addon_config:rw
