@@ -5,6 +5,10 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.3.9
+
+Umstellung auf Native
+
 ### 1.3.8.1
 
 Fehlerbehebungen
