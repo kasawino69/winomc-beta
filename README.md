@@ -1,4 +1,4 @@
-# [BETA] Home Assistant Minecraft Add-ons
+# [BETA] WinoMC Minecraft Server Home Assistant Add-ons
 
 Eine Sammlung von Home Assistant Add-ons für Minecraft-Server und Minecraft Server Automatisierungen.
 

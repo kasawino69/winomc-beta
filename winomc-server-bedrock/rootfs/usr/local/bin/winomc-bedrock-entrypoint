@@ -181,17 +181,18 @@ start_console_web
 # Die Ausgabe wird zusätzlich in eine Logdatei geschrieben, damit die Ingress-Konsole live mitlesen kann.
 : > "${CONSOLE_LOG}"
 echo "[WinoMC Console] Log gestartet" >> "${CONSOLE_LOG}"
-WINOMC_RUNTIME_MODE="${WINOMC_RUNTIME_MODE:-itzg}"
+WINOMC_RUNTIME_MODE="${WINOMC_RUNTIME_MODE:-native}"
 export SERVER_DATA_DIR
+
+if [ "${WINOMC_RUNTIME_MODE}" != "native" ]; then
+  echo "WARN: WINOMC_RUNTIME_MODE=${WINOMC_RUNTIME_MODE} is no longer available in the native image"
+  echo "WARN: Falling back to WINOMC_RUNTIME_MODE=native"
+  WINOMC_RUNTIME_MODE="native"
+fi
 
 echo "WINOMC_RUNTIME_MODE=${WINOMC_RUNTIME_MODE}"
 
-if [ "${WINOMC_RUNTIME_MODE}" = "native" ]; then
-  /usr/local/bin/winomc-native-start < "${COMMAND_FIFO}" 2>&1 | tee -a "${CONSOLE_LOG}" &
-else
-  /opt/bedrock-entry.sh < "${COMMAND_FIFO}" 2>&1 | tee -a "${CONSOLE_LOG}" &
-fi
-
+/usr/local/bin/winomc-native-start < "${COMMAND_FIFO}" 2>&1 | tee -a "${CONSOLE_LOG}" &
 BEDROCK_PID="$!"
 
 # FIFO dauerhaft offen halten, damit Bedrock keinen EOF bekommt.

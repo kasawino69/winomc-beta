@@ -5,6 +5,15 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.4.0
+
+* Docker-Basis von `itzg/minecraft-bedrock-server` auf eine eigene Ubuntu-basierte WinoMC-Runtime umgestellt
+* Native Runtime ist jetzt der Standard für den Bedrock Server
+* `itzg`-Runtime wird nicht mehr benötigt und bei alten Einstellungen automatisch auf `native` umgeleitet
+* Architektur vorübergehend auf `amd64` begrenzt, da der native Mojang Bedrock Dedicated Server ohne itzg-/Box64-Hilfen getestet wird
+* Benötigte Systempakete für nativen BDS-Start direkt im WinoMC-Image ergänzt
+* Vorbereitung für eine spätere eigene `ghcr.io/kasawino69/winomc-bedrock-base` fortgesetzt
+
 ### 1.3.9
 
 Umstellung auf Native

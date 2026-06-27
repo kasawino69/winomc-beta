@@ -1,6 +1,5 @@
 {
   "build_from": {
-    "amd64": "itzg/minecraft-bedrock-server:stable",
-    "aarch64": "itzg/minecraft-bedrock-server:stable"
-  },
+    "amd64": "ubuntu:22.04"
+  }
 }
