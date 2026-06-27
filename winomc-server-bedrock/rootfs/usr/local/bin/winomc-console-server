@@ -245,11 +245,12 @@ INDEX_HTML = r"""<!doctype html>
     body.sidebar-collapsed .sidebar-toggle .toggle-label { display: none; }
     .workbench-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .card-header { position: relative; }
-    .card-tools { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+    .card-tools { display: none; gap: 6px; margin-left: auto; align-items: center; }
+    body.desktop-mode .card[data-card-id] > .card-header .card-tools { display: flex; }
     .card-tools button { padding: 5px 8px; min-width: 30px; font-size: 12px; border-radius: 8px; }
     .card.collapsed > *:not(.card-header) { display: none !important; }
-    .card.maximized { position: fixed; inset: 16px; z-index: 45; overflow: auto; box-shadow: 0 28px 90px rgba(0,0,0,.65); background: rgba(15,23,42,.98); }
-    body.has-maximized-card::after { content: ""; position: fixed; inset: 0; z-index: 44; background: rgba(2,6,23,.65); backdrop-filter: blur(8px); }
+    body.desktop-mode .card.maximized { position: fixed; inset: 16px; z-index: 45; overflow: auto; box-shadow: 0 28px 90px rgba(0,0,0,.65); background: rgba(15,23,42,.98); }
+    body.desktop-mode.has-maximized-card::after { content: ""; position: fixed; inset: 0; z-index: 44; background: rgba(2,6,23,.65); backdrop-filter: blur(8px); }
     .split-resizer { border: 1px solid rgba(51,65,85,.72); border-radius: 999px; background: linear-gradient(180deg, rgba(34,197,94,.42), rgba(96,165,250,.26)); cursor: col-resize; min-height: 100%; position: relative; touch-action: none; }
     .split-resizer::after { content: ""; position: absolute; top: 50%; left: 50%; width: 3px; height: 46px; transform: translate(-50%, -50%); border-left: 1px solid rgba(255,255,255,.5); border-right: 1px solid rgba(255,255,255,.28); }
     .split-resizer:hover, .split-resizer.dragging { box-shadow: 0 0 0 4px rgba(34,197,94,.13); border-color: rgba(34,197,94,.55); }
@@ -398,12 +399,12 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     .desktop-window-bar {
+      display: none;
       position: sticky;
       top: 0;
       z-index: 20;
       margin: 0 -14px 12px;
       padding: 9px 10px;
-      display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
@@ -413,6 +414,10 @@ INDEX_HTML = r"""<!doctype html>
       cursor: grab;
       touch-action: none;
       user-select: none;
+    }
+
+    body.desktop-mode .desktop-window-bar {
+      display: flex;
     }
 
     .desktop-window-bar:active {
@@ -542,25 +547,74 @@ INDEX_HTML = r"""<!doctype html>
 
     body.desktop-mode .console-dock {
       position: fixed;
-      left: auto;
-      right: 18px;
-      bottom: 58px;
-      width: min(760px, calc(100vw - 36px));
-      height: 320px;
+      left: var(--desktop-console-left, auto);
+      top: var(--desktop-console-top, auto);
+      right: var(--desktop-console-right, 18px);
+      bottom: var(--desktop-console-bottom, 58px);
+      width: var(--desktop-console-width, min(760px, calc(100vw - 36px)));
+      height: var(--desktop-console-height, 320px);
+      min-width: min(420px, calc(100vw - 18px));
+      min-height: 86px;
+      max-width: calc(100vw - 18px);
+      max-height: calc(100vh - 72px);
       border: 1px solid rgba(148, 163, 184, .30);
       border-radius: 16px;
       overflow: hidden;
       transform: none !important;
       box-shadow: 0 28px 90px rgba(0,0,0,.56);
       resize: both;
+      touch-action: none;
+    }
+
+    body.desktop-mode .console-dock.desktop-console-dragging,
+    body.desktop-mode .console-dock.desktop-console-resizing {
+      user-select: none;
+      box-shadow: 0 32px 105px rgba(0,0,0,.68), 0 0 0 2px rgba(34,197,94,.22);
     }
 
     body.desktop-mode.console-hidden .console-dock {
       display: none;
     }
 
+    body.desktop-mode.console-collapsed .console-dock {
+      height: 86px !important;
+      min-height: 86px;
+      resize: none;
+    }
+
+    body.desktop-mode.console-maximized .console-dock {
+      left: 12px !important;
+      top: 12px !important;
+      right: 12px !important;
+      bottom: 58px !important;
+      width: auto !important;
+      height: auto !important;
+      max-width: none;
+      max-height: none;
+      resize: none;
+      z-index: 60;
+    }
+
     body.desktop-mode .console-inner {
       padding: 16px 12px 12px;
+    }
+
+    body.desktop-mode.console-collapsed .console-inner {
+      grid-template-rows: auto;
+    }
+
+    body.desktop-mode .console-head {
+      cursor: grab;
+    }
+
+    body.desktop-mode .console-head:active {
+      cursor: grabbing;
+    }
+
+    body.desktop-mode .console-head button,
+    body.desktop-mode .console-head input,
+    body.desktop-mode .console-head select {
+      cursor: pointer;
     }
 
     body.desktop-mode .console-resize-handle::after {
@@ -636,12 +690,26 @@ INDEX_HTML = r"""<!doctype html>
       }
 
       body.desktop-mode .console-dock {
-        left: 8px;
-        right: 8px;
-        bottom: 64px;
-        width: auto;
-        height: min(360px, 48vh);
+        left: 8px !important;
+        top: auto !important;
+        right: 8px !important;
+        bottom: 64px !important;
+        width: auto !important;
+        height: min(360px, 48vh) !important;
         resize: none;
+      }
+
+      body.desktop-mode.console-collapsed .console-dock {
+        height: 76px !important;
+      }
+
+      body.desktop-mode.console-maximized .console-dock {
+        left: 8px !important;
+        top: 8px !important;
+        right: 8px !important;
+        bottom: 64px !important;
+        width: auto !important;
+        height: auto !important;
       }
     }
 
@@ -823,7 +891,7 @@ INDEX_HTML = r"""<!doctype html>
   <section class="console-dock" aria-label="Live Console" id="consoleDock">
     <div class="console-resize-handle" id="consoleResizeHandle" title="Konsole größer oder kleiner ziehen"></div>
     <div class="console-inner">
-      <div class="console-head"><div><h3>Live Console</h3><p>Serverausgabe und freie Befehle bleiben immer erreichbar.</p></div><div class="console-controls"><button class="soft" type="button" data-console-size="compact">Kompakt</button><button class="soft" type="button" data-console-size="normal">Normal</button><button class="soft" type="button" data-console-size="large">Groß</button><button class="soft" type="button" id="consoleCollapse">Einklappen</button><button class="soft" type="button" id="consoleMaximize">Max</button><button class="ghost" type="button" id="clearLog">Anzeige leeren</button></div></div>
+      <div class="console-head"><div><h3>Live Console</h3><p>Serverausgabe und freie Befehle bleiben immer erreichbar.</p></div><div class="console-controls"><button class="soft" type="button" data-console-size="compact">Kompakt</button><button class="soft" type="button" data-console-size="normal">Normal</button><button class="soft" type="button" data-console-size="large">Groß</button><button class="soft" type="button" id="consoleCollapse">Einklappen</button><button class="soft" type="button" id="consoleMinimize">Minimieren</button><button class="soft" type="button" id="consoleMaximize">Max</button><button class="ghost" type="button" id="clearLog">Anzeige leeren</button></div></div>
       <div id="log" aria-live="polite"></div>
       <form id="commandForm" autocomplete="off" class="command-row"><input id="command" name="command" placeholder="Freien Befehl eingeben, z. B. list, say Hallo, gamerule keepinventory true" autofocus><button type="submit" class="primary">Senden</button></form>
     </div>
@@ -880,7 +948,9 @@ INDEX_HTML = r"""<!doctype html>
     const resetWorkbenchLayout = document.getElementById('resetWorkbenchLayout');
     const consoleDock = document.getElementById('consoleDock');
     const consoleResizeHandle = document.getElementById('consoleResizeHandle');
+    const consoleHead = consoleDock ? consoleDock.querySelector('.console-head') : null;
     const consoleCollapse = document.getElementById('consoleCollapse');
+    const consoleMinimize = document.getElementById('consoleMinimize');
     const consoleMaximize = document.getElementById('consoleMaximize');
     const desktopModeToggle = document.getElementById('desktopModeToggle');
     const desktopLayer = document.getElementById('desktopLayer');
@@ -902,6 +972,7 @@ INDEX_HTML = r"""<!doctype html>
     const STORE_DESKTOP_MODE = 'winomcDesktopModeV1';
     const STORE_DESKTOP_WINDOWS = 'winomcDesktopWindowsV1';
     const STORE_DESKTOP_POSITIONS = 'winomcDesktopPositionsV1';
+    const STORE_DESKTOP_CONSOLE_RECT = 'winomcDesktopConsoleRectV1';
     const MAX_JSON_UPLOAD_SIZE = 48 * 1024 * 1024;
 
     const ACTIONS = [
@@ -1002,6 +1073,7 @@ INDEX_HTML = r"""<!doctype html>
     sidebarToggle.addEventListener('click', toggleSidebar);
     resetWorkbenchLayout.addEventListener('click', resetWorkbench);
     consoleCollapse.addEventListener('click', () => setConsoleMode(document.body.classList.contains('console-collapsed') ? 'normal' : 'collapsed'));
+    if (consoleMinimize) consoleMinimize.addEventListener('click', () => minimizeDesktopWindow('console'));
     consoleMaximize.addEventListener('click', () => setConsoleMode(document.body.classList.contains('console-maximized') ? 'normal' : 'maximized'));
     editorFullscreen.addEventListener('click', toggleEditorFullscreen);
     editorWrapToggle.addEventListener('click', toggleEditorWrap);
@@ -1044,6 +1116,10 @@ INDEX_HTML = r"""<!doctype html>
       applySidebarState();
     }
 
+    function isDesktopModeActive() {
+      return document.body.classList.contains('desktop-mode');
+    }
+
     function setConsoleMode(mode) {
       document.body.classList.remove('console-collapsed', 'console-hidden', 'console-maximized', 'console-compact', 'console-large');
       if (mode === 'collapsed') document.body.classList.add('console-collapsed');
@@ -1052,25 +1128,99 @@ INDEX_HTML = r"""<!doctype html>
       if (mode === 'compact') document.body.classList.add('console-compact');
       if (mode === 'large') document.body.classList.add('console-large');
       localStorage.setItem(STORE_CONSOLE_SIZE, mode);
+
       if (mode === 'normal') {
         const stored = Number(localStorage.getItem(STORE_CONSOLE_HEIGHT) || 330);
-        setRootVar('--console-height', clamp(stored, 180, Math.round(window.innerHeight * 0.82)) + 'px');
+        if (!isDesktopModeActive()) {
+          setRootVar('--console-height', clamp(stored, 180, Math.round(window.innerHeight * 0.82)) + 'px');
+        }
       } else if (mode === 'compact' || mode === 'large') {
-        document.documentElement.style.removeProperty('--console-height');
+        if (!isDesktopModeActive()) document.documentElement.style.removeProperty('--console-height');
       }
+
       if (consoleCollapse) consoleCollapse.textContent = mode === 'collapsed' ? 'Ausklappen' : 'Einklappen';
       if (consoleMaximize) consoleMaximize.textContent = mode === 'maximized' ? 'Normal' : 'Max';
+      if (consoleMinimize) consoleMinimize.textContent = mode === 'hidden' ? 'Einblenden' : 'Minimieren';
+      updateDesktopTaskbar();
     }
 
     function applyConsoleSize(size) {
       setConsoleMode(size || 'normal');
     }
 
+    function readDesktopConsoleRect() {
+      return getStoredJson(STORE_DESKTOP_CONSOLE_RECT, null);
+    }
+
+    function saveDesktopConsoleRect() {
+      if (!consoleDock || !isDesktopModeActive() || document.body.classList.contains('console-maximized') || document.body.classList.contains('console-hidden')) return;
+      const rect = consoleDock.getBoundingClientRect();
+      const data = {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      };
+      localStorage.setItem(STORE_DESKTOP_CONSOLE_RECT, JSON.stringify(data));
+      applyDesktopConsoleRect(data);
+    }
+
+    function applyDesktopConsoleRect(rect) {
+      if (!rect) return;
+      const safeWidth = clamp(Number(rect.width) || 760, Math.min(420, window.innerWidth - 18), Math.max(320, window.innerWidth - 18));
+      const safeHeight = clamp(Number(rect.height) || 320, 86, Math.max(180, window.innerHeight - 72));
+      const safeLeft = clamp(Number(rect.left) || 18, 8, Math.max(8, window.innerWidth - safeWidth - 8));
+      const safeTop = clamp(Number(rect.top) || 80, 8, Math.max(8, window.innerHeight - safeHeight - 58));
+      setRootVar('--desktop-console-left', safeLeft + 'px');
+      setRootVar('--desktop-console-top', safeTop + 'px');
+      setRootVar('--desktop-console-right', 'auto');
+      setRootVar('--desktop-console-bottom', 'auto');
+      setRootVar('--desktop-console-width', safeWidth + 'px');
+      setRootVar('--desktop-console-height', safeHeight + 'px');
+    }
+
+    function ensureDesktopConsoleRect() {
+      if (!consoleDock || !isDesktopModeActive() || isDesktopMobile()) return;
+      const saved = readDesktopConsoleRect();
+      if (saved) {
+        applyDesktopConsoleRect(saved);
+        return;
+      }
+      const width = Math.min(820, Math.max(520, window.innerWidth * 0.48));
+      const height = Math.min(420, Math.max(280, window.innerHeight * 0.42));
+      applyDesktopConsoleRect({
+        left: window.innerWidth - width - 18,
+        top: window.innerHeight - height - 58,
+        width,
+        height
+      });
+    }
+
+    function bringConsoleToFront() {
+      if (!consoleDock) return;
+      desktopZ += 1;
+      consoleDock.style.zIndex = String(desktopZ + 50);
+      document.querySelectorAll('.desktop-task-button').forEach(btn => btn.classList.toggle('active', btn.dataset.windowId === 'console'));
+    }
+
     function initConsoleResize() {
       if (!consoleResizeHandle) return;
       let startY = 0;
       let startHeight = 0;
+      let startTop = 0;
       const onMove = event => {
+        if (isDesktopModeActive() && !isDesktopMobile()) {
+          const minHeight = 86;
+          const maxHeight = Math.max(180, window.innerHeight - 72);
+          const delta = event.clientY - startY;
+          const nextHeight = clamp(startHeight - delta, minHeight, maxHeight);
+          const nextTop = clamp(startTop + delta, 8, window.innerHeight - nextHeight - 58);
+          const rect = consoleDock.getBoundingClientRect();
+          applyDesktopConsoleRect({ left: rect.left, top: nextTop, width: rect.width, height: nextHeight });
+          document.body.classList.remove('console-collapsed', 'console-hidden', 'console-maximized', 'console-compact', 'console-large');
+          localStorage.setItem(STORE_CONSOLE_SIZE, 'normal');
+          return;
+        }
         const maxHeight = Math.round(window.innerHeight * 0.86);
         const minHeight = window.innerWidth <= 720 ? 170 : 190;
         const nextHeight = clamp(startHeight + (startY - event.clientY), minHeight, maxHeight);
@@ -1081,6 +1231,8 @@ INDEX_HTML = r"""<!doctype html>
       };
       const onUp = () => {
         consoleResizeHandle.classList.remove('dragging');
+        consoleDock?.classList.remove('desktop-console-resizing');
+        saveDesktopConsoleRect();
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
       };
@@ -1088,9 +1240,56 @@ INDEX_HTML = r"""<!doctype html>
         event.preventDefault();
         startY = event.clientY;
         startHeight = consoleDock ? consoleDock.getBoundingClientRect().height : 330;
+        startTop = consoleDock ? consoleDock.getBoundingClientRect().top : 0;
         consoleResizeHandle.classList.add('dragging');
+        if (isDesktopModeActive()) {
+          bringConsoleToFront();
+          consoleDock?.classList.add('desktop-console-resizing');
+        }
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
+      });
+    }
+
+    function initDesktopConsoleWindow() {
+      if (!consoleDock || !consoleHead) return;
+      consoleHead.addEventListener('pointerdown', event => {
+        if (!isDesktopModeActive() || isDesktopMobile()) return;
+        if (event.target.closest('button, input, select, textarea')) return;
+        if (document.body.classList.contains('console-maximized')) return;
+        event.preventDefault();
+        bringConsoleToFront();
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const rect = consoleDock.getBoundingClientRect();
+        consoleDock.classList.add('desktop-console-dragging');
+        const onMove = moveEvent => {
+          const nextLeft = clamp(rect.left + moveEvent.clientX - startX, 8, window.innerWidth - rect.width - 8);
+          const nextTop = clamp(rect.top + moveEvent.clientY - startY, 8, window.innerHeight - rect.height - 58);
+          applyDesktopConsoleRect({ left: nextLeft, top: nextTop, width: rect.width, height: rect.height });
+        };
+        const onUp = () => {
+          consoleDock.classList.remove('desktop-console-dragging');
+          saveDesktopConsoleRect();
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+        };
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+
+      if ('ResizeObserver' in window) {
+        let timer = null;
+        const observer = new ResizeObserver(() => {
+          if (!isDesktopModeActive() || isDesktopMobile() || document.body.classList.contains('console-maximized')) return;
+          clearTimeout(timer);
+          timer = setTimeout(saveDesktopConsoleRect, 250);
+        });
+        observer.observe(consoleDock);
+      }
+
+      consoleDock.addEventListener('pointerdown', () => {
+        if (isDesktopModeActive()) bringConsoleToFront();
       });
     }
 
@@ -1155,30 +1354,54 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function initCardChrome() {
-      const hidden = new Set(getStoredJson(STORE_HIDDEN_CARDS, []));
-      document.querySelectorAll('.card').forEach((card, index) => {
-        const id = cardIdFor(card, index);
-        if (hidden.has(id)) card.style.display = 'none';
+      // v1.5.4 fix: the old dynamic card chrome added window buttons to every
+      // classic dashboard card and could permanently hide content via localStorage.
+      // Keep cards visible by default and only add safe module controls to explicitly
+      // marked file-manager cards. Desktop windows themselves still use their own bar.
+      localStorage.removeItem(STORE_HIDDEN_CARDS);
+      document.body.classList.remove('has-maximized-card');
+      document.querySelectorAll('.card').forEach(card => {
+        card.style.display = '';
+        card.classList.remove('maximized');
+        const existing = card.querySelector(':scope > .card-header .card-tools');
+        if (existing) existing.remove();
+      });
+
+      document.querySelectorAll('.card[data-card-id="files-explorer"], .card[data-card-id="files-editor"]').forEach(card => {
         const header = card.querySelector(':scope > .card-header');
         if (!header || header.querySelector('.card-tools')) return;
         const tools = document.createElement('div');
         tools.className = 'card-tools';
+
         const collapse = document.createElement('button');
-        collapse.type = 'button'; collapse.title = 'Modul einklappen'; collapse.textContent = '–';
-        collapse.addEventListener('click', event => { event.stopPropagation(); card.classList.toggle('collapsed'); collapse.textContent = card.classList.contains('collapsed') ? '+' : '–'; });
+        collapse.type = 'button';
+        collapse.title = 'Modul einklappen';
+        collapse.textContent = '–';
+        collapse.addEventListener('click', event => {
+          event.stopPropagation();
+          card.classList.toggle('collapsed');
+          collapse.textContent = card.classList.contains('collapsed') ? '+' : '–';
+        });
+
         const maximize = document.createElement('button');
-        maximize.type = 'button'; maximize.title = 'Modul maximieren'; maximize.textContent = '□';
-        maximize.addEventListener('click', event => { event.stopPropagation(); const active = card.classList.toggle('maximized'); document.body.classList.toggle('has-maximized-card', active); maximize.textContent = active ? '×' : '□'; });
-        const hide = document.createElement('button');
-        hide.type = 'button'; hide.title = 'Modul ausblenden'; hide.textContent = '×';
-        hide.addEventListener('click', event => { event.stopPropagation(); hidden.add(id); localStorage.setItem(STORE_HIDDEN_CARDS, JSON.stringify([...hidden])); card.style.display = 'none'; });
-        tools.append(collapse, maximize, hide);
+        maximize.type = 'button';
+        maximize.title = 'Modul maximieren';
+        maximize.textContent = '□';
+        maximize.addEventListener('click', event => {
+          event.stopPropagation();
+          if (!document.body.classList.contains('desktop-mode')) return;
+          const active = card.classList.toggle('maximized');
+          document.body.classList.toggle('has-maximized-card', active);
+          maximize.textContent = active ? '❐' : '□';
+        });
+
+        tools.append(collapse, maximize);
         header.appendChild(tools);
       });
     }
 
     function resetWorkbench() {
-      ['winomcConsoleHeightV1','winomcConsoleSizeV1','winomcSidebarCollapsedV1','winomcFilesSplitV1','winomcHiddenCardsV1','winomcEditorFontV1','winomcEditorWrapV1','winomcDesktopModeV1','winomcDesktopWindowsV1','winomcDesktopPositionsV1'].forEach(key => localStorage.removeItem(key));
+      ['winomcConsoleHeightV1','winomcConsoleSizeV1','winomcSidebarCollapsedV1','winomcFilesSplitV1','winomcHiddenCardsV1','winomcEditorFontV1','winomcEditorWrapV1','winomcDesktopModeV1','winomcDesktopWindowsV1','winomcDesktopPositionsV1','winomcDesktopConsoleRectV1'].forEach(key => localStorage.removeItem(key));
       document.documentElement.style.removeProperty('--console-height');
       document.documentElement.style.removeProperty('--files-left-width');
       document.body.classList.remove('sidebar-collapsed', 'console-collapsed', 'console-hidden', 'console-maximized', 'console-compact', 'console-large', 'has-maximized-card', 'desktop-mode');
@@ -1289,6 +1512,18 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function openDesktopWindow(id) {
+      if (id === 'console') {
+        setConsoleMode('normal');
+        ensureDesktopConsoleRect();
+        bringConsoleToFront();
+        const ids = desktopOpenIds();
+        if (!ids.includes('console')) ids.push('console');
+        saveDesktopOpenIds(ids);
+        updateDesktopTaskbar();
+        setTimeout(() => input?.focus(), 0);
+        return;
+      }
+
       const panel = document.querySelector('[data-panel="' + id + '"]');
       if (!panel) return;
 
@@ -1323,6 +1558,18 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function minimizeDesktopWindow(id) {
+      if (id === 'console') {
+        if (!isDesktopModeActive()) {
+          setConsoleMode('collapsed');
+        } else {
+          setConsoleMode('hidden');
+          const ids = desktopOpenIds();
+          if (!ids.includes('console')) ids.push('console');
+          saveDesktopOpenIds(ids);
+          updateDesktopTaskbar();
+        }
+        return;
+      }
       const panel = document.querySelector('[data-panel="' + id + '"]');
       if (!panel) return;
       panel.classList.add('desktop-minimized');
@@ -1330,6 +1577,10 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function restoreDesktopWindow(id) {
+      if (id === 'console') {
+        openDesktopWindow('console');
+        return;
+      }
       const panel = document.querySelector('[data-panel="' + id + '"]');
       if (!panel || !panel.classList.contains('desktop-open')) {
         openDesktopWindow(id);
@@ -1349,6 +1600,12 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function toggleDesktopMaximize(id) {
+      if (id === 'console') {
+        setConsoleMode(document.body.classList.contains('console-maximized') ? 'normal' : 'maximized');
+        if (!document.body.classList.contains('console-maximized')) ensureDesktopConsoleRect();
+        bringConsoleToFront();
+        return;
+      }
       const panel = document.querySelector('[data-panel="' + id + '"]');
       if (!panel) return;
       if (!panel.classList.contains('desktop-maximized')) saveDesktopPosition(id, panel);
@@ -1362,6 +1619,21 @@ INDEX_HTML = r"""<!doctype html>
       if (!desktopTaskButtons) return;
       desktopTaskButtons.innerHTML = '';
       desktopOpenIds().forEach(id => {
+        if (id === 'console') {
+          const meta = DESKTOP_BY_ID[id] || { title: 'Konsole', icon: '💻' };
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'desktop-task-button';
+          btn.dataset.windowId = id;
+          btn.textContent = meta.icon + ' ' + meta.title;
+          btn.classList.toggle('active', !document.body.classList.contains('console-hidden'));
+          btn.addEventListener('click', () => {
+            if (document.body.classList.contains('console-hidden')) restoreDesktopWindow('console');
+            else minimizeDesktopWindow('console');
+          });
+          desktopTaskButtons.appendChild(btn);
+          return;
+        }
         const panel = document.querySelector('[data-panel="' + id + '"]');
         if (!panel || !panel.classList.contains('desktop-open')) return;
         const meta = DESKTOP_BY_ID[id] || { title: id, icon: '🪟' };
@@ -1409,6 +1681,7 @@ INDEX_HTML = r"""<!doctype html>
       if (desktopModeToggle) desktopModeToggle.textContent = enabled ? 'Klassische Ansicht' : 'Desktop-Modus';
       if (enabled) {
         renderDesktopStartMenu();
+        ensureDesktopConsoleRect();
         const ids = desktopOpenIds();
         if (!ids.length) ids.push('overview');
         ids.forEach(openDesktopWindow);
@@ -1416,7 +1689,10 @@ INDEX_HTML = r"""<!doctype html>
         updateDesktopClock();
       } else {
         desktopStartMenu?.classList.remove('open');
+        document.body.classList.remove('has-maximized-card');
         document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('desktop-open', 'desktop-minimized', 'desktop-maximized'));
+        document.querySelectorAll('.card').forEach(card => card.classList.remove('maximized'));
+        if (document.body.classList.contains('console-hidden')) setConsoleMode('normal');
         updateDesktopTaskbar();
       }
     }
@@ -1450,7 +1726,8 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function connectLogs() { const source = new EventSource('./api/logs'); source.onopen = () => { statusEl.textContent = 'Live verbunden'; statusDot.classList.add('ok'); }; source.onmessage = event => { try { const data = JSON.parse(event.data); if (data.line) appendLine(data.line); } catch (_) {} }; source.onerror = () => { statusEl.textContent = 'Verbindung wird neu aufgebaut...'; statusDot.classList.remove('ok'); }; }
-    applySidebarState(); applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal'); applyEditorPrefs(); initConsoleResize(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); renderDashboard(); connectLogs(); loadStatus();
+    applySidebarState(); applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal'); applyEditorPrefs(); initConsoleResize();
+    initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); renderDashboard(); connectLogs(); loadStatus();
   </script>
 </body>
 </html>

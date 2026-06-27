@@ -5,6 +5,23 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.4
+
+* Desktop-Workbench-Konsole überarbeitet
+* Live Console im Desktop-Modus als echtes bewegliches Fenster nutzbar gemacht
+* Konsole kann im Desktop-Modus verschoben, minimiert, maximiert und über die Taskleiste wiederhergestellt werden
+* Konsolenposition und Größe werden im Browser gespeichert
+* Fehler behoben, bei dem die Live Console nach dem Einklappen im Desktop-Modus leer bzw. statisch wirkte
+* Minimieren-Schaltfläche für die Live Console ergänzt
+* Mobile Darstellung der Desktop-Konsole weiter abgesichert
+* Klassische Ansicht bereinigt: Desktop-Fensterleisten werden dort nicht mehr angezeigt
+* Mein Dashboard in der klassischen Ansicht stabilisiert
+* Falsch platzierte Minimieren-/Maximieren-/Schließen-Schaltflächen in der klassischen Ansicht entfernt
+* Alte dauerhaft ausgeblendete Karten werden automatisch wiederhergestellt
+* Desktop-Fenster schließen Inhalte nicht mehr dauerhaft aus der Oberfläche aus
+* Maximieren-Overlay von Kartenmodulen abgesichert
+* Layout-Reset löscht jetzt auch gespeicherte Desktop-Konsolenpositionen
+
 ### 1.5.3
 
 * Neuer optionaler Desktop-Workbench-Modus ergänzt
