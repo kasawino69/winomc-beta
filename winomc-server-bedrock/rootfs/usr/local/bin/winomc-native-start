@@ -9,6 +9,7 @@ BDS_AUTO_UPDATE="${BDS_AUTO_UPDATE:-true}"
 DOWNLOAD_LINKS_URL="${DOWNLOAD_LINKS_URL:-https://net.web.minecraft-services.net/api/v1.0/download/links}"
 DOWNLOAD_SECONDARY_LINKS_URL="${DOWNLOAD_SECONDARY_LINKS_URL:-https://net.web.minecraft-services.net/api/v1.0/download/links}"
 PROCESSED_DOWNLOAD_LINKS_URL="${PROCESSED_DOWNLOAD_LINKS_URL:-https://raw.githubusercontent.com/kittizz/bedrock-server-downloads/refs/heads/main/bedrock-server-downloads.json}"
+RESOLVE_XUID_API_URL="${RESOLVE_XUID_API_URL:-https://mcprofile.io/api/v1/bedrock/gamertag}"
 
 BDS_STATE_DIR="${SERVER_DATA_DIR}/.winomc/bds"
 BDS_VERSION_FILE="${BDS_STATE_DIR}/installed-version"
@@ -124,6 +125,123 @@ extract_version_from_url() {
   return 1
 }
 
+trim_value() {
+  printf '%s' "${1:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+list_values() {
+  printf '%s' "${1:-}" | tr '\n;|' ',,,'
+}
+
+json_array_from_lines() {
+  file="$1"
+
+  if [ -s "${file}" ]; then
+    jq -s '.' "${file}"
+  else
+    printf '[]\n'
+  fi
+}
+
+resolve_xuid() {
+  value="$(trim_value "${1:-}")"
+
+  if [ -z "${value}" ]; then
+    return 1
+  fi
+
+  if printf '%s' "${value}" | grep -Eq '^[0-9]{15,}$'; then
+    echo "${value}"
+    return 0
+  fi
+
+  encoded="$(printf '%s' "${value}" | jq -sRr @uri)"
+  xuid="$(curl -fsSL -A "WinoMC Bedrock Runtime" "${RESOLVE_XUID_API_URL}/${encoded}" \
+    | jq -r '.xuid // empty' 2>/dev/null || true)"
+
+  if [ -n "${xuid}" ] && [ "${xuid}" != "null" ]; then
+    echo "${xuid}"
+    return 0
+  fi
+
+  echo "WARN: Could not resolve XUID for ${value}; writing value as-is" >&2
+  echo "${value}"
+}
+
+write_allowlist() {
+  tmp_file="$(mktemp)"
+  allowed_values="$(list_values "${ALLOW_LIST_USERS:-}")"
+
+  old_ifs="${IFS}"
+  IFS=','
+
+  for entry in ${allowed_values}; do
+    entry="$(trim_value "${entry}")"
+
+    if [ -z "${entry}" ]; then
+      continue
+    fi
+
+    jq -n --arg name "${entry}" \
+      '{ignoresPlayerLimit:false,name:$name}' >> "${tmp_file}"
+  done
+
+  IFS="${old_ifs}"
+
+  json_array_from_lines "${tmp_file}" > "${SERVER_DATA_DIR}/allowlist.json"
+  rm -f "${tmp_file}"
+
+  echo "WinoMC native allowlist.json written"
+}
+
+append_permission_entries() {
+  permission="$1"
+  values="$(list_values "${2:-}")"
+  tmp_file="$3"
+
+  old_ifs="${IFS}"
+  IFS=','
+
+  for entry in ${values}; do
+    entry="$(trim_value "${entry}")"
+
+    if [ -z "${entry}" ]; then
+      continue
+    fi
+
+    xuid="$(resolve_xuid "${entry}" || true)"
+
+    if [ -z "${xuid}" ]; then
+      continue
+    fi
+
+    jq -n \
+      --arg permission "${permission}" \
+      --arg xuid "${xuid}" \
+      '{permission:$permission,xuid:$xuid}' >> "${tmp_file}"
+  done
+
+  IFS="${old_ifs}"
+}
+
+write_permissions() {
+  tmp_file="$(mktemp)"
+
+  append_permission_entries "operator" "${OPS:-}" "${tmp_file}"
+  append_permission_entries "member" "${MEMBERS:-}" "${tmp_file}"
+  append_permission_entries "visitor" "${VISITORS:-}" "${tmp_file}"
+
+  json_array_from_lines "${tmp_file}" > "${SERVER_DATA_DIR}/permissions.json"
+  rm -f "${tmp_file}"
+
+  echo "WinoMC native permissions.json written"
+}
+
+write_access_files() {
+  write_allowlist
+  write_permissions
+}
+
 cleanup_old_bds_files() {
   echo "Cleaning old Bedrock runtime files"
 
@@ -172,6 +290,9 @@ echo "BDS auto update: ${BDS_AUTO_UPDATE}"
 if [ "${version_mode}" = "EXISTING" ]; then
   if [ ! -x "${SERVER_DATA_DIR}/bedrock_server" ]; then
     echo "ERROR: VERSION=EXISTING but no executable bedrock_server found" >&2
+    echo "Using existing Bedrock Dedicated Server"
+  +  write_access_files
+    /usr/local/bin/winomc-write-server-properties
     exit 1
   fi
 
@@ -184,6 +305,9 @@ fi
 
 if [ -x "${SERVER_DATA_DIR}/bedrock_server" ] && ! is_true "${BDS_AUTO_UPDATE}" && [ -z "${BDS_DIRECT_DOWNLOAD_URL}" ]; then
   echo "BDS_AUTO_UPDATE=false and existing server found. Skipping lookup and download."
+  echo "BDS_AUTO_UPDATE=false and existing server found. Skipping lookup and download."
++  write_access_files
+  /usr/local/bin/winomc-write-server-properties
   /usr/local/bin/winomc-write-server-properties
   echo "Starting native Bedrock Dedicated Server"
   LD_LIBRARY_PATH="${SERVER_DATA_DIR}:${LD_LIBRARY_PATH:-}" ./bedrock_server
@@ -237,6 +361,7 @@ else
   echo "BDS already installed. Skipping download."
 fi
 
++write_access_files
 /usr/local/bin/winomc-write-server-properties
 
 echo "Starting native Bedrock Dedicated Server"

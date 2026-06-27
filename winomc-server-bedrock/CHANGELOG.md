@@ -5,9 +5,19 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.3.8
+
+* `BDS_DIRECT_DOWNLOAD_URL` bleibt als optionale Expertenoption ohne Pflichtfeld erhalten
+* Native WinoMC Bedrock Runtime erfolgreich startfähig gemacht
+* Nativer Start lädt den offiziellen Mojang Bedrock Dedicated Server, schreibt `server.properties` und startet den Server ohne `/opt/bedrock-entry.sh`
+* Native Runtime um `allowlist.json` aus `ALLOW_LIST_USERS` erweitert
+* Native Runtime um `permissions.json` aus `OPS`, `MEMBERS` und `VISITORS` erweitert
+* XUID-Auflösung für Permissions vorbereitet, damit Gamertags nach Möglichkeit automatisch aufgelöst werden
+* Vorbereitung für die spätere Umstellung von der itzg-Basis auf eine eigene WinoMC-/Home-Assistant-Base fortgesetzt
+
 ### 1.3.7
 
-Bug fixes
+Fehlerbehebungen
 
 ### 1.3.6
 
