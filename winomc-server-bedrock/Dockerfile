@@ -9,12 +9,19 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
+        gcc \
         jq \
+        libc6-dev \
         libcurl4 \
         libssl3 \
         python3 \
         tzdata \
         unzip \
+    && gcc -shared -fPIC -O2 -Wall -Wextra \
+        -o /opt/winomc-bds-ipv6fix.so \
+        /usr/local/src/winomc-bds-ipv6fix.c \
+        -ldl \
+    && chmod 0644 /opt/winomc-bds-ipv6fix.so \
     && rm -rf /var/lib/apt/lists/* \
     && chmod +x \
         /usr/local/bin/winomc-bedrock-entrypoint \

@@ -5,6 +5,15 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.4.5
+
+* Native Unterstützung für `ENABLE_BDS_V6BIND_FIX` ergänzt
+* WinoMC-eigener IPv6-Bind-Fix wird jetzt aus Quellcode im Repository gebaut
+* Keine externe Download-Abhängigkeit für den IPv6-Fix beim Docker-Build
+* Native Runtime setzt `LD_PRELOAD`, wenn `ENABLE_BDS_V6BIND_FIX=true` aktiv ist
+* Warnung ergänzt, wenn IPv4- und IPv6-Port gleich sind, der IPv6-Bind-Fix aber deaktiviert ist
+* Dual-Stack-Betrieb mit gleichem IPv4-/IPv6-Port vorbereitet
+
 ### 1.4.4
 
 * Native `MC_PACK`-Importlogik ergänzt

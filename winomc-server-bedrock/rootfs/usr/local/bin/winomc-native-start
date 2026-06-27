@@ -6,6 +6,8 @@ VERSION="${VERSION:-LATEST}"
 BDS_DIRECT_DOWNLOAD_URL="${BDS_DIRECT_DOWNLOAD_URL:-${DIRECT_DOWNLOAD_URL:-}}"
 BDS_AUTO_UPDATE="${BDS_AUTO_UPDATE:-true}"
 PACKAGE_BACKUP_KEEP="${PACKAGE_BACKUP_KEEP:-2}"
+ENABLE_BDS_V6BIND_FIX="${ENABLE_BDS_V6BIND_FIX:-false}"
+BDS_IPV6FIX_SO="${BDS_IPV6FIX_SO:-/opt/winomc-bds-ipv6fix.so}"
 
 DOWNLOAD_LINKS_URL="${DOWNLOAD_LINKS_URL:-https://net.web.minecraft-services.net/api/v1.0/download/links}"
 DOWNLOAD_SECONDARY_LINKS_URL="${DOWNLOAD_SECONDARY_LINKS_URL:-https://net.web.minecraft-services.net/api/v1.0/download/links}"
@@ -23,6 +25,32 @@ is_true() {
     true|on|1|yes) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+start_bedrock_server() {
+  export LD_LIBRARY_PATH="${SERVER_DATA_DIR}:${LD_LIBRARY_PATH:-}"
+
+  if [ "${SERVER_PORT:-}" = "${SERVER_PORT_V6:-}" ] && ! is_true "${ENABLE_BDS_V6BIND_FIX:-false}"; then
+    echo "WARN: SERVER_PORT and SERVER_PORT_V6 are equal, but ENABLE_BDS_V6BIND_FIX=false" >&2
+    echo "WARN: Bedrock Dedicated Server may fail to bind both IPv4 and IPv6 on the same port" >&2
+  fi
+
+  if is_true "${ENABLE_BDS_V6BIND_FIX:-false}"; then
+    if [ -f "${BDS_IPV6FIX_SO}" ]; then
+      echo "WinoMC native IPv6 bind fix enabled: ${BDS_IPV6FIX_SO}"
+
+      if [ -n "${LD_PRELOAD:-}" ]; then
+        export LD_PRELOAD="${BDS_IPV6FIX_SO}:${LD_PRELOAD}"
+      else
+        export LD_PRELOAD="${BDS_IPV6FIX_SO}"
+      fi
+    else
+      echo "WARN: ENABLE_BDS_V6BIND_FIX=true but ${BDS_IPV6FIX_SO} is missing" >&2
+    fi
+  fi
+
+  echo "Starting native Bedrock Dedicated Server"
+  exec ./bedrock_server
 }
 
 version_upper() {
@@ -392,8 +420,7 @@ if [ "${version_mode}" = "EXISTING" ]; then
   /usr/local/bin/winomc-native-content-import
   write_access_files
   /usr/local/bin/winomc-write-server-properties
-  echo "Starting native Bedrock Dedicated Server"
-  LD_LIBRARY_PATH="${SERVER_DATA_DIR}:${LD_LIBRARY_PATH:-}" ./bedrock_server
+  start_bedrock_server
   exit 0
 fi
 
@@ -402,8 +429,7 @@ if [ -x "${SERVER_DATA_DIR}/bedrock_server" ] && ! is_true "${BDS_AUTO_UPDATE}" 
   /usr/local/bin/winomc-native-content-import
   write_access_files
   /usr/local/bin/winomc-write-server-properties
-  echo "Starting native Bedrock Dedicated Server"
-  LD_LIBRARY_PATH="${SERVER_DATA_DIR}:${LD_LIBRARY_PATH:-}" ./bedrock_server
+  start_bedrock_server
   exit 0
 fi
 
@@ -458,5 +484,4 @@ fi
 write_access_files
 /usr/local/bin/winomc-write-server-properties
 
-echo "Starting native Bedrock Dedicated Server"
-LD_LIBRARY_PATH="${SERVER_DATA_DIR}:${LD_LIBRARY_PATH:-}" ./bedrock_server
+start_bedrock_server
