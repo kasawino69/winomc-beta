@@ -5,6 +5,21 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.7
+
+* Eingeklappte Navigation als Icon-Leiste korrigiert
+* Menüicons bleiben bei geringer Höhe erreichbar und scrollbar
+
+* Klassische Layout-Abstände für Übersicht, Dashboard und Dateimanager weiter bereinigt
+* Dateimanager um Web-Schutz ergänzt: Änderungen, Upload, Entpacken, Löschen, Wiederherstellen und Export-Schreibaktionen können in der Weboberfläche gesperrt werden
+* Web-Schutz klar benannt: betrifft nur die Weboberfläche, nicht die Server-Schreibrechte
+* Papierkorb-Aufbewahrung persistent einstellbar: nie automatisch, 3, 7, 14, 30, 60 oder 90 Tage
+* Papierkorb-Vorschau klarer vom Editor getrennt: Vorschau leeren / Vorschau Vollbild statt Editor-Aktionen
+* Papierkorb-Dateien bleiben schreibgeschützt, bis sie wiederhergestellt werden
+* Marketplace-/Pack-Hinweis verständlicher formuliert
+* Dashboard-Kommandopalette stark erweitert um weitere Bedrock-Admin-Befehle mit gezielten Abfragen für Spielername, Menge, Koordinaten, Item, Effekt und weitere Parameter
+* Dashboard-Kacheln und Aktionsbuttons weiter vereinheitlicht
+
 ### 1.5.6
 
 * Mein Dashboard überarbeitet: keine lange Aktionsliste mehr, stattdessen kompakte Such-/Auswahlzeile im Stil einer Command Palette.

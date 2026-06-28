@@ -40,6 +40,7 @@ EXPORT_DIR = os.environ.get("WINOMC_EXPORT_DIR", "/share/winomc/export")
 FILE_BACKUP_DIR = os.environ.get("WINOMC_FILE_BACKUP_DIR", os.path.join(DATA_DIR, ".winomc", "file_backups"))
 TRASH_DIR = os.environ.get("WINOMC_TRASH_DIR", os.path.join(DATA_DIR, ".winomc", "trash"))
 TRASH_RETENTION_DAYS = int(os.environ.get("WINOMC_TRASH_RETENTION_DAYS", "7"))
+CONSOLE_SETTINGS_FILE = os.environ.get("WINOMC_CONSOLE_SETTINGS_FILE", os.path.join(DATA_DIR, ".winomc", "web_console_settings.json"))
 
 MAX_TEXT_FILE_BYTES = int(os.environ.get("WINOMC_FILE_EDITOR_MAX_BYTES", str(2 * 1024 * 1024)))
 MAX_UPLOAD_BYTES = int(os.environ.get("WINOMC_FILE_UPLOAD_MAX_BYTES", str(512 * 1024 * 1024)))
@@ -68,7 +69,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Desktop Workbench 1.5.5</title>
+  <title>WinoMC Desktop Workbench 1.5.7</title>
   <style>
     :root {
       color-scheme: dark;
@@ -787,6 +788,7 @@ INDEX_HTML = r"""<!doctype html>
 
 
     /* v1.5.6 Dashboard + Trash UX refinement */
+
     body.sidebar-collapsed nav {
       overflow: hidden !important;
       scrollbar-width: none;
@@ -847,6 +849,186 @@ INDEX_HTML = r"""<!doctype html>
       .dashboard-add-row { grid-template-columns: 1fr; }
       .dashboard-action-preview { grid-template-columns: 1fr; }
     }
+
+
+    /* v1.5.7 UX polish, Web-Schutz und Papierkorb-Einstellungen */
+    .layout { align-items: start; }
+    .content { align-self: start; }
+    .content > .tab-panel.active:first-child,
+    .tab-panel.active { align-content: start; }
+    .hero { margin: 0; }
+    .grid, .grid-3, .dashboard-grid, .file-manager-grid { min-width: 0; }
+    .dashboard-grid { align-items: stretch; grid-template-columns: repeat(var(--dashboard-columns, 3), minmax(240px, 1fr)); }
+    .dashboard-grid.auto { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .dashboard-tile { min-width: 0; }
+    .dashboard-tile .tile-top { min-height: 54px; }
+    .dashboard-tile .tile-desc { min-height: 42px; }
+    .dashboard-tile .tile-action-main { margin-top: auto; width: 100%; }
+    .dashboard-add-card { overflow: visible; }
+    .dashboard-add-row { align-items: stretch; }
+    .dashboard-add-row button { min-height: 44px; }
+    .file-toolbar { row-gap: 10px; align-items: flex-start; }
+    .file-toolbar label.status { min-height: 44px; align-items: center; }
+    .file-toolbar button, .file-toolbar select, .file-toolbar input { min-height: 44px; }
+    .file-toolbar input { flex: 1 1 260px; }
+    .file-toolbar .toolbar-break { flex-basis: 100%; height: 0; padding: 0; margin: 0; border: 0; }
+    .file-manager-grid { gap: 16px; }
+    .file-manager-grid .card-header { align-items: flex-start; }
+    .file-manager-grid .card-header .actions { align-items: center; row-gap: 8px; }
+    .editor-panel .card-header { margin-bottom: 10px; }
+    .editor-actions { gap: 8px; row-gap: 8px; }
+    .editor-actions button { min-height: 42px; }
+    .file-row-actions { gap: 6px; align-items: center; }
+    .file-row-actions button { min-height: 34px; }
+    .web-lock-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(245, 158, 11, .35);
+      background: rgba(245, 158, 11, .10);
+      color: #ffedd5;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+    .web-lock-pill.unlocked {
+      border-color: rgba(34, 197, 94, .35);
+      background: rgba(34, 197, 94, .12);
+      color: #dcfce7;
+    }
+    .drop-zone.locked {
+      opacity: .62;
+      cursor: not-allowed;
+      border-color: rgba(245, 158, 11, .35);
+      background: rgba(245, 158, 11, .06);
+    }
+    .trash-retention-control { display: none; }
+    body.trash-open .trash-retention-control { display: inline-flex; }
+    .editor-panel.preview-only .editor-actions #fileSave { display: none !important; }
+    .editor-panel.preview-only #fileCloseEditor::before { content: ''; }
+    .editor-panel.preview-only .editor-box { cursor: default; }
+    .readonly-note {
+      margin-top: 10px;
+      border: 1px solid rgba(96, 165, 250, .30);
+      background: rgba(96, 165, 250, .10);
+      color: #dbeafe;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    @media (max-width: 900px) {
+      .dashboard-grid, .dashboard-grid.auto { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+      .file-toolbar .toolbar-break { display: none; }
+      .file-toolbar { display: grid; grid-template-columns: 1fr; }
+      .file-toolbar button, .file-toolbar select, .file-toolbar input { width: 100%; }
+    }
+
+
+
+    /* v1.5.7 sidebar rail hotfix */
+    body.sidebar-collapsed nav {
+      width: 78px;
+      min-width: 78px;
+      max-height: calc(100vh - var(--console-height) - 92px);
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      scrollbar-width: none;
+      display: grid !important;
+      grid-auto-rows: min-content;
+      align-content: start;
+      gap: 4px;
+      padding: 8px 6px !important;
+      overscroll-behavior: contain;
+      scroll-padding-block: 10px;
+    }
+
+    body.sidebar-collapsed nav::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+
+    body.sidebar-collapsed .nav-title {
+      height: 18px;
+      padding: 2px 0 5px !important;
+      margin: 0;
+      line-height: 1;
+    }
+
+    body.sidebar-collapsed .sidebar-toggle,
+    body.sidebar-collapsed .tab-button {
+      width: 48px !important;
+      min-width: 48px !important;
+      height: 48px !important;
+      min-height: 48px !important;
+      margin: 3px auto !important;
+      padding: 0 !important;
+      display: grid !important;
+      place-items: center !important;
+      flex: 0 0 auto !important;
+      overflow: visible !important;
+      position: relative;
+    }
+
+    body.sidebar-collapsed .tab-button .icon {
+      font-size: clamp(20px, 2.4vh, 24px);
+      width: 1em;
+      text-align: center;
+      line-height: 1;
+      transform: none;
+    }
+
+    body.sidebar-collapsed .sidebar-toggle span:first-child {
+      font-size: clamp(17px, 2.2vh, 21px);
+      line-height: 1;
+    }
+
+    @media (max-height: 760px) and (min-width: 1051px) {
+      body.sidebar-collapsed nav {
+        gap: 2px;
+        padding-block: 6px !important;
+      }
+
+      body.sidebar-collapsed .nav-title {
+        height: 14px;
+        padding-bottom: 2px !important;
+      }
+
+      body.sidebar-collapsed .sidebar-toggle,
+      body.sidebar-collapsed .tab-button {
+        width: 42px !important;
+        min-width: 42px !important;
+        height: 42px !important;
+        min-height: 42px !important;
+        margin-block: 2px !important;
+      }
+
+      body.sidebar-collapsed .tab-button .icon {
+        font-size: 21px;
+      }
+    }
+
+    @media (max-height: 640px) and (min-width: 1051px) {
+      body.sidebar-collapsed nav {
+        width: 70px;
+        min-width: 70px;
+      }
+
+      body.sidebar-collapsed .sidebar-toggle,
+      body.sidebar-collapsed .tab-button {
+        width: 38px !important;
+        min-width: 38px !important;
+        height: 38px !important;
+        min-height: 38px !important;
+      }
+
+      body.sidebar-collapsed .tab-button .icon {
+        font-size: 19px;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -973,14 +1155,14 @@ INDEX_HTML = r"""<!doctype html>
 
       <section class="tab-panel" data-panel="packs">
         <div class="grid">
-          <div class="card"><div class="card-header"><div><h3>Resource Packs</h3><p>Dateien und Manifest prüfen, Packs in den passenden Ordner legen.</p></div></div><div class="pill-group"><button data-open-root="resource_packs">Resource Packs öffnen</button><button data-open-root="import">Import öffnen</button></div><div class="info warning-box" style="margin-top:12px">Marketplace-Inhalte sind oft account-/plattformgebunden. WinoMC verwaltet lokal importierte .mcpack, .mcaddon, .mcworld, .mctemplate und .zip.</div></div>
+          <div class="card"><div class="card-header"><div><h3>Resource Packs</h3><p>Dateien und Manifest prüfen, Packs in den passenden Ordner legen.</p></div></div><div class="pill-group"><button data-open-root="resource_packs">Resource Packs öffnen</button><button data-open-root="import">Import öffnen</button></div><div class="info warning-box" style="margin-top:12px">Hinweis: Gekaufte Marketplace-Packs müssen vorher aus Minecraft exportiert bzw. als lokale Pack-Datei bereitgestellt werden. WinoMC verwaltet lokale Dateien wie .mcpack, .mcaddon, .mcworld, .mctemplate und .zip.</div></div>
           <div class="card"><div class="card-header"><div><h3>Behavior Packs & Add-ons</h3><p>Behavior Packs verändern Welt-Metadaten und sollten kontrolliert importiert werden.</p></div></div><div class="pill-group"><button data-open-root="behavior_packs">Behavior Packs öffnen</button><button data-open-root="worlds">Weltdateien öffnen</button></div></div>
         </div>
       </section>
 
       <section class="tab-panel" data-panel="backups">
         <div class="grid">
-          <div class="card"><div class="card-header"><div><h3>Sicherer Welt-Export</h3><p>Erstellt ein ZIP mit save hold, save query und save resume.</p></div><span class="badge warn">Empfohlen</span></div><div class="pill-group"><button class="primary" id="backupSafeWorldExport">Sicheren Welt-Export starten</button><button data-open-root="export">Exportordner öffnen</button></div><div class="info warning-box" style="margin-top:12px">Während des Exports kann der Server kurz verzögert reagieren. save resume wird automatisch im finally-Block ausgeführt.</div></div>
+          <div class="card"><div class="card-header"><div><h3>Sicherer Welt-Export</h3><p>Erstellt ein ZIP mit save hold, save query und save resume.</p></div><span class="badge warn">Empfohlen</span></div><div class="pill-group"><button class="primary" id="backupSafeWorldExport" data-write-action="true">Sicheren Welt-Export starten</button><button data-open-root="export">Exportordner öffnen</button></div><div class="info warning-box" style="margin-top:12px">Während des Exports kann der Server kurz verzögert reagieren. save resume wird automatisch im finally-Block ausgeführt.</div></div>
           <div class="card"><div class="card-header"><div><h3>Export & Retention</h3><p>Exporte liegen unter /share/winomc/export. Alte BDS-Pakete werden über PACKAGE_BACKUP_KEEP begrenzt.</p></div></div><div class="pill-group"><button data-open-root="export">Exporte anzeigen</button><button data-jump-tab="files">Dateimanager</button></div></div>
         </div>
       </section>
@@ -1001,10 +1183,13 @@ INDEX_HTML = r"""<!doctype html>
             <button type="button" id="fileOpenPath">Pfad öffnen</button>
             <button type="button" id="fileRefresh">Aktualisieren</button>
             <button type="button" class="soft" id="fileOpenTrash">🗑️ Papierkorb</button>
+            <button type="button" id="fileWriteLockToggle" class="warning" title="Sperrt Änderungen nur in der Weboberfläche. Der Minecraft Server kann weiterhin schreiben.">🔒 Web-Schutz</button>
+            <label class="status trash-retention-control" id="trashRetentionWrap">Papierkorb leeren nach <select id="trashRetentionSelect" aria-label="Papierkorb-Aufbewahrung"><option value="0">Nie automatisch</option><option value="3">3 Tage</option><option value="7">7 Tage</option><option value="14">14 Tage</option><option value="30">30 Tage</option><option value="60">60 Tage</option><option value="90">90 Tage</option></select></label>
             <button type="button" id="fileParent">Nach oben</button>
+            <span class="toolbar-break" aria-hidden="true"></span>
             <button type="button" id="fileZipCurrent">Ordner als ZIP</button>
-            <button type="button" id="fileZipExportCurrent">ZIP nach Export</button>
-            <button type="button" class="primary" id="safeWorldExport">Sicherer Welt-Export</button>
+            <button type="button" id="fileZipExportCurrent" data-write-action="true">ZIP nach Export</button>
+            <button type="button" class="primary" id="safeWorldExport" data-write-action="true">Sicherer Welt-Export</button>
           </div>
           <div class="file-path" id="fileCurrentPath">config:/</div>
           <div class="breadcrumb" id="fileBreadcrumb"></div>
@@ -1012,7 +1197,7 @@ INDEX_HTML = r"""<!doctype html>
         <div class="file-manager-grid" id="fileManagerGrid">
           <div class="card file-explorer-panel" data-card-id="files-explorer"><div class="card-header"><div><h3>Explorer</h3><p>Ordner öffnen, Dateien downloaden, ZIPs erstellen, löschen oder ZIPs sicher entpacken.</p></div><div class="actions"><button type="button" class="soft" id="fileRefreshExplorer">Aktualisieren</button><button type="button" class="soft" id="fileOpenTrashExplorer">🗑️ Papierkorb</button><button type="button" class="danger" id="fileEmptyTrash">Papierkorb leeren</button></div></div><div class="drop-zone" id="fileDropZone">Dateien hierher ziehen oder klicken zum Hochladen<input type="file" id="fileUploadInput" hidden multiple></div><div style="height:12px"></div><div class="file-table-wrap"><table class="file-table"><thead><tr><th>Name</th><th>Typ</th><th>Größe</th><th>Geändert</th><th>Aktionen</th></tr></thead><tbody id="fileTableBody"><tr><td colspan="5">Dateimanager wird geladen...</td></tr></tbody></table></div></div>
           <div class="split-resizer" id="filesSplitHandle" title="Explorer und Editor verschieben"></div>
-          <div class="card editor-panel" id="editorPanel" data-card-id="files-editor"><div class="card-header"><div><h3>Editor</h3><p>Textdateien bearbeiten. JSON wird vor dem Speichern geprüft, vorher wird automatisch ein Backup erstellt.</p></div></div><div class="file-path" id="editorPath">Keine Datei geöffnet</div><div class="file-meta"><span id="editorMeta">Bereit</span></div><div class="actions editor-actions"><button type="button" class="primary" id="fileSave">Speichern</button><button type="button" class="soft" id="fileCloseEditor">Editor leeren</button><button type="button" class="soft" id="editorFullscreen">Editor Vollbild</button><button type="button" class="soft" id="editorWrapToggle">Umbruch aus</button><button type="button" class="soft" id="editorFontPlus">A+</button><button type="button" class="soft" id="editorFontMinus">A-</button></div><textarea id="fileEditor" class="editor-box" spellcheck="false" placeholder="Wähle links eine Textdatei aus."></textarea><div class="info warning-box" style="margin-top:12px">Änderungen an server.properties, Packs oder Weltdateien brauchen je nach Datei einen Server-Neustart. Fehlerhaftes JSON wird blockiert.</div></div>
+          <div class="card editor-panel" id="editorPanel" data-card-id="files-editor"><div class="card-header"><div><h3>Editor</h3><p>Textdateien bearbeiten. JSON wird vor dem Speichern geprüft, vorher wird automatisch ein Backup erstellt.</p></div></div><div class="file-path" id="editorPath">Keine Datei geöffnet</div><div class="file-meta"><span id="editorMeta">Bereit</span></div><div class="readonly-note" id="editorReadonlyNote" hidden></div><div class="actions editor-actions"><button type="button" class="primary" id="fileSave" data-write-action="true">Speichern</button><button type="button" class="soft" id="fileCloseEditor">Editor leeren</button><button type="button" class="soft" id="editorFullscreen">Editor Vollbild</button><button type="button" class="soft" id="editorWrapToggle">Umbruch aus</button><button type="button" class="soft" id="editorFontPlus">A+</button><button type="button" class="soft" id="editorFontMinus">A-</button></div><textarea id="fileEditor" class="editor-box" spellcheck="false" placeholder="Wähle links eine Textdatei aus."></textarea><div class="info warning-box" style="margin-top:12px">Änderungen an server.properties, Packs oder Weltdateien brauchen je nach Datei einen Server-Neustart. Fehlerhaftes JSON wird blockiert.</div></div>
         </div>
       </section>
 
@@ -1075,6 +1260,10 @@ INDEX_HTML = r"""<!doctype html>
     const fileOpenTrash = document.getElementById('fileOpenTrash');
     const fileOpenTrashExplorer = document.getElementById('fileOpenTrashExplorer');
     const fileEmptyTrash = document.getElementById('fileEmptyTrash');
+    const fileWriteLockToggle = document.getElementById('fileWriteLockToggle');
+    const trashRetentionWrap = document.getElementById('trashRetentionWrap');
+    const trashRetentionSelect = document.getElementById('trashRetentionSelect');
+    const editorReadonlyNote = document.getElementById('editorReadonlyNote');
     const fileParent = document.getElementById('fileParent');
     const fileZipCurrent = document.getElementById('fileZipCurrent');
     const fileZipExportCurrent = document.getElementById('fileZipExportCurrent');
@@ -1128,6 +1317,7 @@ INDEX_HTML = r"""<!doctype html>
     const STORE_DESKTOP_WINDOWS = 'winomcDesktopWindowsV1';
     const STORE_DESKTOP_POSITIONS = 'winomcDesktopPositionsV1';
     const STORE_DESKTOP_CONSOLE_RECT = 'winomcDesktopConsoleRectV1';
+    const STORE_WEB_WRITE_LOCK = 'winomcWebWriteLockV1';
     const MAX_JSON_UPLOAD_SIZE = 48 * 1024 * 1024;
 
     const ACTIONS = [
@@ -1157,6 +1347,41 @@ INDEX_HTML = r"""<!doctype html>
       { id: 'randomtick-custom', category: 'Server', label: 'Random Tick eigener Wert', description: 'Vorsichtig nutzen: hohe Werte belasten den Server.', template: 'gamerule randomtickspeed {value}', promptTitle: 'Random Tick Speed setzen', promptLabel: 'Wert', placeholder: '1', variant: 'warning' },
       { id: 'op-add', category: 'Mehrspieler', label: 'OP geben', description: 'Gibt einem Spieler Operator-Rechte.', template: 'op {value}', promptTitle: 'Operator hinzufügen', promptLabel: 'Spielername', placeholder: 'PlayerName' },
       { id: 'op-remove', category: 'Mehrspieler', label: 'OP entfernen', description: 'Entzieht einem Spieler Operator-Rechte.', template: 'deop {value}', promptTitle: 'Operator entfernen', promptLabel: 'Spielername', placeholder: 'PlayerName' },
+      { id: 'kick-player', category: 'Mehrspieler', label: 'Spieler kicken', description: 'Kickt einen Spieler mit optionaler Begründung.', template: 'kick {player} {reason}', fields: [{key:'player', label:'Spielername', placeholder:'PlayerName'}, {key:'reason', label:'Grund optional', placeholder:'Bitte später wieder verbinden', optional:true}], variant: 'warning' },
+      { id: 'allowlist-add', category: 'Mehrspieler', label: 'Allowlist hinzufügen', description: 'Fügt einen Spieler zur Allowlist hinzu.', template: 'allowlist add {player}', fields: [{key:'player', label:'Spielername', placeholder:'PlayerName'}] },
+      { id: 'allowlist-remove', category: 'Mehrspieler', label: 'Allowlist entfernen', description: 'Entfernt einen Spieler von der Allowlist.', template: 'allowlist remove {player}', fields: [{key:'player', label:'Spielername', placeholder:'PlayerName'}] },
+      { id: 'allowlist-list', category: 'Mehrspieler', label: 'Allowlist anzeigen', description: 'Zeigt die Allowlist im Serverlog an.', command: 'allowlist list' },
+      { id: 'allowlist-reload', category: 'Mehrspieler', label: 'Allowlist neu laden', description: 'Lädt die Allowlist-Datei neu.', command: 'allowlist reload' },
+      { id: 'gamemode-player-survival', category: 'Spieler', label: 'Spieler: Überleben', description: 'Setzt einen einzelnen Spieler auf Survival.', template: 'gamemode survival {player}', fields: [{key:'player', label:'Spielername oder Selector', placeholder:'PlayerName'}] },
+      { id: 'gamemode-player-creative', category: 'Spieler', label: 'Spieler: Kreativ', description: 'Setzt einen einzelnen Spieler auf Creative.', template: 'gamemode creative {player}', fields: [{key:'player', label:'Spielername oder Selector', placeholder:'PlayerName'}] },
+      { id: 'tp-player-to-player', category: 'Spieler', label: 'Teleport zu Spieler', description: 'Teleportiert Spieler A zu Spieler B.', template: 'tp {player} {target}', fields: [{key:'player', label:'Wer wird teleportiert?', placeholder:'PlayerName'}, {key:'target', label:'Zielspieler', placeholder:'OtherPlayer'}] },
+      { id: 'tp-player-to-position', category: 'Spieler', label: 'Teleport zu Koordinaten', description: 'Teleportiert einen Spieler zu x y z.', template: 'tp {player} {x} {y} {z}', fields: [{key:'player', label:'Spielername oder Selector', placeholder:'PlayerName'}, {key:'x', label:'X', placeholder:'0', type:'number'}, {key:'y', label:'Y', placeholder:'80', type:'number'}, {key:'z', label:'Z', placeholder:'0', type:'number'}] },
+      { id: 'spawnpoint-player', category: 'Spieler', label: 'Spawnpoint setzen', description: 'Setzt den Spawnpoint eines Spielers.', template: 'spawnpoint {player}', fields: [{key:'player', label:'Spielername oder Selector', placeholder:'PlayerName'}] },
+      { id: 'clear-player', category: 'Spieler', label: 'Inventar leeren', description: 'Leert das Inventar eines Spielers.', template: 'clear {player}', fields: [{key:'player', label:'Spielername oder Selector', placeholder:'PlayerName'}], variant: 'warning', confirm: 'Inventar wirklich leeren?' },
+      { id: 'kill-target', category: 'Spieler', label: 'Kill-Befehl', description: 'Führt kill für Spieler/Selector aus.', template: 'kill {target}', fields: [{key:'target', label:'Spielername oder Selector', placeholder:'PlayerName oder @e[type=zombie]'}], variant: 'danger', confirm: 'Kill-Befehl wirklich ausführen?' },
+      { id: 'give-item', category: 'Inventar', label: 'Item geben', description: 'Gibt einem Spieler ein Item mit Menge.', template: 'give {player} {item} {amount}', fields: [{key:'player', label:'Spielername oder Selector', placeholder:'PlayerName'}, {key:'item', label:'Item-ID', placeholder:'diamond'}, {key:'amount', label:'Menge', placeholder:'1', type:'number'}] },
+      { id: 'xp-add', category: 'Inventar', label: 'XP geben', description: 'Gibt XP an einen Spieler.', template: 'xp {amount} {player}', fields: [{key:'amount', label:'XP-Menge', placeholder:'100', type:'number'}, {key:'player', label:'Spielername oder Selector', placeholder:'PlayerName'}] },
+      { id: 'effect-give', category: 'Inventar', label: 'Effekt geben', description: 'Gibt einem Spieler einen Effekt.', template: 'effect {player} {effect} {seconds} {amplifier}', fields: [{key:'player', label:'Spielername oder Selector', placeholder:'PlayerName'}, {key:'effect', label:'Effekt', placeholder:'speed'}, {key:'seconds', label:'Sekunden', placeholder:'60', type:'number'}, {key:'amplifier', label:'Stärke', placeholder:'1', type:'number'}] },
+      { id: 'effect-clear', category: 'Inventar', label: 'Effekte löschen', description: 'Entfernt Effekte von einem Spieler.', template: 'effect {player} clear', fields: [{key:'player', label:'Spielername oder Selector', placeholder:'PlayerName'}] },
+      { id: 'enchant-player', category: 'Inventar', label: 'Verzaubern', description: 'Verzaubert das gehaltene Item eines Spielers.', template: 'enchant {player} {enchantment} {level}', fields: [{key:'player', label:'Spielername oder Selector', placeholder:'PlayerName'}, {key:'enchantment', label:'Verzauberung', placeholder:'sharpness'}, {key:'level', label:'Level', placeholder:'1', type:'number'}] },
+      { id: 'setworldspawn', category: 'Welt', label: 'Weltspawn setzen', description: 'Setzt den Weltspawn auf aktuelle Position oder Koordinaten.', template: 'setworldspawn {position}', fields: [{key:'position', label:'Koordinaten optional', placeholder:'0 80 0', optional:true}] },
+      { id: 'setmaxplayers', category: 'Welt', label: 'Max Spieler setzen', description: 'Setzt die maximale Spieleranzahl für die laufende Sitzung.', template: 'setmaxplayers {amount}', fields: [{key:'amount', label:'Anzahl', placeholder:'10', type:'number'}] },
+      { id: 'summon-entity', category: 'Welt', label: 'Entity spawnen', description: 'Spawnt eine Entity.', template: 'summon {entity} {position}', fields: [{key:'entity', label:'Entity-ID', placeholder:'zombie'}, {key:'position', label:'Position optional', placeholder:'0 80 0', optional:true}] },
+      { id: 'title-player', category: 'Welt', label: 'Titel senden', description: 'Sendet einen Titel an Spieler.', template: 'title {player} title {text}', fields: [{key:'player', label:'Spielername oder Selector', placeholder:'@a'}, {key:'text', label:'Text', placeholder:'Willkommen'}] },
+      { id: 'gamerule-custom', category: 'Spielregeln', label: 'Gamerule setzen', description: 'Setzt eine beliebige Gamerule mit Wert.', template: 'gamerule {rule} {value}', fields: [{key:'rule', label:'Gamerule', placeholder:'keepinventory'}, {key:'value', label:'Wert', placeholder:'true'}] },
+      { id: 'daycycle-on', category: 'Spielregeln', label: 'Tageslichtzyklus an', description: 'Zeit läuft normal weiter.', command: 'gamerule dodaylightcycle true' },
+      { id: 'daycycle-off', category: 'Spielregeln', label: 'Tageslichtzyklus aus', description: 'Friert den Tageslichtzyklus ein.', command: 'gamerule dodaylightcycle false' },
+      { id: 'weathercycle-on', category: 'Spielregeln', label: 'Wetterzyklus an', description: 'Wetter ändert sich natürlich.', command: 'gamerule doweathercycle true' },
+      { id: 'weathercycle-off', category: 'Spielregeln', label: 'Wetterzyklus aus', description: 'Wetter bleibt stabil.', command: 'gamerule doweathercycle false' },
+      { id: 'mobspawning-on', category: 'Spielregeln', label: 'Mob-Spawn an', description: 'Aktiviert natürlichen Mob-Spawn.', command: 'gamerule domobspawning true' },
+      { id: 'mobspawning-off', category: 'Spielregeln', label: 'Mob-Spawn aus', description: 'Deaktiviert natürlichen Mob-Spawn.', command: 'gamerule domobspawning false' },
+      { id: 'mobgriefing-on', category: 'Spielregeln', label: 'Mob-Griefing an', description: 'Kreaturen können Blöcke beeinflussen.', command: 'gamerule mobgriefing true' },
+      { id: 'mobgriefing-off', category: 'Spielregeln', label: 'Mob-Griefing aus', description: 'Deaktiviert Mob-Griefing.', command: 'gamerule mobgriefing false' },
+      { id: 'fire-off', category: 'Spielregeln', label: 'Feuer ausbreiten aus', description: 'Feuer breitet sich nicht aus.', command: 'gamerule dofiretick false' },
+      { id: 'fire-on', category: 'Spielregeln', label: 'Feuer ausbreiten an', description: 'Feuer kann sich ausbreiten.', command: 'gamerule dofiretick true' },
+      { id: 'tnt-off', category: 'Spielregeln', label: 'TNT aus', description: 'TNT explodiert nicht.', command: 'gamerule tntexplodes false' },
+      { id: 'tnt-on', category: 'Spielregeln', label: 'TNT an', description: 'TNT kann explodieren.', command: 'gamerule tntexplodes true' },
+      { id: 'free-command', category: 'Experten', label: 'Freier Command', description: 'Sendet einen frei eingegebenen Bedrock-Command.', template: '{value}', promptTitle: 'Freier Bedrock-Command', promptLabel: 'Command ohne führenden Slash', placeholder: 'list', variant: 'warning' },
       { id: 'save-hold', category: 'Experten', label: 'Backup: speichern pausieren', description: 'Pausiert Welt-Schreibvorgänge für Datei-Backups.', command: 'save hold', variant: 'warning', confirm: 'Speichern wirklich pausieren? Danach save resume ausführen.' },
       { id: 'save-query', category: 'Experten', label: 'Backup: Status prüfen', description: 'Fragt den Backup-/Speicherstatus ab.', command: 'save query' },
       { id: 'save-resume', category: 'Experten', label: 'Backup: speichern fortsetzen', description: 'Setzt normales Speichern nach save hold fort.', command: 'save resume', variant: 'primary' }
@@ -1172,12 +1397,51 @@ INDEX_HTML = r"""<!doctype html>
     let currentFileRoot = 'config';
     let currentFilePath = '/';
     let currentEditorFile = null;
+    let webWriteLocked = localStorage.getItem(STORE_WEB_WRITE_LOCK) !== 'false';
+    let trashRetentionDays = 7;
     let latestStatus = null;
 
     function appendLine(text, cls) { const div = document.createElement('div'); div.className = 'line' + (cls ? ' ' + cls : ''); div.textContent = text; const stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 20; log.appendChild(div); while (log.children.length > 1600) log.removeChild(log.firstChild); if (stick) log.scrollTop = log.scrollHeight; }
     function saveHistory(command) { history = history.filter(item => item !== command); history.push(command); history = history.slice(-50); historyIndex = history.length; localStorage.setItem('winomcCommandHistory', JSON.stringify(history)); }
     async function sendCommand(command) { command = String(command || '').trim(); if (!command) return; appendLine('> ' + command, 'command'); saveHistory(command); input.value = ''; try { const endpoint = './api/command?command=' + encodeURIComponent(command); const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command }) }); const data = await res.json(); if (!res.ok || !data.ok) appendLine('Fehler: ' + (data.error || res.statusText), 'error'); else appendLine('Befehl gesendet', 'ok'); } catch (err) { appendLine('Fehler beim Senden: ' + err.message, 'error'); } }
-    function runAction(action) { if (!action) return; if (action.confirm && !window.confirm(action.confirm)) return; if (action.template) { openPromptForAction(action); return; } sendCommand(action.command); }
+    function runAction(action) {
+      if (!action) return;
+      if (action.confirm && !window.confirm(action.confirm)) return;
+      if (Array.isArray(action.fields) && action.fields.length) {
+        runFieldAction(action);
+        return;
+      }
+      if (action.template) { openPromptForAction(action); return; }
+      sendCommand(action.command);
+    }
+
+    function runFieldAction(action) {
+      const values = {};
+      for (const field of action.fields) {
+        let label = field.label || field.key || 'Wert';
+        let hint = field.placeholder ? '\nBeispiel: ' + field.placeholder : '';
+        let value = window.prompt(label + hint, field.default || '');
+        if (value === null) return;
+        value = String(value).trim();
+        if (!value && !field.optional) {
+          alert('Pflichtfeld fehlt: ' + label);
+          return;
+        }
+        if (field.type === 'number' && value && !/^-?\d+(\.\d+)?$/.test(value)) {
+          alert('Bitte eine Zahl eingeben: ' + label);
+          return;
+        }
+        values[field.key] = value;
+      }
+      let command = action.template || '';
+      Object.entries(values).forEach(([key, value]) => {
+        command = command.replaceAll('{' + key + '}', value);
+      });
+      command = command.replace(/\s+/g, ' ').trim();
+      if (!command) return;
+      sendCommand(command);
+    }
+
     function openPromptForAction(action) { pendingTemplate = action.template; modalTitle.textContent = action.promptTitle || action.label || 'Wert eingeben'; modalLabel.textContent = action.promptLabel || action.description || 'Bitte Wert eingeben.'; modalInput.value = ''; modalInput.placeholder = action.placeholder || ''; modalBackdrop.classList.add('open'); modalBackdrop.setAttribute('aria-hidden', 'false'); setTimeout(() => modalInput.focus(), 0); }
     function closePrompt() { modalBackdrop.classList.remove('open'); modalBackdrop.setAttribute('aria-hidden', 'true'); pendingTemplate = null; }
     function sendPromptValue() { const value = modalInput.value.trim(); if (!value || !pendingTemplate) return; const command = pendingTemplate.replaceAll('{value}', value); closePrompt(); sendCommand(command); }
@@ -1307,24 +1571,76 @@ INDEX_HTML = r"""<!doctype html>
     async function fetchJson(path, params = {}) { const res = await fetch(apiUrl(path, params), { cache: 'no-store' }); const data = await res.json(); if (!res.ok || !data.ok) throw new Error(data.error || res.statusText); return data; }
     async function postJson(path, payload = {}) { const res = await fetch('./' + path.replace(/^\/+/, ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); const data = await res.json(); if (!res.ok || !data.ok) throw new Error(data.error || res.statusText); return data; }
     function setFilesStatus(text, variant) { filesStatus.textContent = text; filesStatus.classList.toggle('warn', variant === 'warn'); }
+
+    function applyWebWriteLock() {
+      localStorage.setItem(STORE_WEB_WRITE_LOCK, String(webWriteLocked));
+      document.body.classList.toggle('web-write-locked', webWriteLocked);
+      if (fileWriteLockToggle) {
+        fileWriteLockToggle.textContent = webWriteLocked ? '🔒 Web-Schutz: an' : '🔓 Web-Schutz: aus';
+        fileWriteLockToggle.classList.toggle('warning', webWriteLocked);
+        fileWriteLockToggle.classList.toggle('primary', !webWriteLocked);
+        fileWriteLockToggle.title = webWriteLocked
+          ? 'Ändern, Löschen, Upload, Entpacken und Wiederherstellen sind nur in der Weboberfläche gesperrt. Der Minecraft Server kann weiterhin schreiben.'
+          : 'Weboberfläche ist entsperrt. Änderungen, Uploads und Löschaktionen sind möglich.';
+      }
+      if (fileDropZone) {
+        fileDropZone.classList.toggle('locked', webWriteLocked);
+        fileDropZone.textContent = webWriteLocked ? 'Web-Schutz aktiv: Upload ist gesperrt' : 'Dateien hierher ziehen oder klicken zum Hochladen';
+        if (fileUploadInput && !fileDropZone.contains(fileUploadInput)) fileDropZone.appendChild(fileUploadInput);
+      }
+      document.querySelectorAll('[data-write-action]').forEach(button => {
+        button.disabled = webWriteLocked;
+        button.title = webWriteLocked ? 'Web-Schutz aktiv: erst entsperren.' : '';
+      });
+      if (currentEditorFile && currentEditorFile.root !== 'trash') setEditorPreviewMode(webWriteLocked, webWriteLocked ? 'Web-Schutz aktiv: Vorschau. Zum Speichern oben entsperren.' : '');
+    }
+
+    function ensureWriteAllowed(actionLabel = 'Diese Aktion') {
+      if (!webWriteLocked) return true;
+      alert(actionLabel + ' ist durch den Web-Schutz gesperrt.\n\nDas betrifft nur diese Weboberfläche. Der Minecraft Server selbst kann seine Dateien weiterhin schreiben.');
+      return false;
+    }
+
+    async function loadTrashSettings() {
+      try {
+        const data = await fetchJson('/api/files/trash/settings');
+        trashRetentionDays = Number(data.retention_days ?? 7);
+        if (trashRetentionSelect) trashRetentionSelect.value = String(trashRetentionDays);
+      } catch (err) {
+        appendLine('[WinoMC Dateien] Papierkorb-Einstellungen konnten nicht geladen werden: ' + err.message, 'error');
+      }
+    }
+
+    async function saveTrashSettings(days) {
+      try {
+        const data = await postJson('/api/files/trash/settings', { retention_days: Number(days) });
+        trashRetentionDays = Number(data.retention_days ?? days);
+        if (trashRetentionSelect) trashRetentionSelect.value = String(trashRetentionDays);
+        appendLine('[WinoMC Dateien] Papierkorb-Aufbewahrung gesetzt: ' + (trashRetentionDays === 0 ? 'nie automatisch' : trashRetentionDays + ' Tage'), 'ok');
+      } catch (err) {
+        alert(err.message);
+      }
+    }
     function formatBytes(value) { const bytes = Number(value || 0); if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB'; return (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB'; }
     function formatUnixTime(value) { if (!value) return '-'; return new Date(Number(value) * 1000).toLocaleString(); }
     function normalizeUiPath(path) { path = String(path || '/').replaceAll('\\', '/'); if (!path.startsWith('/')) path = '/' + path; path = path.replace(/\/+/g, '/'); return path || '/'; }
     function parentUiPath(path) { path = normalizeUiPath(path); if (path === '/') return '/'; const parts = path.split('/').filter(Boolean); parts.pop(); return '/' + parts.join('/'); }
     function escapeHtml(value) { return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;'); }
-    function activateTab(tab) { if (document.body.classList.contains('desktop-mode')) { openDesktopWindow(tab); return; } document.body.classList.toggle('hide-hero', tab !== 'overview'); document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); }
+    function activateTab(tab) { if (document.body.classList.contains('desktop-mode')) { openDesktopWindow(tab); return; } document.body.classList.toggle('hide-hero', tab !== 'overview'); document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (document.body.classList.contains('sidebar-collapsed')) requestAnimationFrame(scrollActiveSidebarIconIntoView); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); }
     function openRoot(root, path = '/') { activateTab('files'); setTimeout(async () => { await initFileManager(); currentFileRoot = root; fileRootSelect.value = root; await loadFileList(path); }, 0); }
 
     async function loadStatus() { try { const data = await fetchJson('/api/status'); latestStatus = data; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
 
-    async function initFileManager() { if (filesInitialized) { await loadFileList(); return; } filesInitialized = true; try { setFilesStatus('Lade Bereiche...', 'warn'); const data = await fetchJson('/api/files/roots'); fileRootSelect.innerHTML = ''; data.roots.forEach(root => { const option = document.createElement('option'); option.value = root.key; option.textContent = root.label + (root.exists ? '' : ' (fehlt)'); option.disabled = !root.exists || !root.readable; fileRootSelect.appendChild(option); }); const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled); if (![...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) currentFileRoot = firstEnabled ? firstEnabled.value : 'config'; fileRootSelect.value = currentFileRoot; await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
+    async function initFileManager() { if (filesInitialized) { await loadFileList(); return; } filesInitialized = true; try { setFilesStatus('Lade Bereiche...', 'warn'); const data = await fetchJson('/api/files/roots'); fileRootSelect.innerHTML = ''; data.roots.forEach(root => { const option = document.createElement('option'); option.value = root.key; option.textContent = root.label + (root.exists ? '' : ' (fehlt)'); option.disabled = !root.exists || !root.readable; fileRootSelect.appendChild(option); }); const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled); if (![...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) currentFileRoot = firstEnabled ? firstEnabled.value : 'config'; fileRootSelect.value = currentFileRoot; await loadTrashSettings(); applyWebWriteLock(); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
     async function loadFileList(path) { if (path !== undefined) currentFilePath = normalizeUiPath(path); currentFileRoot = fileRootSelect.value || currentFileRoot; try { setFilesStatus('Lade...', 'warn'); updatePathDisplay(); const data = await fetchJson('/api/files/list', { root: currentFileRoot, path: currentFilePath }); currentFilePath = data.path || '/'; fileParent.disabled = currentFilePath === '/'; updatePathDisplay(); renderFileEntries(data.entries || []); setFilesStatus('Bereit', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
     function updatePathDisplay() { const full = currentFileRoot + ':' + currentFilePath; fileCurrentPath.textContent = full; filePathInput.value = currentFilePath; fileBreadcrumb.innerHTML = ''; const rootButton = document.createElement('button'); rootButton.type = 'button'; rootButton.textContent = currentFileRoot + ':/'; rootButton.addEventListener('click', () => loadFileList('/')); fileBreadcrumb.appendChild(rootButton); let current = ''; currentFilePath.split('/').filter(Boolean).forEach(part => { current += '/' + part; const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = part; const target = current; btn.addEventListener('click', () => loadFileList(target)); fileBreadcrumb.appendChild(btn); }); }
     function renderFileEntries(entries) {
       const inTrash = currentFileRoot === 'trash';
+      document.body.classList.toggle('trash-open', inTrash);
       if (fileEmptyTrash) fileEmptyTrash.style.display = inTrash ? '' : 'none';
       if (!entries.length) {
         fileTableBody.innerHTML = '<tr><td colspan="5">Dieser Ordner ist leer.</td></tr>';
+        applyWebWriteLock();
         return;
       }
       fileTableBody.innerHTML = '';
@@ -1361,6 +1677,7 @@ INDEX_HTML = r"""<!doctype html>
           const exportZip = document.createElement('button');
           exportZip.type = 'button';
           exportZip.textContent = 'Export';
+          exportZip.dataset.writeAction = 'true';
           exportZip.addEventListener('click', () => saveZipToExport(entry.path));
           actions.append(open, zip, exportZip);
         } else {
@@ -1377,6 +1694,7 @@ INDEX_HTML = r"""<!doctype html>
             const unzip = document.createElement('button');
             unzip.type = 'button';
             unzip.textContent = 'Entpacken';
+            unzip.dataset.writeAction = 'true';
             unzip.addEventListener('click', () => unzipFile(entry.path));
             actions.appendChild(unzip);
           }
@@ -1387,6 +1705,7 @@ INDEX_HTML = r"""<!doctype html>
           restore.type = 'button';
           restore.textContent = 'Wiederherstellen';
           restore.className = 'primary';
+          restore.dataset.writeAction = 'true';
           restore.title = entry.original_path ? ('Zurück nach ' + entry.original_root + ':' + entry.original_path) : 'Aus Papierkorb wiederherstellen';
           restore.addEventListener('click', () => restoreFileEntry(entry.path, entry.name));
           actions.appendChild(restore);
@@ -1397,6 +1716,7 @@ INDEX_HTML = r"""<!doctype html>
           del.type = 'button';
           del.textContent = inTrash ? 'Endgültig' : 'Löschen';
           del.className = 'danger';
+          del.dataset.writeAction = 'true';
           del.addEventListener('click', () => deleteFileEntry(entry.path, entry.name, inTrash));
           actions.appendChild(del);
         }
@@ -1405,31 +1725,34 @@ INDEX_HTML = r"""<!doctype html>
         tr.append(nameTd, typeTd, sizeTd, modifiedTd, actionsTd);
         fileTableBody.appendChild(tr);
       });
+      applyWebWriteLock();
     }
 
     function downloadFile(path) { window.location.href = apiUrl('/api/files/download', { root: currentFileRoot, path }); }
     function downloadZip(path) { window.location.href = apiUrl('/api/files/zip', { root: currentFileRoot, path }); }
-    async function saveZipToExport(path) { try { setFilesStatus('Erstelle ZIP...', 'warn'); const data = await postJson('/api/files/zip', { root: currentFileRoot, paths: [path], save_to_export: true }); appendLine('[WinoMC Dateien] ZIP exportiert: ' + data.filename, 'ok'); setFilesStatus('ZIP exportiert', ''); if (currentFileRoot === 'export') await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] ZIP-Fehler: ' + err.message, 'error'); alert(err.message); } }
-    function setEditorPreviewMode(previewOnly) {
-      if (fileSave) {
-        fileSave.disabled = !!previewOnly;
-        fileSave.style.display = previewOnly ? 'none' : '';
-      }
+    async function saveZipToExport(path) { if (!ensureWriteAllowed('ZIP nach Export speichern')) return; try { setFilesStatus('Erstelle ZIP...', 'warn'); const data = await postJson('/api/files/zip', { root: currentFileRoot, paths: [path], save_to_export: true }); appendLine('[WinoMC Dateien] ZIP exportiert: ' + data.filename, 'ok'); setFilesStatus('ZIP exportiert', ''); if (currentFileRoot === 'export') await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] ZIP-Fehler: ' + err.message, 'error'); alert(err.message); } }
+    function setEditorPreviewMode(previewOnly, note = '') {
+      if (editorPanel) editorPanel.classList.toggle('preview-only', !!previewOnly);
       if (fileEditor) fileEditor.readOnly = !!previewOnly;
-      const panel = document.getElementById('editorPanel');
-      if (panel) panel.classList.toggle('preview-only', !!previewOnly);
+      if (fileSave) fileSave.hidden = !!previewOnly;
+      if (fileCloseEditor) fileCloseEditor.textContent = previewOnly ? 'Vorschau leeren' : 'Editor leeren';
+      if (editorFullscreen) editorFullscreen.textContent = previewOnly ? 'Vorschau Vollbild' : 'Editor Vollbild';
+      if (editorReadonlyNote) {
+        editorReadonlyNote.hidden = !previewOnly;
+        editorReadonlyNote.textContent = note || 'Schreibgeschützte Vorschau. Zum Bearbeiten Datei aus dem Papierkorb wiederherstellen oder Web-Schutz entsperren.';
+      }
     }
 
     async function openFileInEditor(path) {
       try {
         setFilesStatus(currentFileRoot === 'trash' ? 'Öffne Vorschau...' : 'Öffne Datei...', 'warn');
         const data = await fetchJson('/api/files/read', { root: currentFileRoot, path });
-        const previewOnly = data.root === 'trash';
+        const previewOnly = data.root === 'trash' || webWriteLocked;
         currentEditorFile = previewOnly ? null : { root: data.root, path: data.path };
         editorPath.textContent = data.root + ':' + data.path;
         editorMeta.textContent = formatBytes(data.size) + ' · geändert: ' + formatUnixTime(data.modified) + (data.json ? ' · JSON-Prüfung aktiv' : '') + (previewOnly ? ' · Papierkorb-Vorschau, nicht schreibbar' : '');
         fileEditor.value = data.content || '';
-        setEditorPreviewMode(previewOnly);
+        setEditorPreviewMode(previewOnly, data.root === 'trash' ? 'Papierkorb-Vorschau: Wiederherstellen, um die Datei wieder bearbeitbar zu machen.' : (webWriteLocked ? 'Web-Schutz aktiv: Diese Datei wird nur als Vorschau geöffnet.' : ''));
         setFilesStatus(previewOnly ? 'Vorschau geöffnet' : 'Datei geöffnet', '');
       } catch (err) {
         setFilesStatus('Fehler', 'warn');
@@ -1438,7 +1761,7 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
-    async function saveEditorFile() {
+    async function saveEditorFile() { if (!ensureWriteAllowed('Speichern')) return;
       if (currentFileRoot === 'trash') { alert('Papierkorb-Dateien sind nur als Vorschau geöffnet. Bitte zuerst wiederherstellen.'); return; }
       if (!currentEditorFile) { alert('Keine Datei geöffnet.'); return; }
       try {
@@ -1456,12 +1779,12 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function clearEditor() { currentEditorFile = null; editorPath.textContent = 'Keine Datei geöffnet'; editorMeta.textContent = 'Bereit'; fileEditor.value = ''; setEditorPreviewMode(false); }
-    async function uploadFiles(files) { files = Array.from(files || []); if (!files.length) return; for (const file of files) { try { setFilesStatus('Upload: ' + file.name, 'warn'); let data; try { data = await uploadFileBinary(file); } catch (binaryErr) { if (file.size > MAX_JSON_UPLOAD_SIZE) throw binaryErr; appendLine('[WinoMC Dateien] Binary Upload fehlgeschlagen, nutze JSON-Fallback: ' + binaryErr.message, 'error'); data = await uploadFileJson(file); } appendLine('[WinoMC Dateien] Hochgeladen: ' + data.path, 'ok'); } catch (err) { appendLine('[WinoMC Dateien] Upload fehlgeschlagen: ' + file.name + ' · ' + err.message, 'error'); alert('Upload fehlgeschlagen: ' + file.name + '\n\n' + err.message); } } setFilesStatus('Upload fertig', ''); await loadFileList(currentFilePath); }
+    async function uploadFiles(files) { if (!ensureWriteAllowed('Upload')) return; files = Array.from(files || []); if (!files.length) return; for (const file of files) { try { setFilesStatus('Upload: ' + file.name, 'warn'); let data; try { data = await uploadFileBinary(file); } catch (binaryErr) { if (file.size > MAX_JSON_UPLOAD_SIZE) throw binaryErr; appendLine('[WinoMC Dateien] Binary Upload fehlgeschlagen, nutze JSON-Fallback: ' + binaryErr.message, 'error'); data = await uploadFileJson(file); } appendLine('[WinoMC Dateien] Hochgeladen: ' + data.path, 'ok'); } catch (err) { appendLine('[WinoMC Dateien] Upload fehlgeschlagen: ' + file.name + ' · ' + err.message, 'error'); alert('Upload fehlgeschlagen: ' + file.name + '\n\n' + err.message); } } setFilesStatus('Upload fertig', ''); await loadFileList(currentFilePath); }
     async function uploadFileBinary(file) { const res = await fetch(apiUrl('/api/files/upload', { root: currentFileRoot, path: currentFilePath, filename: file.name, overwrite: 'false' }), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-WinoMC-Upload-Size': String(file.size), 'X-WinoMC-Filename': encodeURIComponent(file.name) }, body: file }); const data = await res.json(); if (!res.ok || !data.ok) throw new Error(data.error || res.statusText); return data; }
     function readFileAsBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '').split(',', 2)[1] || ''); reader.onerror = () => reject(reader.error || new Error('Datei konnte nicht gelesen werden.')); reader.readAsDataURL(file); }); }
     async function uploadFileJson(file) { const base64 = await readFileAsBase64(file); return postJson('/api/files/upload-json', { root: currentFileRoot, path: currentFilePath, filename: file.name, overwrite: false, content_base64: base64 }); }
-    async function unzipFile(path) { const destination = window.prompt('In welchen Ordner entpacken?', currentFilePath || '/'); if (destination === null) return; const overwrite = window.confirm('Vorhandene Dateien überschreiben?'); try { setFilesStatus('Entpacke ZIP...', 'warn'); const data = await postJson('/api/files/unzip', { root: currentFileRoot, path, destination, overwrite }); appendLine('[WinoMC Dateien] Entpackt: ' + data.files + ' Dateien, ' + data.directories + ' Ordner', 'ok'); setFilesStatus('ZIP entpackt', ''); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Entpacken fehlgeschlagen: ' + err.message, 'error'); alert(err.message); } }
-    async function deleteFileEntry(path, name, permanent) {
+    async function unzipFile(path) { if (!ensureWriteAllowed('Entpacken')) return; const destination = window.prompt('In welchen Ordner entpacken?', currentFilePath || '/'); if (destination === null) return; const overwrite = window.confirm('Vorhandene Dateien überschreiben?'); try { setFilesStatus('Entpacke ZIP...', 'warn'); const data = await postJson('/api/files/unzip', { root: currentFileRoot, path, destination, overwrite }); appendLine('[WinoMC Dateien] Entpackt: ' + data.files + ' Dateien, ' + data.directories + ' Ordner', 'ok'); setFilesStatus('ZIP entpackt', ''); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Entpacken fehlgeschlagen: ' + err.message, 'error'); alert(err.message); } }
+    async function deleteFileEntry(path, name, permanent) { if (!ensureWriteAllowed(permanent ? 'Endgültig löschen' : 'Löschen')) return;
       const label = permanent ? 'endgültig löschen' : 'in den Papierkorb verschieben';
       if (!window.confirm('„' + name + '“ wirklich ' + label + '?')) return;
       try {
@@ -1477,7 +1800,7 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
-    async function restoreFileEntry(path, name, overwrite = false) {
+    async function restoreFileEntry(path, name, overwrite = false) { if (!ensureWriteAllowed('Wiederherstellen')) return;
       if (!overwrite && !window.confirm('„' + name + '“ aus dem Papierkorb wiederherstellen?')) return;
       try {
         setFilesStatus('Stelle wieder her...', 'warn');
@@ -1497,7 +1820,7 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
-    async function emptyTrash() {
+    async function emptyTrash() { if (!ensureWriteAllowed('Papierkorb leeren')) return;
       if (!window.confirm('Papierkorb wirklich endgültig leeren?')) return;
       try {
         setFilesStatus('Leere Papierkorb...', 'warn');
@@ -1512,7 +1835,7 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
-    async function runSafeWorldExport() { const defaultWorld = latestStatus && latestStatus.env && latestStatus.env.LEVEL_NAME ? '/' + latestStatus.env.LEVEL_NAME : '/world'; const worldPath = window.prompt('Welche Welt sicher exportieren?', defaultWorld); if (!worldPath) return; if (!window.confirm('Sicheren Welt-Export starten?\n\nAblauf: save hold → save query → ZIP → save resume')) return; try { setFilesStatus('Welt-Export läuft...', 'warn'); const data = await postJson('/api/worlds/export-safe', { path: worldPath, save_to_export: true }); appendLine('[WinoMC Dateien] Sicherer Welt-Export erstellt: ' + data.filename, 'ok'); setFilesStatus('Welt exportiert', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Welt-Export fehlgeschlagen: ' + err.message, 'error'); alert(err.message); } }
+    async function runSafeWorldExport() { if (!ensureWriteAllowed('Sicherer Welt-Export')) return; const defaultWorld = latestStatus && latestStatus.env && latestStatus.env.LEVEL_NAME ? '/' + latestStatus.env.LEVEL_NAME : '/world'; const worldPath = window.prompt('Welche Welt sicher exportieren?', defaultWorld); if (!worldPath) return; if (!window.confirm('Sicheren Welt-Export starten?\n\nAblauf: save hold → save query → ZIP → save resume')) return; try { setFilesStatus('Welt-Export läuft...', 'warn'); const data = await postJson('/api/worlds/export-safe', { path: worldPath, save_to_export: true }); appendLine('[WinoMC Dateien] Sicherer Welt-Export erstellt: ' + data.filename, 'ok'); setFilesStatus('Welt exportiert', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] Welt-Export fehlgeschlagen: ' + err.message, 'error'); alert(err.message); } }
 
     form.addEventListener('submit', event => { event.preventDefault(); sendCommand(input.value); });
     document.addEventListener('click', event => { const actionBtn = event.target.closest('[data-action-id]'); if (actionBtn) { runAction(ACTION_BY_ID[actionBtn.dataset.actionId]); return; } const jump = event.target.closest('[data-jump-tab]'); if (jump) { activateTab(jump.dataset.jumpTab); return; } const openRootBtn = event.target.closest('[data-open-root]'); if (openRootBtn) { openRoot(openRootBtn.dataset.openRoot, '/'); return; } });
@@ -1544,13 +1867,15 @@ INDEX_HTML = r"""<!doctype html>
     if (fileRefreshExplorer) fileRefreshExplorer.addEventListener('click', () => loadFileList(currentFilePath));
     if (fileOpenTrash) fileOpenTrash.addEventListener('click', () => openRoot('trash', '/'));
     if (fileOpenTrashExplorer) fileOpenTrashExplorer.addEventListener('click', () => openRoot('trash', '/'));
-    if (fileEmptyTrash) fileEmptyTrash.addEventListener('click', emptyTrash);
+    if (fileEmptyTrash) { fileEmptyTrash.dataset.writeAction = 'true'; fileEmptyTrash.addEventListener('click', emptyTrash); }
+    if (fileWriteLockToggle) fileWriteLockToggle.addEventListener('click', () => { webWriteLocked = !webWriteLocked; applyWebWriteLock(); });
+    if (trashRetentionSelect) trashRetentionSelect.addEventListener('change', () => saveTrashSettings(trashRetentionSelect.value));
     fileParent.addEventListener('click', () => loadFileList(parentUiPath(currentFilePath)));
     fileZipCurrent.addEventListener('click', () => downloadZip(currentFilePath));
     fileZipExportCurrent.addEventListener('click', () => saveZipToExport(currentFilePath));
     safeWorldExport.addEventListener('click', runSafeWorldExport); backupSafeWorldExport.addEventListener('click', runSafeWorldExport);
     fileSave.addEventListener('click', saveEditorFile); fileCloseEditor.addEventListener('click', clearEditor);
-    fileDropZone.addEventListener('click', () => fileUploadInput.click());
+    fileDropZone.addEventListener('click', () => { if (ensureWriteAllowed('Upload')) fileUploadInput.click(); });
     fileUploadInput.addEventListener('change', () => { uploadFiles(fileUploadInput.files); fileUploadInput.value = ''; });
     fileDropZone.addEventListener('dragover', event => { event.preventDefault(); fileDropZone.classList.add('dragover'); });
     fileDropZone.addEventListener('dragleave', () => fileDropZone.classList.remove('dragover'));
@@ -1564,6 +1889,18 @@ INDEX_HTML = r"""<!doctype html>
     function applySidebarState() {
       const collapsed = localStorage.getItem(STORE_SIDEBAR_COLLAPSED) === 'true';
       document.body.classList.toggle('sidebar-collapsed', collapsed);
+      if (collapsed) requestAnimationFrame(scrollActiveSidebarIconIntoView);
+    }
+
+    function scrollActiveSidebarIconIntoView() {
+      const nav = document.querySelector('nav[aria-label="WinoMC Menü"]');
+      const active = nav && nav.querySelector('.tab-button.active');
+      if (!nav || !active || !document.body.classList.contains('sidebar-collapsed')) return;
+      const navRect = nav.getBoundingClientRect();
+      const activeRect = active.getBoundingClientRect();
+      if (activeRect.top < navRect.top + 8 || activeRect.bottom > navRect.bottom - 8) {
+        active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
     }
 
     function toggleSidebar() {
@@ -2552,6 +2889,60 @@ def remove_path(path):
         os.remove(path)
 
 
+
+def load_console_settings():
+    defaults = {"trash_retention_days": TRASH_RETENTION_DAYS}
+    try:
+        with open(CONSOLE_SETTINGS_FILE, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        if not isinstance(data, dict):
+            return defaults
+        defaults.update(data)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+    return defaults
+
+
+def save_console_settings(settings):
+    os.makedirs(os.path.dirname(CONSOLE_SETTINGS_FILE), exist_ok=True)
+    current = load_console_settings()
+    current.update(settings)
+    fd, temp_path = tempfile.mkstemp(prefix=".winomc-settings-", dir=os.path.dirname(CONSOLE_SETTINGS_FILE))
+    os.close(fd)
+    try:
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(current, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+        os.replace(temp_path, CONSOLE_SETTINGS_FILE)
+    except Exception:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+        raise
+    return current
+
+
+def get_trash_retention_days():
+    try:
+        value = int(load_console_settings().get("trash_retention_days", TRASH_RETENTION_DAYS))
+    except Exception:
+        value = TRASH_RETENTION_DAYS
+    if value < 0:
+        value = TRASH_RETENTION_DAYS
+    return value
+
+
+def set_trash_retention_days(days):
+    days = int(days)
+    allowed = {0, 3, 7, 14, 30, 60, 90}
+    if days not in allowed:
+        raise ValueError("Ungültige Papierkorb-Aufbewahrung. Erlaubt: nie, 3, 7, 14, 30, 60 oder 90 Tage.")
+    settings = save_console_settings({"trash_retention_days": days})
+    return {"ok": True, "retention_days": int(settings.get("trash_retention_days", days))}
+
 def cleanup_trash():
     os.makedirs(TRASH_DIR, exist_ok=True)
     if TRASH_RETENTION_DAYS <= 0:
@@ -2865,6 +3256,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
+        if path.endswith("/api/files/trash/settings") or path == "/api/files/trash/settings":
+            self._send_json(200, {"ok": True, "retention_days": get_trash_retention_days(), "allowed_days": [0, 3, 7, 14, 30, 60, 90]})
+            return
         self.send_error(404)
 
     def do_POST(self):
@@ -2966,6 +3360,14 @@ class Handler(BaseHTTPRequestHandler):
                     destination_root=payload.get("destination_root"),
                     destination_path=payload.get("destination_path"),
                 ))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/files/trash/settings") or path == "/api/files/trash/settings":
+            try:
+                body = self._read_request_body(max_bytes=65536)
+                payload = json.loads(body or "{}")
+                self._send_json(200, set_trash_retention_days(payload.get("retention_days", TRASH_RETENTION_DAYS)))
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
