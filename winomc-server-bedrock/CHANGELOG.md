@@ -5,6 +5,13 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.7.2
+
+* Desktop-Overlay-Fix ergänzt
+* Stale Maximized-Card-Overlays blockieren den Desktop-Modus nicht mehr
+* Desktop-Workbench bereinigt beim Öffnen automatisch alte klassische Maximieren-Zustände
+* Desktop-Icons und Fenster bleiben auch bei großen Viewports bedienbar
+
 ### 1.5.7.1
 
 * Web-Schutz erweitert: Download und ZIP-Download werden jetzt ebenfalls gesperrt, solange der Web-Schutz aktiv ist

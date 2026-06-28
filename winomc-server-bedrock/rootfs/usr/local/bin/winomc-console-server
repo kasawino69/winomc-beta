@@ -69,7 +69,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Desktop Workbench 1.5.7</title>
+  <title>WinoMC Desktop Workbench 1.5.7.1</title>
   <style>
     :root {
       color-scheme: dark;
@@ -1036,6 +1036,35 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+
+
+    /* v1.5.7.1 Desktop Overlay Fix
+       Prevents stale classic-card maximize overlays from blocking the Desktop Workbench.
+       Desktop windows have their own maximize/minimize logic, so the classic card overlay
+       must never be active in desktop mode. */
+    body.desktop-mode.has-maximized-card::after {
+      content: none !important;
+      display: none !important;
+      pointer-events: none !important;
+    }
+    body.desktop-mode .card.maximized {
+      position: static !important;
+      inset: auto !important;
+      z-index: auto !important;
+      overflow: visible !important;
+      box-shadow: none !important;
+      background: transparent !important;
+    }
+    body.desktop-mode .tab-panel.desktop-open {
+      isolation: isolate;
+    }
+    body.desktop-mode .desktop-layer {
+      pointer-events: none;
+    }
+    body.desktop-mode .desktop-icon-grid,
+    body.desktop-mode .desktop-icon {
+      pointer-events: auto;
+    }
   </style>
 </head>
 <body>
@@ -1936,6 +1965,12 @@ INDEX_HTML = r"""<!doctype html>
       return document.body.classList.contains('desktop-mode');
     }
 
+
+    function clearDesktopBlockingOverlays() {
+      document.body.classList.remove('has-maximized-card');
+      document.querySelectorAll('.card.maximized').forEach(card => card.classList.remove('maximized'));
+    }
+
     function setConsoleMode(mode) {
       document.body.classList.remove('console-collapsed', 'console-hidden', 'console-maximized', 'console-compact', 'console-large');
       if (mode === 'collapsed') document.body.classList.add('console-collapsed');
@@ -2328,6 +2363,7 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function openDesktopWindow(id) {
+      if (isDesktopModeActive()) clearDesktopBlockingOverlays();
       if (id === 'console') {
         setConsoleMode('normal');
         ensureDesktopConsoleRect();
@@ -2493,6 +2529,7 @@ INDEX_HTML = r"""<!doctype html>
 
     function setDesktopMode(enabled) {
       document.body.classList.toggle('desktop-mode', enabled);
+      if (enabled) clearDesktopBlockingOverlays();
       localStorage.setItem(STORE_DESKTOP_MODE, enabled ? 'true' : 'false');
       if (desktopModeToggle) desktopModeToggle.textContent = enabled ? 'Klassische Ansicht' : 'Desktop-Modus';
       setConsoleMode(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal');
