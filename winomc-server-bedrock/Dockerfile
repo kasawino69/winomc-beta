@@ -17,6 +17,7 @@ RUN apt-get update \
         jq \
         libc6-dev \
         libcurl4 \
+        libjemalloc2 \
         libssl3 \
         python3 \
         tzdata \
@@ -29,7 +30,7 @@ RUN apt-get update \
         curl -fsSL "https://ryanfortner.github.io/box64-debs/box64.list" \
           -o /etc/apt/sources.list.d/box64.list; \
         apt-get update; \
-        apt-get install -y --no-install-recommends box64 libjemalloc2; \
+        apt-get install -y --no-install-recommends box64; \
       fi \
     && gcc -shared -fPIC -O2 -Wall -Wextra \
         -o /opt/winomc-bds-ipv6fix.so \
