@@ -1,0 +1,207 @@
+#!/bin/sh
+set -eu
+
+lower_value() {
+  printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]'
+}
+
+host_mode() {
+  case "$(lower_value "${WINOMC_HOST_OPTIMIZATION_MODE:-balanced}")" in
+    off|none|disabled) echo "off" ;;
+    host_friendly|host-friendly|friendly) echo "host_friendly" ;;
+    low_power|low-power|lowpower) echo "low_power" ;;
+    server_priority|server-priority|priority) echo "server_priority" ;;
+    expert) echo "expert" ;;
+    *) echo "balanced" ;;
+  esac
+}
+
+resolve_bds_nice() {
+  mode="$(host_mode)"
+  configured="$(lower_value "${WINOMC_BDS_NICE:-auto}")"
+
+  case "${configured}" in
+    auto|"")
+      case "${mode}" in
+        host_friendly) echo "5" ;;
+        low_power) echo "10" ;;
+        *) echo "0" ;;
+      esac
+      ;;
+    *[!0-9-]*) echo "0" ;;
+    *) echo "${configured}" ;;
+  esac
+}
+
+resolve_ionice_class() {
+  mode="$(host_mode)"
+  configured="$(lower_value "${WINOMC_BDS_IONICE_CLASS:-auto}")"
+
+  case "${configured}" in
+    auto|"")
+      case "${mode}" in
+        off) echo "none" ;;
+        low_power) echo "idle" ;;
+        host_friendly|server_priority|balanced) echo "best_effort" ;;
+        *) echo "none" ;;
+      esac
+      ;;
+    none|off|disabled) echo "none" ;;
+    idle) echo "idle" ;;
+    best_effort|best-effort|be) echo "best_effort" ;;
+    *) echo "none" ;;
+  esac
+}
+
+resolve_ionice_level() {
+  mode="$(host_mode)"
+  configured="$(lower_value "${WINOMC_BDS_IONICE_LEVEL:-auto}")"
+
+  case "${configured}" in
+    auto|"")
+      case "${mode}" in
+        server_priority) echo "2" ;;
+        balanced) echo "4" ;;
+        host_friendly) echo "6" ;;
+        *) echo "4" ;;
+      esac
+      ;;
+    *[!0-7]*) echo "4" ;;
+    *) echo "${configured}" ;;
+  esac
+}
+
+find_jemalloc() {
+  for lib in \
+    /usr/lib/x86_64-linux-gnu/libjemalloc.so.2 \
+    /usr/lib/aarch64-linux-gnu/libjemalloc.so.2 \
+    /usr/lib/libjemalloc.so.2; do
+    if [ -f "${lib}" ]; then
+      echo "${lib}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+maybe_enable_jemalloc() {
+  runtime_arch="$(uname -m)"
+  enabled="$(lower_value "${WINOMC_ENABLE_JEMALLOC:-auto}")"
+  mode="$(host_mode)"
+
+  case "${enabled}" in
+    false|off|0|no)
+      echo "WinoMC host optimization: jemalloc disabled"
+      return 0
+      ;;
+    auto|"")
+      if [ "${mode}" = "off" ]; then
+        return 0
+      fi
+
+      case "${runtime_arch}" in
+        x86_64|amd64) ;;
+        *)
+          echo "WinoMC host optimization: jemalloc auto disabled on ${runtime_arch} because ARM64/Box64 is experimental"
+          return 0
+          ;;
+      esac
+      ;;
+    true|on|1|yes) ;;
+    *) return 0 ;;
+  esac
+
+  jemalloc_lib="$(find_jemalloc || true)"
+
+  if [ -z "${jemalloc_lib}" ]; then
+    echo "WinoMC host optimization: jemalloc requested but library not found"
+    return 0
+  fi
+
+  if [ -n "${LD_PRELOAD:-}" ]; then
+    export LD_PRELOAD="${jemalloc_lib}:${LD_PRELOAD}"
+  else
+    export LD_PRELOAD="${jemalloc_lib}"
+  fi
+
+  echo "WinoMC host optimization: jemalloc enabled: ${jemalloc_lib}"
+}
+
+print_runtime_analysis() {
+  case "$(lower_value "${WINOMC_RUNTIME_ANALYSIS:-true}")" in
+    true|on|1|yes) ;;
+    *) return 0 ;;
+  esac
+
+  runtime_arch="$(uname -m)"
+
+  echo "WinoMC runtime analysis"
+  echo "- Host optimization mode: $(host_mode)"
+  echo "- Architecture: ${runtime_arch}"
+  echo "- amd64 priority: stable primary target"
+
+  case "${runtime_arch}" in
+    aarch64|arm64)
+      echo "- aarch64 status: experimental; host optimizations are applied conservatively"
+      ;;
+  esac
+
+  if [ "${VIEW_DISTANCE:-0}" -gt 16 ] 2>/dev/null; then
+    echo "WARN: VIEW_DISTANCE=${VIEW_DISTANCE} is high and may increase CPU/RAM/network load" >&2
+  fi
+
+  if [ "${TICK_DISTANCE:-0}" -gt 6 ] 2>/dev/null; then
+    echo "WARN: TICK_DISTANCE=${TICK_DISTANCE} is high and may increase server simulation load" >&2
+  fi
+
+  if [ "${MAX_PLAYERS:-0}" -gt 20 ] 2>/dev/null; then
+    echo "WARN: MAX_PLAYERS=${MAX_PLAYERS} is high for Home Assistant hosts; monitor CPU/RAM" >&2
+  fi
+}
+
+if [ "$#" -lt 1 ]; then
+  echo "ERROR: winomc-host-optimized-exec requires a command" >&2
+  exit 1
+fi
+
+maybe_enable_jemalloc
+print_runtime_analysis
+
+mode="$(host_mode)"
+nice_value="$(resolve_bds_nice)"
+ionice_class="$(resolve_ionice_class)"
+ionice_level="$(resolve_ionice_level)"
+affinity="${WINOMC_CPU_AFFINITY:-}"
+
+if [ -n "${affinity}" ]; then
+  if command -v taskset >/dev/null 2>&1; then
+    set -- taskset -c "${affinity}" "$@"
+  else
+    echo "WARN: WINOMC_CPU_AFFINITY=${affinity} requested but taskset is not available" >&2
+  fi
+fi
+
+if command -v ionice >/dev/null 2>&1; then
+  case "${ionice_class}" in
+    idle)
+      set -- ionice -c 3 "$@"
+      ;;
+    best_effort)
+      set -- ionice -c 2 -n "${ionice_level}" "$@"
+      ;;
+  esac
+elif [ "${ionice_class}" != "none" ]; then
+  echo "WARN: ionice requested but not available" >&2
+fi
+
+if [ "${nice_value}" != "0" ]; then
+  if command -v nice >/dev/null 2>&1; then
+    set -- nice -n "${nice_value}" "$@"
+  else
+    echo "WARN: nice=${nice_value} requested but nice is not available" >&2
+  fi
+fi
+
+echo "WinoMC host optimization: mode=${mode}, bds_nice=${nice_value}, bds_ionice=${ionice_class}/${ionice_level}, cpu_affinity=${affinity:-auto}"
+exec "$@"
