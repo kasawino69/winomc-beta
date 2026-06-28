@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2023 williamcorsel  
+Copyright (c) 2023 williamcorsel
 Copyright (c) 2026 kasawino69
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -35,13 +35,27 @@ Parts of the structure, ideas and Home Assistant add-on patterns were inspired b
 - itzg/docker-minecraft-bedrock-server
 - poeggi/bds-ipv6fix
 - Box64
+- jemalloc / libjemalloc2
 
-The WinoMC IPv6 bind fix is implemented inside this repository and built from source as part of the WinoMC add-on image. The technical approach is inspired by the MIT-licensed `bds-ipv6fix` project by poeggi.
+The WinoMC-specific modifications, native runtime, web console, Bedrock add-on handling,
+configuration handling and further project-specific extensions are maintained by kasawino69.
 
-ARM64 / aarch64 support uses Box64 as a compatibility layer where required. Box64 is developed and licensed by its respective authors and is not owned by this project.
+The WinoMC IPv6 bind fix is implemented inside this repository and built from source as part
+of the WinoMC add-on image. The technical approach is inspired by the MIT-licensed
+bds-ipv6fix project by poeggi. WinoMC does not include a prebuilt third-party binary from
+bds-ipv6fix.
 
-Minecraft, Minecraft Bedrock, Bedrock Dedicated Server, Mojang and Microsoft are trademarks or properties of their respective owners.
+ARM64 / aarch64 support may use Box64 as a compatibility layer where required. Box64 is
+developed and licensed by its respective authors and is not owned by this project.
 
-Home Assistant is a trademark or project of the Home Assistant community and its respective owners.
+jemalloc / libjemalloc2 may be included as an operating-system package in the WinoMC add-on
+image and may be used optionally for memory allocation optimization. jemalloc is developed
+and licensed by its respective copyright holders and is not owned by this project.
 
-This project is not affiliated with, endorsed by, sponsored by or officially connected to Mojang, Microsoft, Home Assistant, itzg, poeggi, Box64 or the original upstream add-on repositories unless explicitly stated otherwise.
+This repository may download, install or execute third-party operating-system packages or
+official server software during build or runtime. Those components remain licensed by their
+respective authors and projects.
+
+Minecraft, Minecraft Bedrock Dedicated Server, Mojang and Microsoft are trademarks or property
+of their respective owners. WinoMC is not an official Minecraft, Mojang, Microsoft or Home
+Assistant project.
