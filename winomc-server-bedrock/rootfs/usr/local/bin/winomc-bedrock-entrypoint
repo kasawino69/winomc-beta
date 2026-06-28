@@ -89,6 +89,10 @@ patch_console_overlay() {
     return 0
   fi
 
+  if [ -x "/usr/local/bin/winomc-patch-console-css" ]; then
+    /usr/local/bin/winomc-patch-console-css
+  fi
+
   python3 - <<'PY'
 from pathlib import Path
 

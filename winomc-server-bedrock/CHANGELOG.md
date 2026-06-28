@@ -5,6 +5,13 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.1
+
+* Klassische Dateiexplorer-Ansicht korrigiert: Ordner- und Dateiliste besitzen jetzt eine eigene Scrollhöhe.
+* Tabellenkopf der Dateiliste bleibt beim Scrollen sichtbar.
+* Explorer- und Editorbereich laufen nicht mehr unter die angedockte Live Console.
+* Add-on-Version auf 1.6.1 angehoben, damit Home Assistant die Änderung als Update erkennt.
+
 ### 1.6.0
 
 * WinoMC Framework- und Host-Optimierungen ergänzt, ohne spielinterne Behavior Packs oder Gameplay-Eingriffe.
