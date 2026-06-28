@@ -77,6 +77,10 @@ options:
   PLAYER_IDLE_TIMEOUT: 30
   MAX_THREADS: 2
 
+  # WinoMC Framework- und Host-Optimierung
+  WINOMC_HOST_OPTIMIZATION_MODE: balanced
+  WINOMC_RUNTIME_ANALYSIS: true
+
   # Verhalten und Sicherheit
   CHAT_RESTRICTION: None
   DISABLE_PLAYER_INTERACTION: false
@@ -156,6 +160,10 @@ schema:
   TICK_DISTANCE: int?
   PLAYER_IDLE_TIMEOUT: int?
   MAX_THREADS: int?
+
+  # WinoMC Framework- und Host-Optimierung
+  WINOMC_HOST_OPTIMIZATION_MODE: list(off|balanced|host_friendly|low_power|server_priority|expert)?
+  WINOMC_RUNTIME_ANALYSIS: bool?
 
   # Verhalten und Sicherheit
   CHAT_RESTRICTION: list(None|Dropped|Disabled)?
