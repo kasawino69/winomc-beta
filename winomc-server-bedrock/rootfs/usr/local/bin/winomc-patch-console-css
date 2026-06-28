@@ -1,0 +1,68 @@
+#!/bin/sh
+set -eu
+
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path('/usr/local/bin/winomc-console-server')
+if not path.exists():
+    path = Path('winomc-server-bedrock/rootfs/usr/local/bin/winomc-console-server')
+
+text = path.read_text(encoding='utf-8')
+
+scroll_fix = '''
+
+    /* v1.6.1 Classic File Explorer Scroll Fix
+       Die klassische Dateiliste bekommt eine eigene stabile Scrollhoehe,
+       damit Ordner mit vielen Dateien nicht unter der angedockten Konsole verschwinden. */
+    body:not(.desktop-mode) .tab-panel[data-panel="files"].active,
+    body:not(.desktop-mode) .file-manager-grid {
+      min-height: 0;
+    }
+    body:not(.desktop-mode) .file-explorer-panel,
+    body:not(.desktop-mode) .editor-panel {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    body:not(.desktop-mode) .file-explorer-panel > .card-header,
+    body:not(.desktop-mode) .file-explorer-panel > .drop-zone,
+    body:not(.desktop-mode) .editor-panel > .card-header,
+    body:not(.desktop-mode) .editor-panel > .file-path,
+    body:not(.desktop-mode) .editor-panel > .file-meta,
+    body:not(.desktop-mode) .editor-panel > .readonly-note,
+    body:not(.desktop-mode) .editor-panel > .editor-actions,
+    body:not(.desktop-mode) .editor-panel > .info {
+      flex: 0 0 auto;
+    }
+    body:not(.desktop-mode) .file-table-wrap {
+      flex: 1 1 auto;
+      min-height: 240px;
+      max-height: clamp(260px, calc(100vh - var(--console-height) - 340px), 720px);
+      overflow: auto !important;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+    body:not(.desktop-mode) .file-table th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    body:not(.desktop-mode) .editor-box {
+      flex: 1 1 auto;
+      min-height: 260px;
+      max-height: clamp(280px, calc(100vh - var(--console-height) - 360px), 760px);
+      overflow: auto;
+    }
+    @media (max-width: 850px) {
+      body:not(.desktop-mode) .file-table-wrap,
+      body:not(.desktop-mode) .editor-box {
+        max-height: 58vh;
+      }
+    }
+'''
+
+if 'v1.6.1 Classic File Explorer Scroll Fix' not in text:
+    text = text.replace('  </style>', scroll_fix + '  </style>', 1)
+    path.write_text(text, encoding='utf-8')
+PY
