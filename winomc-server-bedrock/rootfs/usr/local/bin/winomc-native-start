@@ -59,7 +59,7 @@ start_bedrock_server() {
       if is_true "${USE_BOX64:-true}"; then
         if command -v box64 >/dev/null 2>&1; then
           echo "WinoMC native ARM64 mode: starting Bedrock Dedicated Server via box64"
-          exec box64 ./bedrock_server
+          exec sh /usr/local/bin/winomc-host-optimized-exec box64 ./bedrock_server
         fi
 
         echo "ERROR: ARM64 runtime detected, but box64 is not installed or not in PATH" >&2
@@ -69,10 +69,10 @@ start_bedrock_server() {
 
       echo "WARN: ARM64 runtime detected but USE_BOX64=false" >&2
       echo "WARN: Trying direct start anyway; this will usually fail with Exec format error" >&2
-      exec ./bedrock_server
+      exec sh /usr/local/bin/winomc-host-optimized-exec ./bedrock_server
       ;;
     *)
-      exec ./bedrock_server
+      exec sh /usr/local/bin/winomc-host-optimized-exec ./bedrock_server
       ;;
   esac
 }
