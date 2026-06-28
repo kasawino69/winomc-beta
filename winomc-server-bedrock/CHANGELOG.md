@@ -5,6 +5,12 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.7.1
+
+* Web-Schutz erweitert: Download und ZIP-Download werden jetzt ebenfalls gesperrt, solange der Web-Schutz aktiv ist
+* Web-Schutz-Zustand wird zusätzlich per Cookie an das Backend gespiegelt, damit direkte Download-Endpunkte ebenfalls blockiert werden
+* Seitenscrollbar-Hotfix ergänzt: Kopfzeile bleibt einzeilig, Scrollbar-Platz wird stabil reserviert und die klassische Ansicht springt nicht mehr nach unten
+
 ### 1.5.7
 
 * Eingeklappte Navigation als Icon-Leiste korrigiert

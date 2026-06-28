@@ -115,18 +115,21 @@ INDEX_HTML = r"""<!doctype html>
     body.console-maximized { --console-height: min(84vh, 820px); }
     header {
       padding: 14px 18px;
+      min-height: 52px;
       background: rgba(15, 23, 42, .92);
       border-bottom: 1px solid var(--border-soft);
       display: flex;
       gap: 12px;
       align-items: center;
       justify-content: space-between;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       position: sticky;
       top: 0;
       z-index: 5;
       backdrop-filter: blur(12px);
     }
+    header h1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    header .status { margin-left: auto; flex: 0 0 auto; white-space: nowrap; }
     h1 { margin: 0; font-size: 18px; font-weight: 760; letter-spacing: .01em; }
     h2 { margin: 0 0 6px; font-size: 18px; }
     h3 { margin: 0 0 4px; font-size: 15px; }
@@ -628,8 +631,12 @@ INDEX_HTML = r"""<!doctype html>
 
 
     /* v1.5.5 UX polish */
-    html, body { overflow-x: hidden; }
-    body { background-attachment: fixed; background-repeat: no-repeat; }
+    html {
+      overflow-x: hidden;
+      overflow-y: scroll;
+      scrollbar-gutter: stable;
+    }
+    body { overflow-x: hidden; background-attachment: fixed; background-repeat: no-repeat; }
     body.hide-hero:not(.desktop-mode) .hero { display: none; }
     nav { overflow-x: hidden; }
     body.sidebar-collapsed nav {
@@ -784,7 +791,7 @@ INDEX_HTML = r"""<!doctype html>
 
 
     @media (max-width: 1050px) { .layout { grid-template-columns: 1fr; padding: 10px; } body.sidebar-collapsed { --sidebar-width: 255px; } nav { position: static; height: auto; min-height: 0; display: flex; overflow-x: auto; gap: 6px; padding: 8px; border-radius: 12px; } .sidebar-toggle, .nav-title { display: none; } .tab-button { width: auto; min-width: max-content; } .grid, .grid-3, .file-manager-grid { grid-template-columns: 1fr; } .split-resizer { display: none; } .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); } }
-    @media (max-width: 720px) { :root { --console-height: 310px; } body.console-compact { --console-height: 220px; } body.console-large { --console-height: 70vh; } body.console-maximized { --console-height: 82vh; } header { padding: 10px 12px; } .layout { padding: 8px; gap: 10px; } .hero, .card { padding: 12px; border-radius: 12px; } .hero-actions button, .command-row button, .file-toolbar button, .file-toolbar input, .file-toolbar select { width: 100%; } .file-row-actions { flex-wrap: wrap; } .file-table th, .file-table td { padding: 8px; } .split-actions { grid-template-columns: 1fr; } .command-row { flex-direction: column; } .console-controls button { padding: 7px 9px; font-size: 12px; } .console-head { gap: 6px; } .console-head h3 { font-size: 14px; } .console-head p { display: none; } #log { font-size: 12px; } .editor-panel.editor-fullscreen { inset: 8px 8px calc(var(--console-height) + 10px) 8px; } .card.maximized { inset: 8px; } .dashboard-layout { grid-template-columns: 1fr; } }
+    @media (max-width: 720px) { :root { --console-height: 310px; } body.console-compact { --console-height: 220px; } body.console-large { --console-height: 70vh; } body.console-maximized { --console-height: 82vh; } header { padding: 10px 12px; min-height: 46px; } header h1 { font-size: 15px; } header .status { font-size: 12px; } .layout { padding: 8px; gap: 10px; } .hero, .card { padding: 12px; border-radius: 12px; } .hero-actions button, .command-row button, .file-toolbar button, .file-toolbar input, .file-toolbar select { width: 100%; } .file-row-actions { flex-wrap: wrap; } .file-table th, .file-table td { padding: 8px; } .split-actions { grid-template-columns: 1fr; } .command-row { flex-direction: column; } .console-controls button { padding: 7px 9px; font-size: 12px; } .console-head { gap: 6px; } .console-head h3 { font-size: 14px; } .console-head p { display: none; } #log { font-size: 12px; } .editor-panel.editor-fullscreen { inset: 8px 8px calc(var(--console-height) + 10px) 8px; } .card.maximized { inset: 8px; } .dashboard-layout { grid-template-columns: 1fr; } }
 
 
     /* v1.5.6 Dashboard + Trash UX refinement */
@@ -1574,21 +1581,22 @@ INDEX_HTML = r"""<!doctype html>
 
     function applyWebWriteLock() {
       localStorage.setItem(STORE_WEB_WRITE_LOCK, String(webWriteLocked));
+      document.cookie = 'winomc_web_protection=' + (webWriteLocked ? '1' : '0') + '; Path=/; SameSite=Lax';
       document.body.classList.toggle('web-write-locked', webWriteLocked);
       if (fileWriteLockToggle) {
         fileWriteLockToggle.textContent = webWriteLocked ? '🔒 Web-Schutz: an' : '🔓 Web-Schutz: aus';
         fileWriteLockToggle.classList.toggle('warning', webWriteLocked);
         fileWriteLockToggle.classList.toggle('primary', !webWriteLocked);
         fileWriteLockToggle.title = webWriteLocked
-          ? 'Ändern, Löschen, Upload, Entpacken und Wiederherstellen sind nur in der Weboberfläche gesperrt. Der Minecraft Server kann weiterhin schreiben.'
-          : 'Weboberfläche ist entsperrt. Änderungen, Uploads und Löschaktionen sind möglich.';
+          ? 'Download, ZIP-Download, Änderungen, Upload, Entpacken, Löschen und Wiederherstellen sind nur in der Weboberfläche gesperrt. Der Minecraft Server kann weiterhin schreiben.'
+          : 'Weboberfläche ist entsperrt. Downloads und Dateiaktionen sind möglich.';
       }
       if (fileDropZone) {
         fileDropZone.classList.toggle('locked', webWriteLocked);
         fileDropZone.textContent = webWriteLocked ? 'Web-Schutz aktiv: Upload ist gesperrt' : 'Dateien hierher ziehen oder klicken zum Hochladen';
         if (fileUploadInput && !fileDropZone.contains(fileUploadInput)) fileDropZone.appendChild(fileUploadInput);
       }
-      document.querySelectorAll('[data-write-action]').forEach(button => {
+      document.querySelectorAll('[data-write-action], [data-download-action]').forEach(button => {
         button.disabled = webWriteLocked;
         button.title = webWriteLocked ? 'Web-Schutz aktiv: erst entsperren.' : '';
       });
@@ -1598,6 +1606,12 @@ INDEX_HTML = r"""<!doctype html>
     function ensureWriteAllowed(actionLabel = 'Diese Aktion') {
       if (!webWriteLocked) return true;
       alert(actionLabel + ' ist durch den Web-Schutz gesperrt.\n\nDas betrifft nur diese Weboberfläche. Der Minecraft Server selbst kann seine Dateien weiterhin schreiben.');
+      return false;
+    }
+
+    function ensureDownloadAllowed(actionLabel = 'Download') {
+      if (!webWriteLocked) return true;
+      alert(actionLabel + ' ist durch den Web-Schutz gesperrt.\n\nZum Herunterladen bitte den Web-Schutz in der Dateiansicht entsperren.');
       return false;
     }
 
@@ -1673,6 +1687,7 @@ INDEX_HTML = r"""<!doctype html>
           const zip = document.createElement('button');
           zip.type = 'button';
           zip.textContent = 'ZIP';
+          zip.dataset.downloadAction = 'true';
           zip.addEventListener('click', () => downloadZip(entry.path));
           const exportZip = document.createElement('button');
           exportZip.type = 'button';
@@ -1684,6 +1699,7 @@ INDEX_HTML = r"""<!doctype html>
           const download = document.createElement('button');
           download.type = 'button';
           download.textContent = 'Download';
+          download.dataset.downloadAction = 'true';
           download.addEventListener('click', () => downloadFile(entry.path));
           const edit = document.createElement('button');
           edit.type = 'button';
@@ -1728,8 +1744,14 @@ INDEX_HTML = r"""<!doctype html>
       applyWebWriteLock();
     }
 
-    function downloadFile(path) { window.location.href = apiUrl('/api/files/download', { root: currentFileRoot, path }); }
-    function downloadZip(path) { window.location.href = apiUrl('/api/files/zip', { root: currentFileRoot, path }); }
+    function downloadFile(path) {
+      if (!ensureDownloadAllowed('Download')) return;
+      window.location.href = apiUrl('/api/files/download', { root: currentFileRoot, path });
+    }
+    function downloadZip(path) {
+      if (!ensureDownloadAllowed('ZIP-Download')) return;
+      window.location.href = apiUrl('/api/files/zip', { root: currentFileRoot, path });
+    }
     async function saveZipToExport(path) { if (!ensureWriteAllowed('ZIP nach Export speichern')) return; try { setFilesStatus('Erstelle ZIP...', 'warn'); const data = await postJson('/api/files/zip', { root: currentFileRoot, paths: [path], save_to_export: true }); appendLine('[WinoMC Dateien] ZIP exportiert: ' + data.filename, 'ok'); setFilesStatus('ZIP exportiert', ''); if (currentFileRoot === 'export') await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); appendLine('[WinoMC Dateien] ZIP-Fehler: ' + err.message, 'error'); alert(err.message); } }
     function setEditorPreviewMode(previewOnly, note = '') {
       if (editorPanel) editorPanel.classList.toggle('preview-only', !!previewOnly);
@@ -1871,6 +1893,7 @@ INDEX_HTML = r"""<!doctype html>
     if (fileWriteLockToggle) fileWriteLockToggle.addEventListener('click', () => { webWriteLocked = !webWriteLocked; applyWebWriteLock(); });
     if (trashRetentionSelect) trashRetentionSelect.addEventListener('change', () => saveTrashSettings(trashRetentionSelect.value));
     fileParent.addEventListener('click', () => loadFileList(parentUiPath(currentFilePath)));
+    if (fileZipCurrent) fileZipCurrent.dataset.downloadAction = 'true';
     fileZipCurrent.addEventListener('click', () => downloadZip(currentFilePath));
     fileZipExportCurrent.addEventListener('click', () => saveZipToExport(currentFilePath));
     safeWorldExport.addEventListener('click', runSafeWorldExport); backupSafeWorldExport.addEventListener('click', runSafeWorldExport);
@@ -3077,6 +3100,16 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b"Forbidden\n")
         return True
 
+    def _web_protection_active(self):
+        cookie_header = self.headers.get("Cookie", "")
+        cookies = {}
+        for part in cookie_header.split(";"):
+            if "=" not in part:
+                continue
+            key, value = part.split("=", 1)
+            cookies[key.strip()] = value.strip()
+        return cookies.get("winomc_web_protection") == "1"
+
     def _send_json(self, status, payload):
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -3240,6 +3273,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/download") or path == "/api/files/download":
             try:
+                if self._web_protection_active():
+                    raise PermissionError("Download ist durch den Web-Schutz gesperrt. Bitte Web-Schutz entsperren.")
                 root_key = query.get("root", ["config"])[0]
                 rel_path = query.get("path", ["/"])[0]
                 file_path, _ = resolve_safe_path(root_key, rel_path)
@@ -3251,6 +3286,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/zip") or path == "/api/files/zip":
             try:
+                if self._web_protection_active():
+                    raise PermissionError("ZIP-Download ist durch den Web-Schutz gesperrt. Bitte Web-Schutz entsperren.")
                 zip_info = create_zip_from_paths(query.get("root", ["config"])[0], [query.get("path", ["/"])[0]], save_to_export=False)
                 self._send_file(zip_info["zip_path"], download_name=zip_info["zip_name"], content_type="application/zip", cleanup=zip_info["cleanup"])
             except Exception as exc:
