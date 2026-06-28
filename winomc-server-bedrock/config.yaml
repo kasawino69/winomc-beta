@@ -81,6 +81,8 @@ options:
   WINOMC_HOST_OPTIMIZATION_MODE: balanced
   WINOMC_CPU_AFFINITY: ""
   WINOMC_BDS_NICE: auto
+  WINOMC_BDS_IONICE_CLASS: auto
+  WINOMC_BDS_IONICE_LEVEL: auto
   WINOMC_ENABLE_JEMALLOC: auto
   WINOMC_RUNTIME_ANALYSIS: true
 
@@ -168,6 +170,8 @@ schema:
   WINOMC_HOST_OPTIMIZATION_MODE: list(off|balanced|host_friendly|low_power|server_priority|expert)?
   WINOMC_CPU_AFFINITY: str?
   WINOMC_BDS_NICE: str?
+  WINOMC_BDS_IONICE_CLASS: list(auto|none|best_effort|idle)?
+  WINOMC_BDS_IONICE_LEVEL: str?
   WINOMC_ENABLE_JEMALLOC: list(auto|true|false)?
   WINOMC_RUNTIME_ANALYSIS: bool?
 
