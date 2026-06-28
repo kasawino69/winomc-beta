@@ -5,6 +5,14 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.7.3
+
+* Vor dem Start der Webconsole wird die eingebettete Datei winomc-console-server automatisch und idempotent gepatcht.
+* Alte has-maximized-card / .card.maximized Overlay-Zustände werden entfernt.
+* Das Desktop-Layer darf keine Klicks mehr blockieren.
+* Desktop-Fenster, Icons, Taskbar, Startmenü und Konsole bleiben klickbar.
+* Der Patch läuft nur beim Start und erkennt selbst, ob er schon vorhanden ist.
+
 ### 1.5.7.2
 
 * Desktop-Overlay-Fix ergänzt
