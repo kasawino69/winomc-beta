@@ -5,6 +5,18 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.0
+
+* WinoMC Framework- und Host-Optimierungen ergänzt, ohne spielinterne Behavior Packs oder Gameplay-Eingriffe.
+* Neuer Host-Optimierungsmodus für den Bedrock-Start ergänzt: `off`, `balanced`, `host_friendly`, `low_power`, `server_priority` und `expert`.
+* Bedrock Dedicated Server wird jetzt über einen WinoMC-Optimierungs-Wrapper gestartet.
+* Optionale CPU-Priorität, I/O-Priorität und CPU-Affinity für hostfreundlicheren Betrieb vorbereitet.
+* Optionale jemalloc-Nutzung vorbereitet; automatisch konservativ, mit Fokus auf amd64 als primäres Ziel.
+* Laufzeitanalyse beim Start ergänzt, inklusive Hinweisen für hohe Sichtweite, hohe Tickdistanz und große Spielerlimits.
+* aarch64 bleibt experimentell, erhält aber konservative Host-Optimierungen und klare Log-Hinweise.
+* Neue Home-Assistant-UI-Optionen für WinoMC Host-Optimierung ergänzt.
+* Add-on-Version auf 1.6.0 angehoben, damit Home Assistant die Änderung als Update erkennt.
+
 ### 1.5.7.6
 
 * Klassische Ansicht erweitert: Neuer Menüpunkt **Desktop-Modus** direkt unter **Experten** ergänzt.

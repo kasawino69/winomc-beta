@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: Bedrock Minecraft Server auf Home Assistant
-version: 1.5.7.6
+version: 1.6.0
 slug: winomc-bedrock
 init: false
 boot: auto
@@ -76,6 +76,15 @@ options:
   TICK_DISTANCE: 4
   PLAYER_IDLE_TIMEOUT: 30
   MAX_THREADS: 2
+
+  # WinoMC Framework- und Host-Optimierung
+  WINOMC_HOST_OPTIMIZATION_MODE: balanced
+  WINOMC_CPU_AFFINITY: ""
+  WINOMC_BDS_NICE: auto
+  WINOMC_BDS_IONICE_CLASS: auto
+  WINOMC_BDS_IONICE_LEVEL: auto
+  WINOMC_ENABLE_JEMALLOC: auto
+  WINOMC_RUNTIME_ANALYSIS: true
 
   # Verhalten und Sicherheit
   CHAT_RESTRICTION: None
@@ -156,6 +165,15 @@ schema:
   TICK_DISTANCE: int?
   PLAYER_IDLE_TIMEOUT: int?
   MAX_THREADS: int?
+
+  # WinoMC Framework- und Host-Optimierung
+  WINOMC_HOST_OPTIMIZATION_MODE: list(off|balanced|host_friendly|low_power|server_priority|expert)?
+  WINOMC_CPU_AFFINITY: str?
+  WINOMC_BDS_NICE: str?
+  WINOMC_BDS_IONICE_CLASS: list(auto|none|best_effort|idle)?
+  WINOMC_BDS_IONICE_LEVEL: str?
+  WINOMC_ENABLE_JEMALLOC: list(auto|true|false)?
+  WINOMC_RUNTIME_ANALYSIS: bool?
 
   # Verhalten und Sicherheit
   CHAT_RESTRICTION: list(None|Dropped|Disabled)?
