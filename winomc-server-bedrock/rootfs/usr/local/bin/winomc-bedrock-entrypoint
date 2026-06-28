@@ -85,7 +85,7 @@ prepare_console_fifo() {
 
 patch_console_overlay() {
   if [ ! -f "/usr/local/bin/winomc-console-server" ]; then
-    echo "WinoMC web console overlay patch skipped: console server not found"
+    echo "WinoMC web console desktop patch skipped: console server not found"
     return 0
   fi
 
@@ -96,11 +96,50 @@ path = Path("/usr/local/bin/winomc-console-server")
 text = path.read_text(encoding="utf-8")
 original = text
 
+text = text.replace(
+    "<title>WinoMC Desktop Workbench 1.5.7.1</title>",
+    "<title>WinoMC Desktop Workbench 1.5.7.4</title>",
+)
+
 css_guard = r'''
 
-    /* v1.5.7.2 Desktop Overlay Guard
-       Verhindert, dass alte Card-Maximize-Overlays den Desktop Workbench blockieren.
-       Der Desktop nutzt eigene Fenster; klassische Karten-Backdrops dürfen dort nie interaktiv werden. */
+    /* v1.5.7.4 Desktop Viewport Fix
+       Verhindert, dass alte Fensterpositionen oder Root-Scrollbereiche den Desktop überdecken.
+       Der Desktop belegt im Desktop-Modus den kompletten sichtbaren Ingress-Bereich. */
+    :root:has(body.desktop-mode) {
+      overflow: hidden !important;
+      height: 100% !important;
+    }
+    body.desktop-mode {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      min-height: 100vh !important;
+      min-height: 100dvh !important;
+      overflow: hidden !important;
+      overscroll-behavior: none !important;
+    }
+    body.desktop-mode .layout {
+      height: 100vh !important;
+      height: 100dvh !important;
+      overflow: hidden !important;
+    }
+    body.desktop-mode main.content {
+      position: fixed !important;
+      inset: 0 0 46px 0 !important;
+      min-height: 0 !important;
+      height: auto !important;
+      overflow: hidden !important;
+      isolation: isolate;
+    }
+    body.desktop-mode header,
+    body.desktop-mode nav,
+    body.desktop-mode .hero {
+      display: none !important;
+      pointer-events: none !important;
+    }
     body.desktop-mode.has-maximized-card::after,
     body.desktop-mode::before {
       content: none !important;
@@ -109,11 +148,8 @@ css_guard = r'''
       visibility: hidden !important;
       opacity: 0 !important;
     }
-    body.desktop-mode main.content {
-      isolation: isolate;
-    }
     body.desktop-mode .desktop-layer {
-      z-index: 0 !important;
+      z-index: 1 !important;
       pointer-events: none !important;
     }
     body.desktop-mode .desktop-icon-grid,
@@ -121,17 +157,21 @@ css_guard = r'''
       pointer-events: auto !important;
     }
     body.desktop-mode .tab-panel.desktop-open:not(.desktop-minimized) {
-      z-index: 12;
-      pointer-events: auto;
+      pointer-events: auto !important;
+      max-width: calc(100vw - 24px) !important;
+      max-height: calc(100dvh - 70px) !important;
     }
     body.desktop-mode .tab-panel.desktop-maximized {
-      z-index: 44;
+      left: 8px !important;
+      top: 8px !important;
+      width: calc(100vw - 16px) !important;
+      height: calc(100dvh - 64px) !important;
     }
     body.desktop-mode .desktop-taskbar {
-      z-index: 90;
+      z-index: 90 !important;
     }
     body.desktop-mode .desktop-start-menu {
-      z-index: 95;
+      z-index: 95 !important;
     }
     body.desktop-mode .card.maximized {
       position: static !important;
@@ -144,8 +184,13 @@ css_guard = r'''
     }
 '''
 
-if "v1.5.7.2 Desktop Overlay Guard" not in text:
+if "v1.5.7.4 Desktop Viewport Fix" not in text:
     text = text.replace("  </style>", css_guard + "  </style>", 1)
+
+text = text.replace(
+    "return getStoredJson(STORE_DESKTOP_WINDOWS, ['overview']);",
+    "return getStoredJson(STORE_DESKTOP_WINDOWS, []);",
+)
 
 old_clear = """    function clearDesktopBlockingOverlays() {
       document.body.classList.remove('has-maximized-card');
@@ -153,39 +198,82 @@ old_clear = """    function clearDesktopBlockingOverlays() {
     }
 """
 new_clear = """    function clearDesktopBlockingOverlays() {
-      // v1.5.7.2 desktop overlay runtime guard
+      // v1.5.7.4 desktop overlay and viewport runtime guard
       document.body.classList.remove('has-maximized-card');
       document.querySelectorAll('.card.maximized').forEach(card => card.classList.remove('maximized'));
       const layer = document.getElementById('desktopLayer');
       if (layer) {
         layer.style.pointerEvents = 'none';
-        layer.style.zIndex = '0';
+        layer.style.zIndex = '1';
       }
     }
 """
-if "v1.5.7.2 desktop overlay runtime guard" not in text and old_clear in text:
+if "v1.5.7.4 desktop overlay and viewport runtime guard" not in text and old_clear in text:
     text = text.replace(old_clear, new_clear)
 
-overlay_guard = """    function initDesktopOverlayGuard() {
-      const guard = () => {
-        if (!document.body.classList.contains('desktop-mode')) return;
-        clearDesktopBlockingOverlays();
-        const layer = document.getElementById('desktopLayer');
-        if (layer) {
-          layer.style.pointerEvents = 'none';
-          layer.style.zIndex = '0';
-        }
-      };
-      const scheduleGuard = () => requestAnimationFrame(guard);
+viewport_guard = """    function clampDesktopPanelToViewport(panel) {
+      if (!panel || !document.body.classList.contains('desktop-mode') || isDesktopMobile()) return;
+      if (panel.classList.contains('desktop-maximized')) return;
+      const taskbarHeight = 58;
+      const margin = 10;
+      const maxWidth = Math.max(320, window.innerWidth - margin * 2);
+      const maxHeight = Math.max(260, window.innerHeight - taskbarHeight - margin * 2);
+      const rect = panel.getBoundingClientRect();
+      const nextWidth = clamp(rect.width || 720, Math.min(420, maxWidth), maxWidth);
+      const nextHeight = clamp(rect.height || 520, Math.min(280, maxHeight), maxHeight);
+      const nextLeft = clamp(rect.left || margin, margin, Math.max(margin, window.innerWidth - nextWidth - margin));
+      const nextTop = clamp(rect.top || margin, margin, Math.max(margin, window.innerHeight - taskbarHeight - nextHeight - margin));
+      panel.style.left = Math.round(nextLeft) + 'px';
+      panel.style.top = Math.round(nextTop) + 'px';
+      panel.style.width = Math.round(nextWidth) + 'px';
+      panel.style.height = Math.round(nextHeight) + 'px';
+    }
+
+    function applyDesktopStartupLayout(ids) {
+      const migrationKey = 'winomcDesktopViewportFixV1574';
+      if (localStorage.getItem(migrationKey) !== 'done') {
+        localStorage.removeItem(STORE_DESKTOP_POSITIONS);
+        localStorage.setItem(STORE_DESKTOP_WINDOWS, JSON.stringify([]));
+        localStorage.setItem(migrationKey, 'done');
+        return [];
+      }
+      return Array.isArray(ids) ? ids.filter(Boolean) : [];
+    }
+
+    function fixDesktopViewportLayout() {
+      if (!document.body.classList.contains('desktop-mode')) return;
+      clearDesktopBlockingOverlays();
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+      document.querySelectorAll('.tab-panel.desktop-open').forEach(clampDesktopPanelToViewport);
+    }
+
+    function initDesktopOverlayGuard() {
+      const scheduleGuard = () => requestAnimationFrame(fixDesktopViewportLayout);
       scheduleGuard();
       window.addEventListener('resize', scheduleGuard, { passive: true });
       const observer = new MutationObserver(scheduleGuard);
       observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+      document.querySelectorAll('.tab-panel').forEach(panel => observer.observe(panel, { attributes: true, attributeFilter: ['class', 'style'] }));
     }
 
 """
-if "function initDesktopOverlayGuard()" not in text:
-    text = text.replace("    function connectLogs() {", overlay_guard + "    function connectLogs() {", 1)
+if "function clampDesktopPanelToViewport(panel)" not in text:
+    text = text.replace("    function connectLogs() {", viewport_guard + "    function connectLogs() {", 1)
+
+old_desktop_start = """        const ids = desktopOpenIds();
+        if (!ids.length) ids.push('overview');
+        ids.forEach(openDesktopWindow);
+        if (!document.querySelector('.tab-panel.desktop-open')) openDesktopWindow('overview');
+        updateDesktopClock();
+"""
+new_desktop_start = """        const ids = applyDesktopStartupLayout(desktopOpenIds());
+        ids.forEach(openDesktopWindow);
+        fixDesktopViewportLayout();
+        updateDesktopClock();
+"""
+if old_desktop_start in text:
+    text = text.replace(old_desktop_start, new_desktop_start, 1)
 
 old_init = "initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); renderDashboard(); connectLogs(); loadStatus();"
 new_init = "initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); initDesktopOverlayGuard(); renderDashboard(); connectLogs(); loadStatus();"
@@ -194,9 +282,9 @@ if old_init in text and new_init not in text:
 
 if text != original:
     path.write_text(text, encoding="utf-8")
-    print("WinoMC web console overlay patch applied")
+    print("WinoMC web console desktop viewport patch applied")
 else:
-    print("WinoMC web console overlay patch already present")
+    print("WinoMC web console desktop viewport patch already present")
 PY
 }
 
@@ -228,8 +316,7 @@ send_bedrock_command() {
 
   echo "WinoMC console command: ${command_line}"
 
-  if printf '%s
-' "${command_line}" > "${COMMAND_FIFO}"; then
+  if printf '%s\n' "${command_line}" > "${COMMAND_FIFO}"; then
     echo "WinoMC console command written"
   else
     echo "WinoMC console command failed: ${command_line}"
