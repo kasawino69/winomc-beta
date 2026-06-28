@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: Bedrock Minecraft Server auf Home Assistant
-version: 1.6.0
+version: 1.6.1
 slug: winomc-bedrock
 init: false
 boot: auto
