@@ -98,14 +98,17 @@ original = text
 
 text = text.replace(
     "<title>WinoMC Desktop Workbench 1.5.7.1</title>",
-    "<title>WinoMC Desktop Workbench 1.5.7.4</title>",
+    "<title>WinoMC Desktop Workbench 1.5.7.5</title>",
 )
 
 css_guard = r'''
 
-    /* v1.5.7.4 Desktop Viewport Fix
-       Verhindert, dass alte Fensterpositionen oder Root-Scrollbereiche den Desktop überdecken.
-       Der Desktop belegt im Desktop-Modus den kompletten sichtbaren Ingress-Bereich. */
+    /* v1.5.7.5 Desktop Ingress Breakpoint Fix
+       Ursache: Bei breiteren Home-Assistant-Ingress-Flächen nutzte der Desktop-Layer
+       ein anderes Layout als im kleinen Breakpoint. Dadurch wirkte eine dunkle Fläche
+       wie ein blockierender Hintergrund, während die Icons erst bei kleinerem Fenster
+       sichtbar wurden. Der Desktop nutzt nun auch auf breiteren Ingress-Flächen ein
+       stabiles, relatives Icon-Grid. */
     :root:has(body.desktop-mode) {
       overflow: hidden !important;
       height: 100% !important;
@@ -131,7 +134,7 @@ css_guard = r'''
       inset: 0 0 46px 0 !important;
       min-height: 0 !important;
       height: auto !important;
-      overflow: hidden !important;
+      overflow: auto !important;
       isolation: isolate;
     }
     body.desktop-mode header,
@@ -149,11 +152,36 @@ css_guard = r'''
       opacity: 0 !important;
     }
     body.desktop-mode .desktop-layer {
+      display: block !important;
+      position: relative !important;
+      inset: auto !important;
       z-index: 1 !important;
+      min-height: calc(100dvh - 58px) !important;
+      padding: 16px 18px 340px !important;
       pointer-events: none !important;
     }
-    body.desktop-mode .desktop-icon-grid,
+    body.desktop-mode .desktop-brand {
+      position: static !important;
+      right: auto !important;
+      top: auto !important;
+      text-align: left !important;
+      font-size: clamp(22px, 3vw, 36px) !important;
+      line-height: 1.08 !important;
+      margin: 0 0 16px !important;
+      color: rgba(226, 232, 240, .34) !important;
+    }
+    body.desktop-mode .desktop-icon-grid {
+      width: 100% !important;
+      max-width: none !important;
+      display: grid !important;
+      grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)) !important;
+      gap: 12px !important;
+      align-content: start !important;
+      pointer-events: auto !important;
+    }
     body.desktop-mode .desktop-icon {
+      width: 100% !important;
+      min-height: 86px !important;
       pointer-events: auto !important;
     }
     body.desktop-mode .tab-panel.desktop-open:not(.desktop-minimized) {
@@ -184,7 +212,7 @@ css_guard = r'''
     }
 '''
 
-if "v1.5.7.4 Desktop Viewport Fix" not in text:
+if "v1.5.7.5 Desktop Ingress Breakpoint Fix" not in text:
     text = text.replace("  </style>", css_guard + "  </style>", 1)
 
 text = text.replace(
@@ -198,7 +226,7 @@ old_clear = """    function clearDesktopBlockingOverlays() {
     }
 """
 new_clear = """    function clearDesktopBlockingOverlays() {
-      // v1.5.7.4 desktop overlay and viewport runtime guard
+      // v1.5.7.5 desktop overlay and ingress breakpoint runtime guard
       document.body.classList.remove('has-maximized-card');
       document.querySelectorAll('.card.maximized').forEach(card => card.classList.remove('maximized'));
       const layer = document.getElementById('desktopLayer');
@@ -208,7 +236,7 @@ new_clear = """    function clearDesktopBlockingOverlays() {
       }
     }
 """
-if "v1.5.7.4 desktop overlay and viewport runtime guard" not in text and old_clear in text:
+if "v1.5.7.5 desktop overlay and ingress breakpoint runtime guard" not in text and old_clear in text:
     text = text.replace(old_clear, new_clear)
 
 viewport_guard = """    function clampDesktopPanelToViewport(panel) {
@@ -230,7 +258,7 @@ viewport_guard = """    function clampDesktopPanelToViewport(panel) {
     }
 
     function applyDesktopStartupLayout(ids) {
-      const migrationKey = 'winomcDesktopViewportFixV1574';
+      const migrationKey = 'winomcDesktopIngressFixV1575';
       if (localStorage.getItem(migrationKey) !== 'done') {
         localStorage.removeItem(STORE_DESKTOP_POSITIONS);
         localStorage.setItem(STORE_DESKTOP_WINDOWS, JSON.stringify([]));
@@ -245,6 +273,11 @@ viewport_guard = """    function clampDesktopPanelToViewport(panel) {
       clearDesktopBlockingOverlays();
       document.documentElement.style.overflow = 'hidden';
       document.body.style.overflow = 'hidden';
+      if (desktopLayer) {
+        desktopLayer.style.position = 'relative';
+        desktopLayer.style.inset = 'auto';
+        desktopLayer.style.pointerEvents = 'none';
+      }
       document.querySelectorAll('.tab-panel.desktop-open').forEach(clampDesktopPanelToViewport);
     }
 
@@ -282,9 +315,9 @@ if old_init in text and new_init not in text:
 
 if text != original:
     path.write_text(text, encoding="utf-8")
-    print("WinoMC web console desktop viewport patch applied")
+    print("WinoMC web console desktop ingress breakpoint patch applied")
 else:
-    print("WinoMC web console desktop viewport patch already present")
+    print("WinoMC web console desktop ingress breakpoint patch already present")
 PY
 }
 

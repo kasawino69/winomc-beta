@@ -5,6 +5,14 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.7.5
+
+* Desktop-Icon-Layer für breite Home-Assistant-Ingress-Ansichten korrigiert.
+* Der Desktop nutzt jetzt auch oberhalb des bisherigen kleinen Breakpoints ein relatives, stabiles Icon-Grid.
+* Der scheinbar blockierende dunkle Hintergrund in größeren Browserfenstern wird dadurch vermieden.
+* Desktop-Icons bleiben sichtbar und anklickbar, ohne das Browserfenster verkleinern zu müssen.
+* Add-on-Version auf 1.5.7.5 angehoben, damit Home Assistant die Änderung als Update erkennt.
+
 ### 1.5.7.4
 
 * Desktop-Workbench-Viewport korrigiert: Der Desktop-Modus belegt jetzt den kompletten sichtbaren Ingress-Bereich und erzeugt keinen zusätzlichen Root-Scrollbereich mehr.
