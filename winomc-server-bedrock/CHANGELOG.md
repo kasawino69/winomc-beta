@@ -5,6 +5,14 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.7.4
+
+* Desktop-Workbench-Viewport korrigiert: Der Desktop-Modus belegt jetzt den kompletten sichtbaren Ingress-Bereich und erzeugt keinen zusätzlichen Root-Scrollbereich mehr.
+* Alte gespeicherte Desktop-Fensterpositionen werden einmalig bereinigt, damit kein altes Übersicht-Fenster den Desktop großflächig verdeckt.
+* Desktop-Fenster werden beim Öffnen und bei Größenänderungen wieder in den sichtbaren Bereich geklemmt.
+* Die Übersicht wird im Desktop-Modus nicht mehr automatisch als großes Fenster geöffnet; der Desktop startet wieder frei nutzbar mit Icons und Taskleiste.
+* Add-on-Version auf 1.5.7.4 angehoben, damit Home Assistant die Änderung als Update erkennt.
+
 ### 1.5.7.3
 
 * Vor dem Start der Webconsole wird die eingebettete Datei winomc-console-server automatisch und idempotent gepatcht.
