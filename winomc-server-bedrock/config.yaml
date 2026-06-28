@@ -79,6 +79,9 @@ options:
 
   # WinoMC Framework- und Host-Optimierung
   WINOMC_HOST_OPTIMIZATION_MODE: balanced
+  WINOMC_CPU_AFFINITY: ""
+  WINOMC_BDS_NICE: auto
+  WINOMC_ENABLE_JEMALLOC: auto
   WINOMC_RUNTIME_ANALYSIS: true
 
   # Verhalten und Sicherheit
@@ -163,6 +166,9 @@ schema:
 
   # WinoMC Framework- und Host-Optimierung
   WINOMC_HOST_OPTIMIZATION_MODE: list(off|balanced|host_friendly|low_power|server_priority|expert)?
+  WINOMC_CPU_AFFINITY: str?
+  WINOMC_BDS_NICE: str?
+  WINOMC_ENABLE_JEMALLOC: list(auto|true|false)?
   WINOMC_RUNTIME_ANALYSIS: bool?
 
   # Verhalten und Sicherheit
