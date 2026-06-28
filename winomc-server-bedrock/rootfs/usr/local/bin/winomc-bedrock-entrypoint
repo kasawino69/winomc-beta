@@ -96,10 +96,11 @@ path = Path("/usr/local/bin/winomc-console-server")
 text = path.read_text(encoding="utf-8")
 original = text
 
-text = text.replace(
+for old_title in (
     "<title>WinoMC Desktop Workbench 1.5.7.1</title>",
     "<title>WinoMC Desktop Workbench 1.5.7.5</title>",
-)
+):
+    text = text.replace(old_title, "<title>WinoMC Desktop Workbench 1.5.7.6</title>")
 
 css_guard = r'''
 
@@ -215,6 +216,11 @@ css_guard = r'''
 if "v1.5.7.5 Desktop Ingress Breakpoint Fix" not in text:
     text = text.replace("  </style>", css_guard + "  </style>", 1)
 
+expert_menu_button = '<button class="tab-button" data-tab="expert" aria-label="Experten"><span class="icon">🧰</span> Experten</button>'
+classic_desktop_menu_button = '<button class="tab-button" type="button" data-enable-desktop-mode aria-label="Desktop-Modus"><span class="icon">🖥️</span> Desktop-Modus</button>'
+if "data-enable-desktop-mode" not in text and expert_menu_button in text:
+    text = text.replace(expert_menu_button, expert_menu_button + "\n      " + classic_desktop_menu_button, 1)
+
 text = text.replace(
     "return getStoredJson(STORE_DESKTOP_WINDOWS, ['overview']);",
     "return getStoredJson(STORE_DESKTOP_WINDOWS, []);",
@@ -308,6 +314,11 @@ new_desktop_start = """        const ids = applyDesktopStartupLayout(desktopOpen
 if old_desktop_start in text:
     text = text.replace(old_desktop_start, new_desktop_start, 1)
 
+old_click_handler = """document.addEventListener('click', event => { const actionBtn = event.target.closest('[data-action-id]'); if (actionBtn) { runAction(ACTION_BY_ID[actionBtn.dataset.actionId]); return; } const jump = event.target.closest('[data-jump-tab]'); if (jump) { activateTab(jump.dataset.jumpTab); return; } const openRootBtn = event.target.closest('[data-open-root]'); if (openRootBtn) { openRoot(openRootBtn.dataset.openRoot, '/'); return; } });"""
+new_click_handler = """document.addEventListener('click', event => { const desktopModeMenu = event.target.closest('[data-enable-desktop-mode]'); if (desktopModeMenu) { setDesktopMode(true); return; } const actionBtn = event.target.closest('[data-action-id]'); if (actionBtn) { runAction(ACTION_BY_ID[actionBtn.dataset.actionId]); return; } const jump = event.target.closest('[data-jump-tab]'); if (jump) { activateTab(jump.dataset.jumpTab); return; } const openRootBtn = event.target.closest('[data-open-root]'); if (openRootBtn) { openRoot(openRootBtn.dataset.openRoot, '/'); return; } });"""
+if "data-enable-desktop-mode" in text and "const desktopModeMenu = event.target.closest('[data-enable-desktop-mode]')" not in text and old_click_handler in text:
+    text = text.replace(old_click_handler, new_click_handler, 1)
+
 old_init = "initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); renderDashboard(); connectLogs(); loadStatus();"
 new_init = "initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); initDesktopOverlayGuard(); renderDashboard(); connectLogs(); loadStatus();"
 if old_init in text and new_init not in text:
@@ -315,9 +326,9 @@ if old_init in text and new_init not in text:
 
 if text != original:
     path.write_text(text, encoding="utf-8")
-    print("WinoMC web console desktop ingress breakpoint patch applied")
+    print("WinoMC web console desktop menu patch applied")
 else:
-    print("WinoMC web console desktop ingress breakpoint patch already present")
+    print("WinoMC web console desktop menu patch already present")
 PY
 }
 

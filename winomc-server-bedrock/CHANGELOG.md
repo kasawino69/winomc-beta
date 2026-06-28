@@ -5,6 +5,12 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.5.7.6
+
+* Klassische Ansicht erweitert: Neuer Menüpunkt **Desktop-Modus** direkt unter **Experten** ergänzt.
+* Der neue Menüpunkt schaltet sofort in den Desktop-Modus, ohne vorher über die Übersicht gehen zu müssen.
+* Add-on-Version auf 1.5.7.6 angehoben, damit Home Assistant die Änderung als Update erkennt.
+
 ### 1.5.7.5
 
 * Desktop-Icon-Layer für breite Home-Assistant-Ingress-Ansichten korrigiert.
