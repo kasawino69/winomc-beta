@@ -40,6 +40,7 @@ RUN apt-get update \
     && chmod +x \
         /usr/local/bin/winomc-bedrock-entrypoint \
         /usr/local/bin/winomc-console-server \
+        /usr/local/bin/winomc-host-optimized-exec \
         /usr/local/bin/winomc-native-start \
         /usr/local/bin/winomc-native-content-import \
         /usr/local/bin/winomc-native-content-import-one \
