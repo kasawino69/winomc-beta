@@ -6,6 +6,8 @@ Für die Stable Version bitte zur anderen Repository wechseln:
 https://github.com/kasawino69/winomc
 ```
 
+---
+
 **BETA WinoMC** bringt Minecraft Bedrock als Home-Assistant-Add-on auf dein System.
 
 Installieren, einstellen, starten und spielen — mit einer modernen Weboberfläche, Live-Konsole, Dateimanager, Mobile-Ansicht und sinnvollen Werkzeugen für Alltag, Wartung und Serververwaltung.
