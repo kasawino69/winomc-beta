@@ -3,12 +3,28 @@ set -eu
 
 python3 - <<'PY'
 from pathlib import Path
+import re
 
 path = Path('/usr/local/bin/winomc-console-server')
 if not path.exists():
     path = Path('winomc-server-bedrock/rootfs/usr/local/bin/winomc-console-server')
 
 text = path.read_text(encoding='utf-8')
+original = text
+
+# Keep the visible/runtime version aligned with the beta add-on version.
+text = re.sub(
+    r'<title>WinoMC Adaptive Workbench [^<]+</title>',
+    '<title>WinoMC Adaptive Workbench 1.6.14.14</title>',
+    text,
+    count=1,
+)
+text = re.sub(
+    r'server_version = "WinoMCConsole/[^"]+"',
+    'server_version = "WinoMCConsole/1.6.14.14"',
+    text,
+    count=1,
+)
 
 scroll_fix = '''
 
@@ -62,7 +78,172 @@ scroll_fix = '''
     }
 '''
 
+classic_pc_fix = '''
+
+    /* v1.6.14.14b Classic PC Dashboard + Editor Fullscreen Fix
+       Scope: klassische PC-Ansicht. Dashboard- und Editor-Korrektur ohne Umbau
+       der PC-Workbench, Mobile-Ansicht oder Datei-API. */
+    @media (min-width: 1051px) {
+      body.ux-desktop:not(.desktop-mode).has-maximized-card::after {
+        content: none !important;
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        backdrop-filter: none !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"].active {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        align-content: start !important;
+        padding-right: 8px !important;
+        padding-bottom: 28px !important;
+        scroll-padding-bottom: 32px !important;
+        scrollbar-gutter: stable !important;
+        overscroll-behavior: contain !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-layout,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-add-card,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-active-card {
+        min-height: 0 !important;
+        max-width: 100% !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-active-card {
+        overflow: visible !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-grid {
+        max-width: 100% !important;
+        min-height: 0 !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-add-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, .85fr) auto !important;
+        max-width: 100% !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .editor-panel.editor-fullscreen {
+        position: fixed !important;
+        z-index: 140 !important;
+        inset: 16px 16px calc(var(--console-height) + 16px) 16px !important;
+        width: auto !important;
+        height: auto !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        max-width: none !important;
+        max-height: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        overflow: hidden !important;
+        background: rgba(15, 23, 42, .98) !important;
+        box-shadow: 0 28px 90px rgba(0,0,0,.70) !important;
+        backdrop-filter: none !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode).console-maximized .editor-panel.editor-fullscreen {
+        inset: 16px !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .editor-panel.editor-fullscreen .editor-box {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        height: auto !important;
+        resize: none !important;
+      }
+    }
+'''
+
 if 'v1.6.1 Classic File Explorer Scroll Fix' not in text:
     text = text.replace('  </style>', scroll_fix + '  </style>', 1)
+
+if 'v1.6.14.14b Classic PC Dashboard + Editor Fullscreen Fix' not in text:
+    text = text.replace('  </style>', classic_pc_fix + '  </style>', 1)
+
+runtime_fix = r'''
+
+    /* v1.6.14.14b runtime guard: classic PC dashboard scroll + editor fullscreen */
+    (function hardenClassicPcDashboardEditor161414() {
+      function classicPc161414() {
+        return document.body.classList.contains('ux-desktop') && !document.body.classList.contains('desktop-mode');
+      }
+
+      function syncDashboardScroll161414() {
+        const panel = document.querySelector('.tab-panel[data-panel="dashboard"]');
+        if (!panel || !classicPc161414()) return;
+        panel.style.height = '100%';
+        panel.style.minHeight = '0';
+        panel.style.maxHeight = '100%';
+        panel.style.overflowY = 'auto';
+        panel.style.overflowX = 'hidden';
+        panel.style.paddingBottom = '28px';
+      }
+
+      function clearClassicBlurOverlay161414() {
+        if (!classicPc161414()) return;
+        document.body.classList.remove('has-maximized-card');
+        document.querySelectorAll('.card.maximized').forEach(card => card.classList.remove('maximized'));
+      }
+
+      function setEditorFullscreen161414(active) {
+        if (!editorPanel) return;
+        clearClassicBlurOverlay161414();
+        editorPanel.classList.add('editor-open');
+        editorPanel.classList.toggle('editor-fullscreen', !!active);
+        if (fileManagerGrid) fileManagerGrid.classList.add('editor-visible');
+        if (editorFullscreen) editorFullscreen.textContent = active ? 'Normal' : 'Vollbild';
+
+        if (active && classicPc161414()) {
+          const bottom = document.body.classList.contains('console-maximized') ? '16px' : 'calc(var(--console-height) + 16px)';
+          editorPanel.style.position = 'fixed';
+          editorPanel.style.zIndex = '140';
+          editorPanel.style.inset = `16px 16px ${bottom} 16px`;
+          editorPanel.style.display = 'flex';
+          editorPanel.style.flexDirection = 'column';
+          editorPanel.style.overflow = 'hidden';
+          editorPanel.style.pointerEvents = 'auto';
+          editorPanel.style.visibility = 'visible';
+          editorPanel.style.opacity = '1';
+          window.setTimeout(() => fileEditor?.focus({ preventScroll: true }), 60);
+        } else {
+          ['position','zIndex','inset','display','flexDirection','overflow','pointerEvents','visibility','opacity'].forEach(prop => editorPanel.style[prop] = '');
+        }
+      }
+
+      if (editorFullscreen) {
+        editorFullscreen.addEventListener('click', event => {
+          if (!classicPc161414()) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          setEditorFullscreen161414(!editorPanel.classList.contains('editor-fullscreen'));
+        }, true);
+      }
+
+      window.addEventListener('resize', () => {
+        window.requestAnimationFrame(() => {
+          syncDashboardScroll161414();
+          if (editorPanel?.classList.contains('editor-fullscreen')) setEditorFullscreen161414(true);
+        });
+      }, { passive: true });
+
+      document.addEventListener('click', () => window.requestAnimationFrame(syncDashboardScroll161414), true);
+      window.requestAnimationFrame(syncDashboardScroll161414);
+      window.setTimeout(syncDashboardScroll161414, 250);
+    })();
+'''
+
+if 'v1.6.14.14b runtime guard: classic PC dashboard scroll + editor fullscreen' not in text:
+    text = text.replace('\n</script>\n</body>\n</html>', runtime_fix + '\n</script>\n</body>\n</html>', 1)
+
+if text != original:
     path.write_text(text, encoding='utf-8')
 PY

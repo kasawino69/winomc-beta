@@ -1,31 +1,25 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: "[BETA] Bedrock Minecraft Server auf Home Assistant"
-version: 1.6.14.13b
+version: 1.6.14.14b
 slug: winomc-bedrock
 init: false
 boot: auto
 startup: services
 stdin: true
-
 arch:
   - amd64
   - aarch64
-
 host_network: true
-
 ingress: true
 ingress_port: 8099
 ingress_stream: true
 panel_icon: mdi:console
 panel_title: "[BETA] WinoMC Console"
 panel_admin: true
-
 ports_description:
   19132/udp: Minecraft Bedrock IPv4 Port
   19133/udp: Minecraft Bedrock IPv6 Port
-
 options:
-  # Server
   VERSION: LATEST
   BDS_AUTO_UPDATE: true
   BDS_DIRECT_DOWNLOAD_URL: ""
@@ -33,50 +27,36 @@ options:
   LEVEL_NAME: world
   LEVEL_SEED: ""
   LEVEL_TYPE: DEFAULT
-
-  # Gameplay
   GAMEMODE: survival
   FORCE_GAMEMODE: false
   DIFFICULTY: normal
   ALLOW_CHEATS: false
   MAX_PLAYERS: 10
   DEFAULT_PLAYER_PERMISSION_LEVEL: member
-
-  # Zugang und Spielerrechte
   ONLINE_MODE: true
   ALLOW_LIST: false
   ALLOW_LIST_USERS: ""
   OPS: ""
   MEMBERS: ""
   VISITORS: ""
-
-  # Netzwerk
   ENABLE_LAN_VISIBILITY: true
   SERVER_PORT: 19132
   SERVER_PORT_V6: 19133
   ENABLE_BDS_V6BIND_FIX: false
-
-  # Web-Konsole
   ENABLE_WEB_CONSOLE: true
   WINOMC_CONSOLE_HISTORY_LIMIT: 300
   WINOMC_FILE_EDITOR_MAX_BYTES: 2097152
   WINOMC_FILE_UPLOAD_MAX_BYTES: 536870912
   WINOMC_FILE_JSON_UPLOAD_MAX_BYTES: 67108864
   WINOMC_ZIP_UNPACK_MAX_BYTES: 1073741824
-
-  # Welten, Packs und Import
   MC_PACK: ""
   FORCE_WORLD_COPY: false
   FORCE_PACK_COPY: false
   TEXTUREPACK_REQUIRED: false
-
-  # Performance
   VIEW_DISTANCE: 10
   TICK_DISTANCE: 4
   PLAYER_IDLE_TIMEOUT: 30
   MAX_THREADS: 2
-
-  # WinoMC Framework- und Host-Optimierung
   WINOMC_HOST_OPTIMIZATION_MODE: balanced
   WINOMC_CPU_AFFINITY: ""
   WINOMC_BDS_NICE: auto
@@ -84,37 +64,27 @@ options:
   WINOMC_BDS_IONICE_LEVEL: auto
   WINOMC_ENABLE_JEMALLOC: auto
   WINOMC_RUNTIME_ANALYSIS: true
-
-  # Verhalten und Sicherheit
   CHAT_RESTRICTION: None
   DISABLE_PLAYER_INTERACTION: false
   DISABLE_PERSONA: false
   DISABLE_CUSTOM_SKINS: false
   MSA_GAMERTAGS_ONLY: false
-
-  # Content-Logs
   CONTENT_LOG_FILE_ENABLED: false
   CONTENT_LOG_LEVEL: info
   CONTENT_LOG_CONSOLE_OUTPUT_ENABLED: false
-
-  # Erweiterte Server-Prüfungen
   SERVER_AUTHORITATIVE_MOVEMENT: server-auth
   SERVER_AUTHORITATIVE_BLOCK_BREAKING: false
   PLAYER_MOVEMENT_SCORE_THRESHOLD: 20
   PLAYER_MOVEMENT_DISTANCE_THRESHOLD: 0.3
   PLAYER_MOVEMENT_DURATION_THRESHOLD_IN_MS: 500
   CORRECT_PLAYER_MOVEMENT: false
-
-  # System
   TZ: Europe/Berlin
   PACKAGE_BACKUP_KEEP: 2
   DOWNLOAD_PROGRESS: false
   USE_BOX64: true
   EMIT_SERVER_TELEMETRY: false
   VARIABLES: ""
-
 schema:
-  # Server
   VERSION: str
   BDS_AUTO_UPDATE: bool?
   BDS_DIRECT_DOWNLOAD_URL: str?
@@ -122,50 +92,36 @@ schema:
   LEVEL_NAME: str
   LEVEL_SEED: str?
   LEVEL_TYPE: list(DEFAULT|FLAT|LEGACY)
-
-  # Gameplay
   GAMEMODE: list(survival|creative|adventure)
   FORCE_GAMEMODE: bool?
   DIFFICULTY: list(peaceful|easy|normal|hard)
   ALLOW_CHEATS: bool?
   MAX_PLAYERS: int
   DEFAULT_PLAYER_PERMISSION_LEVEL: list(member|operator|visitor)
-
-  # Zugang und Spielerrechte
   ONLINE_MODE: bool
   ALLOW_LIST: bool?
   ALLOW_LIST_USERS: str?
   OPS: str?
   MEMBERS: str?
   VISITORS: str?
-
-  # Netzwerk
   ENABLE_LAN_VISIBILITY: bool?
   SERVER_PORT: port
   SERVER_PORT_V6: port?
   ENABLE_BDS_V6BIND_FIX: bool?
-
-  # Web-Konsole
   ENABLE_WEB_CONSOLE: bool?
   WINOMC_CONSOLE_HISTORY_LIMIT: int?
   WINOMC_FILE_EDITOR_MAX_BYTES: int?
   WINOMC_FILE_UPLOAD_MAX_BYTES: int?
   WINOMC_FILE_JSON_UPLOAD_MAX_BYTES: int?
   WINOMC_ZIP_UNPACK_MAX_BYTES: int?
-
-  # Welten, Packs und Import
   MC_PACK: str?
   FORCE_WORLD_COPY: bool?
   FORCE_PACK_COPY: bool?
   TEXTUREPACK_REQUIRED: bool?
-
-  # Performance
   VIEW_DISTANCE: int?
   TICK_DISTANCE: int?
   PLAYER_IDLE_TIMEOUT: int?
   MAX_THREADS: int?
-
-  # WinoMC Framework- und Host-Optimierung
   WINOMC_HOST_OPTIMIZATION_MODE: list(off|balanced|host_friendly|low_power|server_priority|expert)?
   WINOMC_CPU_AFFINITY: str?
   WINOMC_BDS_NICE: str?
@@ -173,37 +129,27 @@ schema:
   WINOMC_BDS_IONICE_LEVEL: str?
   WINOMC_ENABLE_JEMALLOC: list(auto|true|false)?
   WINOMC_RUNTIME_ANALYSIS: bool?
-
-  # Verhalten und Sicherheit
   CHAT_RESTRICTION: list(None|Dropped|Disabled)?
   DISABLE_PLAYER_INTERACTION: bool?
   DISABLE_PERSONA: bool?
   DISABLE_CUSTOM_SKINS: bool?
   MSA_GAMERTAGS_ONLY: bool?
-
-  # Content-Logs
   CONTENT_LOG_FILE_ENABLED: bool?
   CONTENT_LOG_LEVEL: list(verbose|info|warning|error)?
   CONTENT_LOG_CONSOLE_OUTPUT_ENABLED: bool?
-
-  # Erweiterte Server-Prüfungen
   SERVER_AUTHORITATIVE_MOVEMENT: list(client-auth|server-auth|server-auth-with-rewind)?
   SERVER_AUTHORITATIVE_BLOCK_BREAKING: bool?
   PLAYER_MOVEMENT_SCORE_THRESHOLD: int?
   PLAYER_MOVEMENT_DISTANCE_THRESHOLD: float?
   PLAYER_MOVEMENT_DURATION_THRESHOLD_IN_MS: int?
   CORRECT_PLAYER_MOVEMENT: bool?
-
-  # System
   TZ: str
   PACKAGE_BACKUP_KEEP: int?
   DOWNLOAD_PROGRESS: bool?
   USE_BOX64: bool?
   EMIT_SERVER_TELEMETRY: bool?
   VARIABLES: str?
-
 backup: cold
-
 backup_exclude:
   - "bedrock_server*"
   - "behavior_packs/vanilla*"
@@ -212,12 +158,10 @@ backup_exclude:
   - "resource_packs/chemistry*"
   - ".winomc/bds/*"
   - ".winomc/file_backups/*"
-
 map:
   - addons:rw
   - addon_config:rw
   - share:rw
-
 environment:
   EULA: "TRUE"
   WINOMC_CONSOLE_PORT: "8099"
