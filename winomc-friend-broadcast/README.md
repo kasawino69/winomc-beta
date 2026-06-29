@@ -1,10 +1,10 @@
 # [BETA] WinoMC Friend Broadcast
 
-Das **WinoMC Friend Broadcast Add-on** zeigt deinen WinoMC Bedrock Server über Xbox Live beziehungsweise die Freunde-Liste an.
+Das **[BETA] WinoMC Friend Broadcast Add-on** zeigt deinen [BETA] WinoMC Bedrock Server über Xbox Live beziehungsweise die Freunde-Liste an.
 
 Damit können Spieler den Server einfacher finden, besonders wenn die normale LAN-Anzeige auf Konsolen wie Nintendo Switch, Xbox oder mobilen Geräten nicht zuverlässig funktioniert.
 
-Das Add-on ist als Ergänzung zum **WinoMC Bedrock Server** gedacht.
+Das Add-on ist als Ergänzung zum **[BETA] WinoMC Bedrock Server** gedacht.
 
 ---
 
@@ -31,7 +31,7 @@ Du brauchst:
 
 Empfohlen:
 
-* WinoMC Bedrock Server läuft auf demselben Home-Assistant-System
+* [BETA] WinoMC Bedrock Server läuft auf demselben Home-Assistant-System
 * Friend Broadcast und Bedrock Server laufen beide im Host-Netzwerk
 * Der Broadcast-Account ist **nicht** dein Hauptaccount
 
@@ -42,7 +42,7 @@ Empfohlen:
 1. Öffne Home Assistant.
 2. Gehe zu **Einstellungen → Add-ons → Add-on Store**.
 3. Füge dieses Repository hinzu, falls noch nicht geschehen.
-4. Installiere **WinoMC Friend Broadcast**.
+4. Installiere **[BETA] WinoMC Friend Broadcast**.
 5. Öffne die Add-on-Konfiguration.
 6. Passe die Einstellungen an.
 7. Starte das Add-on.
@@ -53,12 +53,12 @@ Beim ersten Start kann eine Microsoft/Xbox-Anmeldung erforderlich sein. Folge de
 
 ## Empfohlene Grundkonfiguration
 
-Wenn der WinoMC Bedrock Server auf demselben Home-Assistant-Host läuft, ist eine typische Konfiguration:
+Wenn der [BETA] WinoMC Bedrock Server auf demselben Home-Assistant-Host läuft, ist eine typische Konfiguration:
 
 ```yaml
 TARGET_IP: "123.123.123.123"
 TARGET_PORT: 19132
-HOST_NAME: "WinoMC Server"
+HOST_NAME: "[BETA] WinoMC Server"
 WORLD_NAME: "world"
 PLAYERS: 0
 MAX_PLAYERS: 10
@@ -124,7 +124,7 @@ Standard:
 TARGET_PORT: 19132
 ```
 
-Dieser Wert sollte zum Port deines WinoMC Bedrock Servers passen.
+Dieser Wert sollte zum Port deines [BETA] WinoMC Bedrock Servers passen.
 
 Wenn dein Bedrock Server auf einem anderen Port läuft, musst du diesen Wert entsprechend anpassen.
 
@@ -137,7 +137,7 @@ Der Name, der für den Server angezeigt werden soll.
 Beispiel:
 
 ```yaml
-HOST_NAME: "WinoMC Server"
+HOST_NAME: "[BETA] WinoMC Server"
 ```
 
 Dieser Name wird verwendet, wenn Friend Broadcast die Serverinformationen aus der Konfiguration nimmt oder als Fallback nutzt.
@@ -145,7 +145,7 @@ Dieser Name wird verwendet, wenn Friend Broadcast die Serverinformationen aus de
 Empfehlung:
 
 ```yaml
-HOST_NAME: "WinoMC Server"
+HOST_NAME: "[BETA] WinoMC Server"
 ```
 
 oder ein eigener Name, zum Beispiel:
@@ -610,7 +610,7 @@ Beispiel:
 ```yaml
 action: hassio.app_restart
 data:
-  app: f2435c57_winomc-friend-broadcast
+  app: f2435c57_WinoMC-friend-broadcast
 ```
 
 Den vollständigen Add-on-Slug findest du in der Add-on-URL.
@@ -618,13 +618,13 @@ Den vollständigen Add-on-Slug findest du in der Add-on-URL.
 Beispiel-URL:
 
 ```text
-/config/app/f2435c57_winomc-friend-broadcast/info
+/config/app/f2435c57_[BETA] WinoMC-friend-broadcast/info
 ```
 
 Der zu verwendende Slug ist dann:
 
 ```text
-f2435c57_winomc-friend-broadcast
+f2435c57_[BETA] WinoMC-friend-broadcast
 ```
 
 Wichtig: Zwischen Repository-ID und Add-on-Slug steht ein Unterstrich `_`.
@@ -785,12 +785,12 @@ SUPPRESS_SESSION_UPDATE_MESSAGE: false
 
 ## Empfohlene Standardwerte
 
-Für einen typischen privaten WinoMC-Server:
+Für einen typischen privaten [BETA] WinoMC-Server:
 
 ```yaml
 TARGET_IP: "127.0.0.1"
 TARGET_PORT: 19132
-HOST_NAME: "WinoMC Server"
+HOST_NAME: "[BETA] WinoMC Server"
 WORLD_NAME: "world"
 PLAYERS: 0
 MAX_PLAYERS: 10
@@ -842,13 +842,13 @@ EXPIRY_DAYS
 
 ## Credits
 
-Dieses Add-on ist Teil des WinoMC Add-on-Repositories.
+Dieses Add-on ist Teil des [BETA] WinoMC Add-on-Repositories.
 
 Das Repository basiert ursprünglich auf der Arbeit von:
 
 * williamcorsel/hassio-addons
 
-Weitere Anpassungen, Umbenennung und WinoMC-spezifische Add-ons werden gepflegt von:
+Weitere Anpassungen, Umbenennung und [BETA] WinoMC-spezifische Add-ons werden gepflegt von:
 
 * kasawino69
 

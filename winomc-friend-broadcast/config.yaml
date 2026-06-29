@@ -1,5 +1,5 @@
 name: "[BETA] WinoMC Friend Broadcast"
-description: Zeigt den WinoMC Bedrock Server über Xbox Live/Freunde an
+description: "Zeigt den WinoMC Bedrock Server über Xbox Live/Freunde an"
 version: 1.0.1
 slug: winomc-friend-broadcast
 init: false
@@ -14,7 +14,7 @@ host_network: true
 options:
   TARGET_IP: "127.0.0.1"
   TARGET_PORT: 19132
-  HOST_NAME: "WinoMC Server"
+  HOST_NAME: "[BETA] WinoMC Server"
   WORLD_NAME: "world"
   PLAYERS: 0
   MAX_PLAYERS: 10

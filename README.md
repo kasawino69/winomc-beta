@@ -1,152 +1,150 @@
 # [BETA] WinoMC
 
-WinoMC bringt einen Minecraft Bedrock Dedicated Server als Home-Assistant-Add-on auf dein Home Assistant OS.
+**BETA WinoMC** bringt Minecraft Bedrock als Home-Assistant-Add-on auf dein System.
 
-Das Ziel ist einfach: installieren, einstellen, starten und spielen.
+Installieren, einstellen, starten und spielen — mit einer modernen Weboberfläche, Live-Konsole, Dateimanager, Mobile-Ansicht und sinnvollen Werkzeugen für Alltag, Wartung und Serververwaltung.
 
-WinoMC nutzt eine eigene native Runtime und basiert nicht mehr auf dem itzg-Image.
-
----
-
-### Was ist enthalten?
-
-* Minecraft Bedrock Dedicated Server als Home-Assistant-Add-on
-* Konfiguration direkt über die Home-Assistant-UI
-* Web-Konsole direkt in Home Assistant
-* Persistente Welten und Serverdaten
-* Home-Assistant-Backups
-* Import von Welten, Resource Packs und Behavior Packs
-* IPv4 und IPv6
-* Optionaler IPv6-Bind-Fix für Dual-Stack-Netzwerke
-* Unterstützung für amd64
-* Experimentelle Unterstützung für aarch64 / ARM64 über Box64
+[BETA] WinoMC richtet sich an alle, die einen Minecraft Bedrock Server bequem zu Hause betreiben möchten, ohne dafür ständig per SSH, Terminal oder Dateifreigaben arbeiten zu müssen.
 
 ---
 
-### Installation
+## Was ist [BETA] WinoMC?
 
-Repository in Home Assistant hinzufügen:
+[BETA] WinoMC ist ein Home-Assistant-Add-on-Repository für Minecraft Bedrock.
 
-[![Repository zu Home Assistant hinzufügen](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https://github.com/kasawino69/winomc-beta)
-
-Oder manuell:
-
-1. Home Assistant öffnen
-2. Einstellungen -> Add-ons -> Add-on Store
-3. Oben rechts auf die drei Punkte klicken
-4. Repositorys auswählen
-5. Diese URL einfügen:
-
-```text
-https://github.com/kasawino69/winomc-beta
-```
-
-Danach das Add-on installieren:
+Im Mittelpunkt steht das Add-on:
 
 ```text
 [BETA] WinoMC Bedrock Server
 ```
 
----
+Damit kannst du einen offiziellen Minecraft Bedrock Dedicated Server direkt in Home Assistant betreiben.
 
-### Schnellstart
-
-Für einen normalen privaten Survival-Server reichen meistens diese Einstellungen:
-
-```yaml
-VERSION: LATEST
-SERVER_NAME: WinoMC Server
-LEVEL_NAME: world
-GAMEMODE: survival
-DIFFICULTY: normal
-ALLOW_CHEATS: false
-MAX_PLAYERS: 10
-ONLINE_MODE: true
-ENABLE_LAN_VISIBILITY: true
-SERVER_PORT: 19132
-SERVER_PORT_V6: 19133
-ENABLE_WEB_CONSOLE: true
-```
-
-Beim ersten Start lädt WinoMC automatisch den offiziellen Minecraft Bedrock Dedicated Server herunter.
+[BETA] WinoMC ist dabei mehr als nur ein Startscript für den Server.  
+Das Projekt möchte den Serverbetrieb einfacher, übersichtlicher und angenehmer machen — besonders für private Server, Familien, Freundesgruppen und Vanilla-nahe Welten.
 
 ---
 
-### Verbindung zum Server
+## Was [BETA] WinoMC bietet
 
-Im gleichen Netzwerk kann der Server je nach Gerät automatisch als LAN-Spiel erscheinen.
+- Minecraft Bedrock Server direkt in Home Assistant
+- einfache Installation über den Home-Assistant-Add-on-Store
+- komfortable Konfiguration über die Home-Assistant-Oberfläche
+- moderne Web-Konsole direkt im Browser
+- Live Console mit intelligenter Befehlshilfe
+- Dateimanager für Welten, Packs und Serverdateien
+- Datei-Editor mit Sicherheitsfunktionen
+- Dashboard für eigene Schnellaktionen
+- Import und Export von Welten, Packs und Add-ons
+- Home-Assistant-Backup-Unterstützung
+- LAN-Sichtbarkeit im Heimnetzwerk
+- IPv4 und IPv6
+- optionale Unterstützung für ARM64
+- Mobile Ansicht für Smartphones
+- PC-Ansicht für große Bildschirme
 
-Falls nicht, den Server in Minecraft manuell hinzufügen:
+---
+
+## Warum [BETA] WinoMC?
+
+[BETA] WinoMC wurde mit einem klaren Ziel entwickelt:
+
+> Minecraft Bedrock Server sollen sich in Home Assistant einfach, sicher und angenehm bedienen lassen.
+
+Viele Serverlösungen funktionieren technisch, fühlen sich aber im Alltag oft wie reine Admin-Werkzeuge an. [BETA] WinoMC versucht, daraus ein nutzbares Produkt zu machen:
+
+- verständliche Einstellungen statt unnötiger Hürden
+- Weboberfläche statt dauerhaftem Terminal
+- Mobile Bedienung statt Desktop-Zwang
+- Dateimanager statt manueller Dateisuche
+- Live Console statt versteckter Logs
+- Befehlshilfe statt Befehle auswendig lernen
+- Backup- und Importfunktionen direkt im Workflow
+- klare Trennung zwischen normaler Nutzung und fortgeschrittener Verwaltung
+
+Das Motto von [BETA] WinoMC:
 
 ```text
-Adresse: IP-Adresse von Home Assistant
-Port: 19132
+Keep it simple, with innovative UX and modern design.
 ```
-
-Beispiel:
-
-```text
-192.168.2.187
-Port: 19132
-```
-
-Wichtig: Minecraft Bedrock nutzt UDP. Bei Router, Firewall oder Portfreigaben also UDP freigeben, nicht TCP.
 
 ---
 
-### Web-Konsole
+## Weboberfläche
 
-WinoMC enthält eine eigene Web-Konsole über Home Assistant.
+[BETA] WinoMC enthält eine eigene Weboberfläche in Home Assistant.
 
-Damit kannst du Serverausgaben sehen und Befehle senden, zum Beispiel:
+Dort findest du unter anderem:
+
+- Serverübersicht
+- Live Console
+- intelligente Minecraft-Befehlseingabe
+- Dashboard für eigene Aktionen
+- Dateimanager
+- Datei-Editor
+- Import- und Exportfunktionen
+- Netzwerk- und Statusinformationen
+
+Die Oberfläche ist für zwei Nutzungssituationen gedacht:
+
+### PC
+
+Für Desktop, Notebook und große Browserfenster.
+
+Die PC-Ansicht bietet viel Platz, eine klare Navigation, größere Arbeitsbereiche und eine komfortable Bedienung mit Maus und Tastatur.
+
+### Mobile
+
+Für Smartphones.
+
+Die Mobile-Ansicht ist auf Touch-Bedienung ausgelegt. Sie verzichtet bewusst auf überladene Desktop-Funktionen und nutzt kompakte Menüs, große Bedienflächen und Vollbild-Ansichten für wichtige Werkzeuge.
+
+---
+
+## Live Console
+
+Die Live Console zeigt die Serverausgabe und erlaubt das Senden von Befehlen.
+
+Die integrierte Befehlshilfe unterstützt beim Schreiben von Minecraft Bedrock Befehlen.  
+Vorschläge helfen beim Ausfüllen, führen aber nichts ungefragt aus.
+
+Beispiele:
 
 ```text
 say Hallo zusammen
 list
-stop
+gamerule keepinventory true
+weather clear
+time set day
 ```
 
 ---
 
-### Speicherorte
+## Dateimanager und Editor
 
-Die wichtigsten Pfade:
+Der Dateimanager hilft beim Verwalten von Welten, Packs, Add-ons und Serverdateien.
 
-```text
-/config
-```
+Mögliche Aktionen:
 
-Serverdaten und Konfiguration.
+- Dateien ansehen
+- Dateien bearbeiten
+- Dateien hochladen
+- Dateien herunterladen
+- Dateien verschieben
+- Dateien löschen
+- ZIP-Dateien erstellen
+- ZIP-Dateien entpacken
+- MD5-Prüfsummen prüfen
+- Welt- und Pack-Dateien verwalten
 
-```text
-/config/worlds
-```
-
-Minecraft-Welten.
-
-```text
-/config/resource_packs
-```
-
-Resource Packs.
-
-```text
-/config/behavior_packs
-```
-
-Behavior Packs.
-
-```text
-/share/winomc/import
-```
-
-Import-Ordner für Welten, Packs und Add-ons.
+Der Editor öffnet sich als Overlay beziehungsweise Vollbildansicht.  
+Dadurch bleibt der Dateimanager übersichtlich und der Editor bekommt genug Platz.
 
 ---
 
-### Welten und Packs importieren
+## Import, Export und Backups
 
-WinoMC kann folgende Dateien importieren:
+[BETA] WinoMC unterstützt typische Minecraft-Bedrock-Dateien:
 
 ```text
 .mcworld
@@ -156,121 +154,156 @@ WinoMC kann folgende Dateien importieren:
 .zip
 ```
 
-Beispiel für ein Resource Pack:
+Damit lassen sich Welten, Resource Packs, Behavior Packs und Add-ons einfacher in den Server übernehmen.
 
-```yaml
-MC_PACK: /share/winomc/import/mein-pack.mcpack
-```
+Für Sicherheit im Alltag setzt [BETA] WinoMC auf:
 
-Beispiel für eine Welt:
+- Home-Assistant-Backups
+- Exportfunktionen
+- Sicherheitskopien vor Dateiänderungen
+- übersichtliche Importpfade
+- kontrollierte Dateioperationen über die Weboberfläche
 
-```yaml
-MC_PACK: /share/winomc/import/meine-welt.mcworld
-```
-
-Wenn vorhandene Packs oder Welten ersetzt werden sollen:
-
-```yaml
-FORCE_PACK_COPY: true
-FORCE_WORLD_COPY: true
-```
-
-Vorsicht: `FORCE_WORLD_COPY` kann eine bestehende Welt ersetzen. Vorher immer ein Backup erstellen.
+Vor größeren Änderungen an Welten oder Packs sollte trotzdem immer ein vollständiges Backup erstellt werden.
 
 ---
 
-### Updates und Backups
+## Für wen ist [BETA] WinoMC gedacht?
 
-Mit dieser Einstellung nutzt WinoMC die aktuelle stabile Bedrock-Server-Version:
+[BETA] WinoMC passt besonders gut für:
 
-```yaml
-VERSION: LATEST
-```
-
-WinoMC kann alte Serverpakete vor Updates sichern:
-
-```yaml
-PACKAGE_BACKUP_KEEP: 2
-```
-
-Das ersetzt kein vollständiges Welt-Backup. Vor größeren Updates oder Weltimporten sollte zusätzlich ein Home-Assistant-Backup erstellt werden.
+- private Minecraft Bedrock Server
+- Familienserver
+- Freundesgruppen
+- Vanilla- und Vanilla+-Welten
+- Home-Assistant-Nutzerinnen und Nutzer
+- Menschen, die einen Server bedienen möchten, ohne alles per Terminal zu machen
+- alle, die Minecraft Bedrock sauber in ihr Smart Home integrieren möchten
 
 ---
 
-### IPv4 und IPv6
+## Add-ons in diesem Repository
 
-Standard:
+### [BETA] WinoMC Bedrock Server
 
-```yaml
-SERVER_PORT: 19132
-SERVER_PORT_V6: 19133
-ENABLE_BDS_V6BIND_FIX: false
-```
+Das Haupt-Add-on für den Minecraft Bedrock Dedicated Server.
 
-Für Dual-Stack mit gleichem Port:
+Es enthält Serverbetrieb, Weboberfläche, Dateimanager, Konsole, Import, Export und die wichtigsten Verwaltungsfunktionen.
 
-```yaml
-SERVER_PORT: 19132
-SERVER_PORT_V6: 19132
-ENABLE_BDS_V6BIND_FIX: true
-```
+### [BETA] WinoMC Friend Broadcast
 
-Der IPv6-Bind-Fix wird von WinoMC selbst aus Quellcode gebaut. Es wird dafür kein fremdes Fertig-Binary heruntergeladen.
+Ein optionales Zusatz-Add-on, das bei bestimmten Geräten und Netzwerksituationen helfen kann, einen Bedrock-Server über Freundes-/Broadcast-Mechanismen sichtbarer zu machen.
+
+Das Haupt-Add-on bleibt der [BETA] WinoMC Bedrock Server.
 
 ---
 
-### ARM64 / aarch64
+## Installation
 
-ARM64 wird experimentell unterstützt.
+### Repository zu Home Assistant hinzufügen
 
-Da der offizielle Bedrock Dedicated Server für Linux nicht nativ als ARM64-Server bereitgestellt wird, nutzt WinoMC auf ARM64 Box64.
+[![Repository zu Home Assistant hinzufügen](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https://github.com/kasawino69/winomc-beta)
 
-Standard:
+Oder manuell in Home Assistant:
 
-```yaml
-USE_BOX64: true
+1. **Einstellungen** öffnen
+2. **Add-ons** öffnen
+3. **Add-on Store** öffnen
+4. oben rechts die drei Punkte wählen
+5. **Repositorys** öffnen
+6. diese URL hinzufügen:
+
+```text
+https://github.com/kasawino69/winomc-beta
 ```
 
-Auf amd64 wird Box64 nicht verwendet.
+Danach das gewünschte [BETA] WinoMC Add-on installieren.
 
 ---
 
-### Hinweise
+## Dokumentation
 
-WinoMC ist aktuell Beta-Software.
+Die ausführliche Dokumentation zum Haupt-Add-on findest du hier:
 
-Minecraft Bedrock, Home Assistant und verschiedene Geräte können sich unterschiedlich verhalten. Besonders Konsolen wie Nintendo Switch oder Xbox können bei LAN-Anzeige, manueller Verbindung und Netzwerkfreigaben eigene Einschränkungen haben.
+```text
+WinoMC-server-bedrock/README.md
+```
 
-Dieses Projekt ist kein offizielles Minecraft-, Mojang-, Microsoft- oder Home-Assistant-Projekt.
+Dort werden Einrichtung, Optionen, Speicherorte, Import, Export, Netzwerk, Web-Konsole und Fehlerbehebung genauer erklärt.
 
 ---
 
-### Credits
+## Support
 
-Dieses Repository basiert ursprünglich auf der Arbeit von:
+Fehler, Wünsche und Sicherheitsmeldungen können über GitHub Issues gemeldet werden:
 
-* williamcorsel/hassio-addons
+```text
+https://github.com/kasawino69/WinoMC/issues
+```
 
-Die ursprünglichen Vorlagen und Inspirationen stammen außerdem unter anderem von:
+Bitte bei Fehlern möglichst angeben:
 
-* alexbelgium/hassio-addons
+- verwendete WinoMC-Version
+- Home-Assistant-Version
+- Systemarchitektur, zum Beispiel `amd64` oder `aarch64`
+- kurze Beschreibung des Problems
+- relevante Logs ohne private Daten
+- was erwartet wurde und was tatsächlich passiert ist
 
-WinoMC wurde danach für Minecraft Bedrock, Home Assistant und die eigene native Runtime weiter angepasst und erweitert.
+Bitte keine Tokens, Zugangsdaten, privaten Weltdateien oder persönlichen Daten öffentlich posten.
+
+WICHTIG:
+Für die [BETA] WinoMC Versionen wird kein Support gegeben.
+
+---
+
+## Sicherheit
+
+Die Weboberfläche ist ein Verwaltungswerkzeug.  
+Wer Zugriff darauf hat, kann Serverbefehle ausführen und Dateien verändern.
+
+Für private Server wird empfohlen:
+
+- Microsoft/Xbox-Authentifizierung aktiv lassen
+- Allowlist verwenden
+- Operator-Rechte nur vertrauenswürdigen Spielern geben
+- vor größeren Änderungen Backups erstellen
+- keine Zugangsdaten oder privaten Daten in Issues veröffentlichen
+
+---
+
+## Credits
+
+WinoMC basiert ursprünglich auf der Arbeit von:
+
+- `williamcorsel/hassio-addons`
+
+Weitere Inspirationen und Vorlagen stammen unter anderem von:
+
+- `alexbelgium/hassio-addons`
 
 Danke außerdem an:
 
-* itzg/docker-minecraft-bedrock-server für viele gute Ideen, Verhaltensweisen und Kompatibilitätsreferenzen rund um Minecraft Bedrock Server Container
-* poeggi/bds-ipv6fix für die technische Beschreibung und Idee des IPv6-Bind-Fixes
-* Box64 für die Möglichkeit, den Bedrock Dedicated Server experimentell auf ARM64 auszuführen
-* die Home-Assistant-Community
-* die Minecraft-Community
+- `itzg/docker-minecraft-bedrock-server` für viele gute Ideen, Verhaltensweisen und Kompatibilitätsreferenzen rund um Minecraft Bedrock Server Container
+- `poeggi/bds-ipv6fix` für die technische Beschreibung und Idee des IPv6-Bind-Fixes
+- `Box64` für die Möglichkeit, den Bedrock Dedicated Server experimentell auf ARM64 auszuführen
+- die Home-Assistant-Community
+- die Minecraft-Community
 
-WinoMC-spezifische Anpassungen und Weiterentwicklung werden von kasawino69 gepflegt.
+[BETA] WinoMC-spezifische Anpassungen, Weboberfläche, UX, Add-on-Integration und Weiterentwicklung werden im [BETA] WinoMC-Projekt gepflegt.
 
 ---
 
-### Lizenz
+## Lizenz
 
 Dieses Repository steht unter der MIT-Lizenz, soweit nicht anders angegeben.
 
-Minecraft ist Eigentum von Mojang/Microsoft. WinoMC stellt nur ein Home-Assistant-Add-on zur Ausführung des offiziellen Bedrock Dedicated Servers bereit.
+Drittprojekte behalten ihre jeweiligen eigenen Lizenzen und Rechte.
+
+Minecraft, Minecraft Bedrock, Bedrock Dedicated Server, Mojang und Microsoft sind Marken oder Eigentum der jeweiligen Rechteinhaber.
+
+Home Assistant ist ein Projekt der Home-Assistant-Community und ihrer jeweiligen Rechteinhaber.
+
+WinoMC ist kein offizielles Minecraft-, Mojang-, Microsoft- oder Home-Assistant-Projekt.
+
+WinoMC ist nicht offiziell mit Mojang, Microsoft, Home Assistant, itzg, poeggi, Box64 oder den ursprünglichen Upstream-Repositories verbunden, sofern nicht ausdrücklich anders angegeben.

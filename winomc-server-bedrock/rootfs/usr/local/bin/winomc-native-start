@@ -221,6 +221,51 @@ resolve_xuid() {
   echo "${value}"
 }
 
+write_allowlist_entry() {
+  entry="$(trim_value "${1:-}")"
+  tmp_file="$2"
+  name="${entry}"
+  xuid=""
+
+  # Supported formats:
+  #   Gamertag:XUID
+  #   Gamertag=XUID
+  #   Gamertag
+  # The previous implementation wrote the full "Gamertag:XUID" string
+  # into the name field, which makes Bedrock reject the player.
+  case "${entry}" in
+    *:*)
+      name="$(trim_value "${entry%%:*}")"
+      xuid="$(trim_value "${entry#*:}")"
+      ;;
+    *=*)
+      name="$(trim_value "${entry%%=*}")"
+      xuid="$(trim_value "${entry#*=}")"
+      ;;
+  esac
+
+  if [ -z "${name}" ]; then
+    echo "WARN: Skipping allowlist entry without name: ${entry}" >&2
+    return 0
+  fi
+
+  if [ -n "${xuid}" ] && ! printf '%s' "${xuid}" | grep -Eq '^[0-9]{15,}$'; then
+    echo "WARN: Invalid XUID in allowlist entry '${entry}', writing name-only entry" >&2
+    xuid=""
+  fi
+
+  if [ -n "${xuid}" ]; then
+    jq -n \
+      --arg name "${name}" \
+      --arg xuid "${xuid}" \
+      '{ignoresPlayerLimit:false,name:$name,xuid:$xuid}' >> "${tmp_file}"
+  else
+    jq -n \
+      --arg name "${name}" \
+      '{ignoresPlayerLimit:false,name:$name}' >> "${tmp_file}"
+  fi
+}
+
 write_allowlist() {
   tmp_file="$(mktemp)"
   allowed_values="$(list_values "${ALLOW_LIST_USERS:-}")"
@@ -235,8 +280,7 @@ write_allowlist() {
       continue
     fi
 
-    jq -n --arg name "${entry}" \
-      '{ignoresPlayerLimit:false,name:$name}' >> "${tmp_file}"
+    write_allowlist_entry "${entry}" "${tmp_file}"
   done
 
   IFS="${old_ifs}"
@@ -246,6 +290,7 @@ write_allowlist() {
 
   echo "WinoMC native allowlist.json written"
 }
+
 
 append_permission_entries() {
   permission="$1"

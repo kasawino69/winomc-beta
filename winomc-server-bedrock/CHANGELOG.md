@@ -5,6 +5,697 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.14.3
+
+#### Mobile UX Hardening
+
+* Live Console auf Mobile weiter gehärtet:
+  * Der Größen-Ziehgriff wird auf Mobile vollständig deaktiviert.
+  * Der Ziehgriff erscheint auch im eingeklappten Zustand nicht mehr.
+  * Eingeklappte Live Console bleibt innerhalb der sichtbaren Browserfläche.
+  * iOS-/Browser-Safe-Area wird beim eingeklappten Zustand stärker berücksichtigt.
+  * Mobile nutzt weiterhin ausschließlich die Bedienflächen `Kompakt`, `Normal`, `Groß`, `Vollbild` und `Ausklappen`.
+
+#### Mobile Editor
+
+* Editor-Overlay auf Mobile modal abgesichert:
+  * Hintergrundinteraktionen werden blockiert, solange der Editor geöffnet ist.
+  * Ein eigener Backdrop verhindert versehentliche Klicks oder Scrollgesten auf die Seite hinter dem Editor.
+  * Editor bleibt als Vordergrund-Overlay nutzbar, ohne dass Datei-Explorer oder andere UI-Elemente im Hintergrund ausgelöst werden.
+
+#### Reliability
+
+* Bekannte Zustände gezielt gehärtet statt Layoutlogik erneut umzubauen.
+* Keine neuen Darstellungsmodi eingeführt.
+* Bestehendes Mobile-/PC-Verhalten aus 1.6.14.2 bleibt erhalten.
+* Version auf `WinoMCConsole/1.6.14.3` angehoben.
+
+### 1.6.14.2
+
+#### UX / Mobile Live Console
+
+* Mobile Größenlogik der Live Console überarbeitet.
+* `Groß` ist auf Mobile wieder ein großer angedockter Konsolenmodus und kein Vollbild-Alias mehr.
+* `Vollbild` ist nun der einzige echte Vollbildmodus.
+* Erneuter Klick auf `Vollbild` beziehungsweise der angezeigte `Normal`-Button kehrt zuverlässig zur vorherigen Größe zurück.
+* Mobile Konsolengrößen begrenzt:
+  * `Kompakt`: kleinste nutzbare Ansicht mit Eingabe und ungefähr drei Logzeilen.
+  * `Normal`: mittlere Standardansicht.
+  * `Groß`: maximal etwa halbe Bildschirmhöhe.
+  * `Vollbild`: echtes Overlay für längere Konsolenarbeit.
+* Mobile Touch-Verhalten der Konsolenbuttons stabilisiert, damit keine Textmarkierung oder falsche Button-Aktion ausgelöst wird.
+
+#### UX / Mobile Dateimanager
+
+* Mobile Dateimanager-Ansicht stärker auf die Dateiliste fokussiert.
+* Sekundäre Werkzeuge bleiben hinter `Werkzeuge anzeigen` gebündelt, unabhängig von der tatsächlichen CSS-Browserbreite.
+* Kopfbereich des Dateimanagers kompakter gestaltet.
+* Status, Beschreibung, Breadcrumb und doppelte Explorer-Aktionsleiste auf Mobile reduziert oder ausgeblendet.
+* Upload-Zone kompakter gemacht.
+* Dateiliste erhält deutlich mehr Höhe und bleibt der zentrale Arbeitsbereich.
+* Mobile Datei-Karten kompakter gestaltet:
+  * kleinere Abstände,
+  * weniger Label-Ballast,
+  * kompaktere Aktionstaste,
+  * bessere Scrollbarkeit.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.14.2` angehoben.
+* Kein Backend-/Dateisystemverhalten verändert.
+* Security-/CodeQL-Logik aus den vorherigen Versionen bleibt unverändert.
+* Lokale Prüfungen:
+  * `python3 -m py_compile`
+  * `node --check` für das eingebettete JavaScript
+  * ZIP-Struktur geprüft
+
+### 1.6.14.1
+
+#### UX / Live Console
+
+* Vollbild-Schaltfläche der Live Console korrigiert.
+* Ein Klick auf **Vollbild** öffnet die Live Console als Vollbild-Overlay.
+* Ein erneuter Klick auf dieselbe Schaltfläche kehrt zuverlässig zur vorherigen Größe zurück.
+* Der Button zeigt im Vollbildmodus nun korrekt **Normal** an und führt die Rückkehr zur vorherigen Größe aus.
+* Die alte doppelte Behandlung der Vollbild-Schaltfläche wurde abgefangen, damit ältere Größen-Handler den Klick nicht mehr vorher verbrauchen.
+
+#### UX / PC Navigation
+
+* Eingeklappte PC-Navigation weiter bereinigt.
+* Bei kleinen PC-Browserfenstern zeigt die eingeklappte Navigation jetzt konsequent nur Icons.
+* Abgeschnittene oder halb sichtbare Menütexte in der Icon-Leiste wurden unterbunden.
+* Der Inhaltsbereich bleibt neben der eingeklappten Navigation nutzbar.
+
+#### UX / Mobile Dateimanager
+
+* Mobile Dateimanager-Ansicht kompakter gestaltet.
+* Sekundäre Dateimanager-Werkzeuge werden auf Mobile hinter einer neuen Schaltfläche **Werkzeuge anzeigen** zusammengefasst.
+* Standardmäßig sichtbar bleiben nur die wichtigsten Felder zum Navigieren im Dateisystem.
+* Datei-Inhaltsbereich erhält mehr vertikalen Platz.
+* Dateiliste nutzt den verfügbaren Platz besser aus und bleibt scrollbar.
+* Upload-Zone und Kopfbereich wurden auf Mobile reduziert, damit der Explorer nicht mehr von Bedienelementen verdrängt wird.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.14.1` angehoben.
+* Python-Syntaxprüfung mit `python3 -m py_compile` durchgeführt.
+* JavaScript-Syntaxprüfung mit `node --check` durchgeführt.
+* Repo-ZIP-Struktur geprüft.
+
+### 1.6.14
+
+#### UX / Navigation
+
+* PC-Workbench-Navigation im klassischen PC-Modus erneut stabilisiert.
+* Eingeklappte PC-Navigation hinterlässt keinen großen leeren Zwischenraum mehr.
+* PC-Workbench-Button wird nach dynamischen UI-Aufräumarbeiten erneut verdrahtet und bleibt funktionsfähig.
+
+#### Live Console
+
+* Neue Vollbild-Funktion für die Live Console ergänzt.
+* Vollbild funktioniert jetzt in klassischer PC-Ansicht, PC-Workbench und Mobile.
+* Erneuter Druck auf **Vollbild** kehrt zur vorherigen Konsolengröße zurück.
+* Im eingeklappten Zustand wird nur noch **Ausklappen** angezeigt; Kompakt, Normal, Groß und Anzeige leeren werden ausgeblendet.
+* Mobile Kompaktansicht leicht erhöht, damit Logzeilen und Eingabe besser erreichbar bleiben.
+
+#### Serverübersicht / Monitoring
+
+* Übersicht um Server-Metriken erweitert:
+  * Spieleranzeige aus dem letzten `list`-Output
+  * Arbeitsspeicher-Verbrauch
+  * Speicherplatz des `/config`-Datenbereichs
+  * System-Load als Zusatzinformation
+* Status-API um `metrics` erweitert.
+* Nach dem Befehl `list` wird die Spieleranzeige automatisch nachgeladen.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.14` angehoben.
+* Datei syntaktisch geprüft.
+* ZIP-Struktur für den Repo-Pfad geprüft.
+
+### 1.6.13.2
+
+#### UX / Mobile Live Console
+
+* Mobile Live-Console-Größenlogik überarbeitet.
+* Der mobile Zieh-/Resize-Griff wurde deaktiviert, da Touch-Browser diesen Bereich zu leicht als Markier-/Scrollgeste interpretieren.
+* Mobile Größen sind jetzt bewusst über Schaltflächen gesteuert:
+  * **Kompakt**: Eingabe bleibt sichtbar, Logbereich zeigt ungefähr drei Zeilen.
+  * **Normal**: größerer Logbereich mit ungefähr zehn Zeilen.
+  * **Vollbild**: Live Console öffnet als Vollbild-Bottom-Sheet ohne Seitenwechsel oder Refresh.
+* Im mobilen Kompaktmodus bleibt die Befehlseingabe sichtbar.
+* iOS-/Browser-Safe-Area bleibt berücksichtigt.
+
+#### UX / Mobile Editor
+
+* Datei-Editor auf Mobile neu ausgerichtet.
+* Editor öffnet jetzt als echtes Vollbild-Overlay über der Oberfläche.
+* Der Inhaltsbereich bekommt den Hauptplatz und ist nicht mehr auf wenige Zeilen gequetscht.
+* Editor-Bedienelemente liegen kompakt unten und überlappen den Inhalt nicht mehr.
+* Hinweisboxen werden mobil ausgeblendet, damit der Textbereich nutzbar bleibt.
+
+#### UX / Datei-Explorer
+
+* Beim Öffnen einer Datei im Editor wird der Editor sichtbar in den Fokus gebracht.
+* Das verhindert den Eindruck, dass beim Öffnen einer weiter unten liegenden Datei nichts passiert.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.13.2` angehoben.
+* Datei syntaktisch geprüft.
+
+### 1.6.13.1
+
+#### UX / Navigation
+
+* PC-Workbench wieder als eigener Navigationspunkt in der PC-Ansicht ergänzt.
+* PC-Workbench bleibt auf Mobile bewusst ausgeblendet, da der Modus dort keinen sinnvollen Nutzen hat.
+* Alte Legacy-Einträge wie `Desktop-Modus` werden weiterhin bereinigt, ohne den neuen PC-Workbench-Eintrag zu entfernen.
+
+#### Konsole / Befehlshilfe
+
+* Befehlshilfe stark erweitert und an die offizielle Minecraft-Bedrock-Befehlsliste angepasst.
+* Gamerules vollständig ergänzt, inklusive Boolean-, Integer- und `playerwaypoints`-Varianten.
+* Vorschläge werden auf PC und Mobile nur noch in die Eingabe übernommen und niemals direkt ausgeführt.
+* Mobile Touch-Auswahl der Vorschläge abgesichert, damit kein unbeabsichtigter Submit ausgelöst wird.
+* Platzhalter-Befehle wie `gamemode creative <player>` bleiben als editierbare Eingabe stehen, bis der Nutzer den fehlenden Wert ergänzt und selbst sendet.
+
+#### Mobile UX
+
+* Editor-Overlay auf Mobile korrigiert: Bedienelemente überlappen den Inhaltsbereich nicht mehr.
+* Editor-Aktionen sind mobil horizontal scrollbar und nehmen weniger vertikalen Platz ein.
+* Live-Console-Schieber auf Mobile wieder nutzbar gemacht.
+* Eingeklappte mobile Live Console kann über den Schieber wieder in einen normalen, veränderbaren Zustand gebracht werden.
+
+#### Dashboard
+
+* Dashboard-Kacheln lösen beim Klick auf die Kachel selbst keinen Befehl mehr aus.
+* Befehle werden nur noch über die sichtbare Schaltfläche `Ausführen` gestartet.
+* Drag & Drop am PC bleibt erhalten; Mobile behält das Aktionsmenü.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.13.1` angehoben.
+* Datei syntaktisch geprüft.
+* JavaScript extrahiert und mit Node geprüft.
+
+### 1.6.13
+
+#### UX / Shell Cleanup
+
+* PC- und Mobile-Erkennung überarbeitet: schmale PC-Browserfenster werden nicht mehr fälschlich wie Mobile/Tablet behandelt.
+* Mobile bleibt Mobile: Die PC-Workbench ist auf Smartphones bewusst nicht mehr auswählbar und alte Desktop-/Workbench-Menüeinträge werden bereinigt.
+* Klassische PC-Ansicht behält auch bei kleineren Browserfenstern eine echte linke Navigation statt einer kaputten horizontalen Zwischenansicht.
+* Veraltete `Desktop-Modus`-/`Workbench`-Navigationseinträge werden beim Laden automatisch entfernt.
+
+#### Live Console
+
+* Eingeklappte Live Console zeigt jetzt in allen Ansichten nur noch **Ausklappen**.
+* Zusätzliche Größen-, Fenster- und Leer-Buttons werden im eingeklappten Zustand ausgeblendet.
+* iPhone/Safari-Darstellung verbessert: Die eingeklappte Konsole liegt höher und bleibt oberhalb der Browser-Bedienleiste erreichbar.
+* Menüpunkt **Konsole** wurde zur echten Kommandozentrale erweitert, statt leer oder redundant zu wirken.
+
+#### Intelligente Befehlseingabe
+
+* Neue nicht störende Befehlshilfe für Minecraft-Bedrock-Serverbefehle ergänzt.
+* Vorschläge erscheinen nur beim Tippen und werden erst per Klick/Touch übernommen.
+* Funktioniert ohne Tab-Taste und ist damit auch mobil bedienbar.
+* Enthält häufige Server-, Spieler-, Welt-, Gamerule-, Backup-, Chat-, Inventar- und Expertenbefehle.
+
+#### Dashboard
+
+* Dashboard-Kacheln können am PC per Drag & Drop neu angeordnet werden.
+* Mobile behält bewusst die sicheren Menüaktionen, da Drag & Drop auf Touch-Geräten weniger zuverlässig ist.
+* Kachel-Aktionen wurden in ein kompaktes Menü verschoben: Nach oben, Nach unten, Entfernen.
+* Die bisherigen Sortierpfeile liegen nicht mehr dauerhaft sichtbar im Layout.
+
+#### Dateimanager / PC Layout
+
+* Dateiexplorer erhält im PC-Modus mehr nutzbare Höhe.
+* Datei-Liste bekommt zusätzlichen unteren Scroll-Puffer, damit Elemente nicht von der Live Console verdeckt werden.
+* PC-Workbench-Dateifenster erhält größere Mindestabmessungen für sinnvolles Arbeiten.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.13` angehoben.
+* Keine Änderung an bestehenden Sicherheits-/CodeQL-Pfadprüfungen.
+* Datei syntaktisch geprüft und Paketstruktur vorbereitet.
+
+### 1.6.12
+
+#### Webinterface / Rethinking
+
+* Webinterface-UX neu ausgerichtet nach dem Prinzip: **Keep it simple, modern UX, weniger Modi**.
+* Tablet wurde als eigener Produktmodus entfernt.
+* Es gibt jetzt nur noch zwei Zieloberflächen:
+  * **Mobile UX** für Smartphones und kleine Touch-Displays
+  * **PC UX** für Desktop-Browser, Laptops und große Displays
+* Alte gespeicherte Tablet-Zustände werden automatisch auf `Auto` normalisiert.
+* Die automatische Erkennung unterscheidet nicht mehr zwischen Mobile, Tablet und Desktop, sondern nur noch zwischen Mobile und PC.
+
+#### Mobile UX
+
+* PC-Workbench/Desktop-Modus ist auf Mobilgeräten deaktiviert.
+* Mobile Geräte bleiben konsequent in der mobilen Oberfläche.
+* Alte Desktop-/Workbench-Zustände aus vorherigen Sitzungen werden auf Mobile automatisch entfernt.
+* Die Live Console bleibt im eingeklappten Zustand besser erreichbar und verschwindet nicht mehr unter der Browser-/iOS-Bedienleiste.
+* Der mobile Dateimanager ist kompakter:
+  * weniger hohe Dateikarten
+  * kompaktere Metadaten
+  * Aktionsmenü statt klobiger Button-Blöcke
+
+#### PC UX
+
+* PC-Browser werden nicht mehr fälschlich als Tablet behandelt.
+* PC-Workbench bleibt PC-only und wird nicht mehr auf Mobile angeboten.
+* Der Button wurde von `Desktop-Modus` auf `PC-Workbench` umbenannt, damit klarer ist, dass dieser Modus nur für große Displays gedacht ist.
+* Klassische PC-Ansicht und PC-Workbench werden sauberer getrennt.
+
+#### Dateimanager Re-Design
+
+* Dateiexplorer und Editor wurden entkoppelt.
+* Der Dateiexplorer nutzt jetzt den verfügbaren Arbeitsbereich deutlich besser.
+* Der Editor ist nicht mehr dauerhaft rechts neben dem Explorer sichtbar.
+* Beim Bearbeiten oder Vorschauen einer Datei öffnet sich der Editor als Overlay/Vollbild-Panel ohne Seitenwechsel und ohne Refresh.
+* Dadurch bleibt der Explorer übersichtlicher und die Dateiliste bekommt deutlich mehr Platz.
+* Das bestehende Aktionen-Menü pro Datei bleibt erhalten und wird auf Mobile/PC einheitlicher dargestellt.
+
+#### Maintenance / Cleanup
+
+* Adaptive UX-Logik vereinfacht.
+* Alte `tablet`-Preference wird nicht mehr als gültige Auswahl akzeptiert.
+* UI-State-Wechsel zwischen Mobile, PC klassisch und PC-Workbench wurden robuster gemacht.
+* Version auf `WinoMCConsole/1.6.12` angehoben.
+
+### 1.6.11.4
+
+#### UX / Adaptive Layout
+
+* Auto-Erkennung für Desktop/Tablet/Mobil korrigiert.
+* PC-Browser mit Touch-Unterstützung werden nicht mehr fälschlich als Tablet erkannt.
+* Defekte Tablet-/Mobile-Navigation nach vorher eingeklappter Sidebar behoben.
+* Mobile und Tablet-Profile entfernen verwaiste Sidebar-Rail-Zustände automatisch.
+
+#### Mobile / iPhone
+
+* Live Console berücksichtigt nun die sichtbare Browserfläche über `visualViewport`.
+* Eingeklappte Live Console bleibt über der iOS-/Browser-Bedienleiste erreichbar.
+* Im eingeklappten Zustand wird mobil nur noch der relevante Ausklappen-Button angezeigt.
+* Console-Bedienelemente verschwinden nicht mehr im unteren Bildschirmrand.
+
+#### Desktop / Klassische Ansicht
+
+* Der Button `Desktop-Modus` / `Klassische Ansicht` richtet sich nun nach dem echten aktiven Zustand und nicht nur nach dem erkannten UX-Profil.
+* Wechsel zwischen klassischer Ansicht und Desktop-Modus robuster gemacht.
+* Version auf `WinoMCConsole/1.6.11.4` angehoben.
+
+### 1.6.11.3
+
+#### UX / Classic Console
+
+* Bug behoben, bei dem die Live Console in der klassischen Ansicht nach dem Einklappen durch Ziehen am Resize-Griff in einen widersprüchlichen Zustand geraten konnte.
+* Der Resize-Griff ist im eingeklappten oder minimierten klassischen Zustand nun deaktiviert.
+* Beim manuellen Resize wird die Console sauber in den normalen Modus zurückgeführt und die Beschriftung der Buttons bleibt korrekt.
+
+#### UX / Dateimanager
+
+* Scrollverhalten des Dateiexplorers in der klassischen PC-Ansicht erneut stabilisiert.
+* Der Dateimanager nutzt auf großen Bildschirmen nun einen festen, viewportbasierten internen Scrollbereich oberhalb der Live Console.
+* Untere Dateien und Aktionen bleiben erreichbar, auch wenn die Live Console geöffnet ist.
+
+#### UX / Mobile & Desktop-Wechsel
+
+* Wechsel von Mobile/Tablet in den Desktop-Modus robuster gemacht.
+* Der Desktop-Modus wird bei manueller Auswahl nun direkt erzwungen und nicht mehr durch die automatische Geräteerkennung zurückgesetzt.
+* Wechsel vom Desktop-Modus zurück in die klassische Ansicht bereinigt verwaiste Desktop-Fenster, Overlays, Inline-Positionen und blockierende Zustände zuverlässiger.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.11.3` angehoben.
+* Bestehende Sicherheits- und Dateimanager-Funktionen aus 1.6.11.2 bleiben erhalten.
+
+### 1.6.11.2
+
+#### UX / Responsive Layout
+
+* Fehler behoben, bei dem die klassische Ansicht am PC nach aktivem Desktop-Modus nicht mehr zuverlässig geöffnet wurde.
+* Wechsel von Desktop-Modus zurück zur klassischen Ansicht stabilisiert, ohne dass ein Seitenrefresh nötig ist.
+* Verwaiste Desktop-Zustände werden beim Wechsel in die klassische Ansicht nun konsequent entfernt:
+  * Desktop-Fensterklassen
+  * Desktop-Taskbar/Layer
+  * maximierte Karten-Overlays
+  * blockierende Pointer-/Overlay-Zustände
+* Mobile Bedienbarkeit nach dem Wechsel Desktop → Klassisch verbessert.
+* Klassische Ansicht bleibt im Auto-Modus möglich, auch wenn der PC grundsätzlich als Desktop-Gerät erkannt wird.
+
+#### Dateimanager
+
+* Dateiaktionen pro Datei/Ordner in ein kompaktes Aktionsmenü zusammengefasst.
+* Die vorher sehr klobigen Aktionsbuttons werden nicht mehr dauerhaft untereinander angezeigt.
+* Aktionsmenü funktioniert in Mobile-, Tablet-, klassischer PC- und Desktop-Ansicht.
+* Bestehende Aktionen bleiben erhalten:
+  * Öffnen / Download / Editor
+  * ZIP / Export
+  * Verschieben
+  * MD5-Prüfung
+  * Entpacken
+  * Löschen / Wiederherstellen
+
+#### Mobile UX
+
+* Dateiaktionen auf iPhone und kleinen Displays platzsparender dargestellt.
+* Schaltflächen im Dateimanager nehmen deutlich weniger permanenten Platz ein.
+* Mobile Ansicht bleibt nach Layoutwechseln besser bedienbar.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.11.2` angehoben.
+* Bestehende CodeQL-/Security-Umbauten bleiben erhalten.
+* Datei syntaktisch geprüft.
+
+### 1.6.11.1
+
+#### UX / Mobile
+
+* Fehler behoben, bei dem die Oberfläche nach dem Wechsel vom Desktop-Modus zurück in die klassische Ansicht auf Mobile/Touch-Geräten teilweise nicht mehr korrekt bedienbar war.
+* Verwaiste Desktop-Fensterzustände, Inline-Größen und Desktop-Overlays werden beim Wechsel in die klassische Ansicht nun konsequent bereinigt.
+* Mobile Dateimanager-Ansicht kompakter gestaltet:
+  * kleinere Aktionsbuttons
+  * horizontale Aktionsleiste je Datei
+  * weniger vertikaler Platzverbrauch pro Datei
+  * kompaktere Upload-Zone und Toolbar
+* Mobile Safe-Area- und Scroll-Verhalten aus den vorherigen Versionen bleibt erhalten.
+
+#### File Explorer
+
+* Dateien und Ordner können nun über eine neue Schaltfläche **Verschieben** verschoben werden.
+* Drag & Drop innerhalb des Dateimanagers ergänzt:
+  * Dateien/Ordner können auf Ordner gezogen werden.
+  * Dateien/Ordner können auf die Upload-/Drop-Zone gezogen werden, um sie in den aktuell geöffneten Ordner zu verschieben.
+  * Drag & Drop ist in Mobile, Tablet und Desktop verfügbar, sofern das Gerät Drag & Drop unterstützt.
+* Neue MD5-Schaltfläche für Dateien ergänzt.
+* MD5-Hash wird serverseitig berechnet und in der Oberfläche angezeigt; wenn möglich wird der Hash in die Zwischenablage kopiert.
+* Verschieben ist im Papierkorb gesperrt, damit Papierkorb-Einträge weiterhin über Wiederherstellen/Löschen verwaltet werden.
+
+#### Security / Safety
+
+* Neue Backend-API `/api/files/move` nutzt die vorhandene sichere Root-/Pfadprüfung.
+* Verschieben des Wurzelordners wird blockiert.
+* Verschieben eines Ordners in sich selbst wird blockiert.
+* Zielüberschreibung ist nur nach expliziter Bestätigung möglich.
+* Bei überschriebenen Dateien wird, sofern möglich, vorher ein Backup erstellt.
+* Neue Backend-API `/api/files/md5` arbeitet nur mit Dateien aus erlaubten WinoMC-Dateibereichen.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.11.1` angehoben.
+* Datei syntaktisch geprüft.
+* Bestehende adaptive Profile `Auto`, `Mobil`, `Tablet` und `Desktop` bleiben erhalten.
+
+### 1.6.11
+
+#### UX / Adaptive Layout
+
+* Adaptive UX Engine für Mobile, Tablet und Desktop ergänzt.
+* Neue Darstellungsmodi in der Oberfläche:
+  * Auto
+  * Mobil
+  * Tablet
+  * Desktop
+* Auto-Modus erkennt Viewport, Touch-Fähigkeit, Pointer-Typ und Ausrichtung und wählt daraus das passende UX-Profil.
+* Die gewählte Darstellung wird lokal im Browser gespeichert.
+* Der bisherige Desktop-Modus bleibt erhalten, ist jetzt aber Teil des neuen Desktop-Profils.
+* Der Button „Desktop-Modus“ wechselt künftig sauber zwischen Desktop-Workbench und automatischer klassischer Ansicht.
+
+#### Mobile UX
+
+* Eigene Mobile-Ansicht für iPhone und Android vorbereitet.
+* Header, Navigation, Karten, Aktionen und Formulare wurden für kleine Touch-Displays angepasst.
+* Navigation wird auf Mobile als kompakte horizontale Touch-Navigation dargestellt.
+* Eingeklappte Sidebar kann auf Mobile nicht mehr als defekte vertikale Icon-Leiste hängen bleiben.
+* Live Console wird auf Mobile als kompakter Bottom-Sheet-Bereich behandelt.
+* iOS Safe-Area wird berücksichtigt, damit Inhalte und Bedienelemente nicht hinter Browser- oder Systemleisten verschwinden.
+* Hauptinhalt bleibt oberhalb der Live Console scrollbar.
+* Konsolenbedienung, Eingabefeld und Senden-Button bleiben erreichbar.
+
+#### Tablet UX
+
+* Eigene Tablet-Zwischenansicht für iPad, Android-Tablets und Touch-Laptops ergänzt.
+* Tablet-Navigation ist touchfreundlich und horizontal scrollbar.
+* Dashboard und Karten nutzen den verfügbaren Platz besser als Mobile, bleiben aber einfacher als die Desktop-Workbench.
+* Dateimanager nutzt auf größeren Tablets weiterhin eine geteilte Explorer-/Editor-Ansicht.
+* Live Console bleibt als stabiles Dock erreichbar, ohne den Inhalt unbrauchbar zu verdecken.
+
+#### Dateimanager / Mobile
+
+* Dateiliste wird auf Mobile als Kartenliste dargestellt statt als breite Tabelle.
+* Dateiaktionen bleiben auf kleinen Displays erreichbar und umbrechen kontrolliert.
+* Dateiname, Typ, Größe, Änderungsdatum und Aktionen bleiben auf Mobile lesbar.
+* Editor und Vollbild-Editor berücksichtigen die mobile Live Console.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.11` angehoben.
+* Lokale Syntaxprüfung mit `python3 -m py_compile` durchgeführt.
+* JavaScript-Syntaxprüfung mit `node --check` durchgeführt.
+* Bestehende CodeQL-/Security-Umbauten aus den vorherigen Versionen bleiben erhalten.
+
+### 1.6.1.9
+
+#### Web Console / Layout
+
+* Live-Konsole im klassischen Layout robuster gegen ungünstige Browsergrößen gemacht.
+* Bedienelemente der Live-Konsole bleiben jetzt erreichbar, auch wenn das Fenster in den mittelbreiten Layoutbereich wechselt.
+* Console-Buttons laufen bei wenig Breite nicht mehr unterhalb des sichtbaren Dock-Bereichs aus dem Bild.
+* Console-Buttons bleiben auf einer horizontal scrollbaren Bedienleiste, statt den Header unkontrolliert nach unten zu vergrößern.
+* Eingabezeile und Logbereich werden innerhalb der festen Live-Konsole stabiler berechnet.
+* Eingeklappte Konsole wurde leicht erhöht, damit Kopfzeile und Bedienung nicht abgeschnitten werden.
+* Bei niedriger Fensterhöhe wird die Konsolenhöhe begrenzt, damit keine Bedienelemente aus dem sichtbaren Bereich rutschen.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.1.9` angehoben.
+* CodeQL-/Pfadsicherheitslogik aus 1.6.1.7 und der Dateiexplorer-Scrollfix aus 1.6.1.8 bleiben erhalten.
+* Änderung betrifft nur Layout/CSS der Live-Konsole.
+
+### 1.6.1.8
+
+#### Web Console / Dateimanager
+
+* Scrollverhalten im klassischen Dateiexplorer der Webkonsole korrigiert.
+* Die Dateiliste erhält im klassischen Modus nun einen eigenen vertikalen Scrollbereich.
+* Dateien am unteren Ende langer Ordnerlisten bleiben dadurch erreichbar, auch wenn die Live-Konsole unten eingeblendet ist.
+* Tabellenkopf im Dateimanager bleibt beim Scrollen sichtbar.
+* Desktop-Modus bleibt unverändert, da dort bereits das Fenster selbst korrekt scrollt.
+
+#### UI / Layout
+
+* Klassischer Dateimanager berücksichtigt die feste Konsolenleiste am unteren Bildschirmrand besser.
+* Explorer- und Editor-Karte nutzen im klassischen Modus nun eine begrenzte Höhe mit internem Scrollen statt unkontrolliert nach unten aus dem sichtbaren Bereich zu wachsen.
+* Touch-/Ingress-Scrolling für Home Assistant verbessert.
+
+#### Maintenance
+
+* Version auf `WinoMCConsole/1.6.1.8` angehoben.
+* Keine Änderungen an der CodeQL-Sicherheitslogik aus 1.6.1.7.
+* Keine Änderungen an Nutzeroptionen oder API-Endpunkten.
+
+### 1.6.1.7
+
+#### Security / CodeQL
+
+* Weitere Reduzierung der offenen CodeQL-Meldungen im `winomc-console-server`.
+* Dateisystem-Zugriffe strukturell überarbeitet, damit geprüfte Pfade nicht mehr als rohe, request-beeinflusste Strings bis zu `open`, `listdir`, `stat`, `getsize`, `remove`, `replace`, `copy2`, `move` oder `mkstemp` weitergereicht werden.
+* Neue interne `VerifiedPath`-Pfadklasse ergänzt:
+  * Pfade werden weiterhin normalisiert und gegen erlaubte WinoMC-Root-Verzeichnisse geprüft.
+  * Symlink-Komponenten bleiben blockiert.
+  * Dateisystem-Sinks erhalten nun einen geprüften `PathLike`-Wrapper statt direkt den aus Request-Daten abgeleiteten String.
+* Root-, interne und Runtime-Pfadoperationen vereinheitlicht über:
+  * `verify_root_path(...)`
+  * `verify_internal_path(...)`
+  * `verify_runtime_path(...)`
+* Mehrere verbleibende `py/path-injection`-Flows aus den allgemeinen Dateioperationen entschärft, insbesondere bei:
+  * Datei öffnen
+  * Existenzprüfung
+  * Dateitypprüfung
+  * Verzeichnislisting
+  * Dateigröße und Stat-Informationen
+  * Ordnererstellung
+  * temporären Dateien
+  * Entfernen, Ersetzen, Kopieren und Verschieben
+* FIFO-Zugriff für Konsolenbefehle auf geprüften Runtime-Pfad umgestellt.
+* Dateierstellung weiter gehärtet: der sichere Open-Opener verwendet nun restriktive Rechte `0600` statt `0666`.
+
+#### Reliability
+
+* Unbenutzte lokale Variablen entfernt:
+  * `zip_path = None` im temporären ZIP-Zweig
+  * `log_parent` beim Start der Webkonsole
+* Temporäre ZIP-Erstellung, gespeicherter ZIP-Export, Upload, Download, Editor, Papierkorb und ZIP-Slip-Schutz erneut per Smoke-Test geprüft.
+* Datei erneut mit `python3 -m py_compile` syntaktisch geprüft.
+
+#### Maintenance
+
+* Keine CodeQL-/LGTM-Suppression-Kommentare verwendet.
+* Keine reine Alert-Unterdrückung.
+* Zentrale Sicherheitslogik klarer getrennt in:
+  * Pfadvalidierung
+  * geprüfte `PathLike`-Objekte
+  * eigentliche Dateisystemoperationen
+* Version auf `WinoMCConsole/1.6.1.7` angehoben.
+
+### 1.6.1.6
+
+#### Security / CodeQL
+
+* Download- und ZIP-Auslieferung im `winomc-console-server` strukturell überarbeitet.
+* Die generische Funktion `_send_file(file_path, ...)` wurde entfernt, damit kein request-beeinflusster Pfad mehr als Parameter bis zu `open(...)` weitergereicht wird.
+* Temporäre ZIP-Downloads werden nun über einen serverseitig erzeugten temporären Dateihandle erstellt und direkt aus diesem Handle gestreamt.
+* ZIP-Dateinamen für temporäre Downloads und gespeicherte Exporte werden serverseitig erzeugt und nicht mehr aus Request-Werten wie `root` zusammengesetzt.
+* Der von CodeQL gemeldete Flow aus `create_zip_from_paths(...)` über `zip_info["zip_path"]` in `_send_file(...)` wurde entfernt.
+* Normale Datei-Downloads laufen über eine eigene Root-/Relativpfad-Downloadfunktion statt über einen generischen Vollpfad-Streamer.
+* ZIP-Ziele für gespeicherte Exporte werden über `mkstemp_root(...)` im erlaubten Export-Root erzeugt.
+* Temporäre ZIPs ohne Export-Speicherung verwenden `tempfile.TemporaryFile(...)` und besitzen keinen von außen beeinflussbaren Pfadnamen.
+
+#### Reliability
+
+* ZIP-Streams werden nach der Auslieferung kontrolliert geschlossen.
+* Unvollständige gespeicherte ZIP-Dateien werden bei Fehlern bereinigt.
+* ZIP-Suffix-Erzeugung korrigiert, sodass gespeicherte Exportdateien wieder sauber mit `.zip` enden.
+* Datei weiterhin syntaktisch mit `python3 -m py_compile` geprüft.
+
+#### Maintenance
+
+* Keine CodeQL-/LGTM-Suppression-Kommentare verwendet.
+* Keine reine Alert-Unterdrückung.
+* Der problematische Pfad-Parameter-Flow wurde aus dem Code entfernt.
+* Interne Download-Auslieferung klarer getrennt in:
+  * `_send_stream(...)` für bereits geöffnete sichere Handles
+  * `_send_root_download(...)` für normale Downloads aus erlaubten WinoMC-Roots
+  * `_send_zip_info(...)` für temporäre ZIP-Streams
+
+### 1.6.1.5
+
+#### Security / CodeQL
+
+* Weitere echte Behebung der CodeQL-Meldungen `py/path-injection` im `winomc-console-server`.
+* Die zentrale Änderung: Dateioperationen führen die Pfadvalidierung jetzt direkt in derselben Funktion aus, in der anschließend der Dateisystemzugriff erfolgt.
+* `listdir_root(...)` und weitere Root-Dateioperationen wurden so umgebaut, dass CodeQL den Ablauf besser nachvollziehen kann:
+  * Pfad wird mit `os.path.abspath(...)`, `os.path.realpath(...)` und `os.path.normpath(...)` kanonisiert.
+  * Der kanonisierte Pfad wird direkt gegen den erlaubten Root-Bereich geprüft.
+  * Erst danach erfolgt `os.listdir(...)`, `os.stat(...)`, `os.path.getsize(...)`, `open(...)`, `os.makedirs(...)`, `os.replace(...)`, `os.remove(...)`, `shutil.move(...)` oder `shutil.rmtree(...)`.
+* Indirekte Muster wie `os.listdir(assert_safe_path(...))` beziehungsweise `safe_path = assert_safe_path(...); os.listdir(safe_path)` wurden für die relevanten Sinks entfernt.
+* Runtime-Dateizugriffe für Log und FIFO wurden ebenfalls expliziter abgesichert:
+  * `runtime_path_exists(...)`
+  * `runtime_getsize(...)`
+  * `open_runtime(...)`
+  * `ensure_runtime_parent_dir(...)`
+* Download-Auslieferung erneut angepasst:
+  * Download-Pfad wird lokal in `_send_file(...)` kanonisiert und geprüft.
+  * `isfile`, `getsize` und `open` verwenden danach denselben geprüften lokalen Pfad.
+* ZIP-Erstellung und ZIP-Import weiter gehärtet:
+  * `archive.write(...)`, `os.walk(...)` und `zipfile.ZipFile(...)` verwenden geprüfte lokale Pfade.
+  * ZIP-Slip-Schutz bleibt aktiv.
+* Interne Papierkorb- und Settings-Dateioperationen wurden von direkten `assert_safe_internal_path(...)`-Ausdrücken an Dateisystem-Sinks auf explizite sichere Wrapper umgestellt.
+
+#### Reliability
+
+* Leere `except: pass`-Blöcke bleiben entfernt.
+* Temporäre Upload-, Editor-, ZIP- und Settings-Dateien werden weiterhin kontrolliert bereinigt.
+* Symlink-Schutz bleibt aktiv, insbesondere bei Schreib-, Lösch-, Download- und Traversal-relevanten Pfaden.
+
+#### Maintenance
+
+* Keine CodeQL-/LGTM-Suppression-Kommentare verwendet.
+* Keine Alert-Unterdrückung eingebaut.
+* Die Sicherheitslogik wurde näher an das von CodeQL empfohlene Muster gebracht: normalisieren, gegen erlaubten Basisordner prüfen, danach erst Dateisystemzugriff.
+* Lokale Prüfung durchgeführt:
+  * `python3 -m py_compile`
+  * AST-Check auf leere `except: pass`-Blöcke
+  * Smoke-Tests für Listing, Lesen, Upload-Schreiben, Traversal-Block, Symlink-Block, ZIP-Slip-Block und ZIP-Erstellung
+
+### 1.6.1.4
+
+#### Security / CodeQL
+
+* CodeQL-Handling für `py/path-injection` im `winomc-console-server` erneut überarbeitet.
+* Pfadprüfung so angepasst, dass der geprüfte Pfad für CodeQL klarer als bereinigter Wert erkennbar ist:
+  * Normalisierung über `os.path.normpath(...)`
+  * Symlink-Auflösung über `os.path.realpath(...)`
+  * explizite Base-Prefix-Prüfung mit `startswith(...)`
+  * separate Behandlung des Root-Ordners selbst
+* `os.path.commonpath(...)` aus der zentralen CodeQL-relevanten Pfadprüfung entfernt, da CodeQL diese Custom-Hilfslogik nicht zuverlässig als Sanitizer erkannt hat.
+* Download-Auslieferung überarbeitet:
+  * validierter Download-Pfad wird nur einmal berechnet
+  * `isfile`, `getsize` und `open` arbeiten danach mit demselben geprüften lokalen Pfad
+  * kein erneutes Verschachteln von `assert_safe_download_path(...)` direkt im Filesystem-Sink
+* Schutz gegen Path-Traversal bleibt erhalten und wurde CodeQL-freundlicher formuliert.
+* Symlink-Schutz bleibt aktiv, um Ausbrüche aus erlaubten WinoMC-Verzeichnissen zu verhindern.
+
+#### Reliability
+
+* Datei erneut syntaktisch geprüft.
+* Leere `except: pass`-Blöcke bleiben entfernt.
+* Bestehende Sicherheitsprüfungen für Upload, Download, Editor, ZIP-Import, ZIP-Export, Papierkorb und Runtime-Dateien bleiben erhalten.
+
+#### Maintenance
+
+* Keine CodeQL-/LGTM-Suppression-Kommentare verwendet.
+* Kein reines Unterdrücken von Alerts.
+* Sicherheitslogik näher an das von CodeQL empfohlene Muster gebracht: erst normalisieren, dann gegen einen erlaubten Basisordner prüfen, danach erst Dateisystemzugriff.
+* Version für Release `1.6.1.4` vorbereitet.
+
+### 1.6.1.3
+
+#### Security / CodeQL
+
+* Echte Behebung der offenen CodeQL-Meldungen im `winomc-console-server`
+* Unsichere Datei- und Pfadoperationen im Web-Dateimanager überarbeitet
+* Schutz gegen Path-Traversal verbessert, insbesondere bei:
+  * Datei-Downloads
+  * Datei-Uploads
+  * Datei-Bearbeitung
+  * Datei-Löschung
+  * Papierkorb-Funktionen
+  * Wiederherstellung aus dem Papierkorb
+  * ZIP-Import und ZIP-Export
+* Pfadzugriffe werden nun konsequent gegen erlaubte WinoMC-Verzeichnisse geprüft
+* Zugriffe außerhalb der freigegebenen Datenbereiche werden blockiert
+* `..`-Traversal, ungültige Pfadsegmente und manipulierte Zielpfade werden abgewiesen
+* Schutz gegen ZIP-Slip beim Entpacken von Archiven ergänzt
+* Symlink-basierte Umgehungen im Dateimanager blockiert
+* Runtime-Dateipfade für Konsole, Log und FIFO stärker eingeschränkt
+
+#### Reliability
+
+* Leere `except: pass`-Blöcke entfernt
+* Fehlerbehandlung im `winomc-console-server` verbessert
+* Relevante Fehler werden nun sauber protokolliert oder kontrolliert behandelt
+* Stille Fehlerunterdrückung reduziert, um Debugging und Wartbarkeit zu verbessern
+
+#### Maintenance
+
+* Alte CodeQL-/LGTM-Suppression-Kommentare entfernt
+* CodeQL-Probleme nicht mehr nur kommentiert, sondern technisch behoben
+* Sicherheitsrelevante Hilfsfunktionen für sichere Pfadauflösung und Dateioperationen ergänzt
+* Keine beabsichtigten Änderungen am normalen Verhalten der Webkonsole
+* Keine Änderung an bestehenden Nutzeroptionen oder Add-on-Konfigurationen
+
+### 1.6.1.2
+
+* CodeQL-Pfadwarnungen (`py/path-injection`) in der Web-Konsole gehärtet.
+* Pfadprüfung zentral auf `realpath` plus `commonpath` umgestellt.
+* Upload, JSON-Upload, Datei-Editor, ZIP-Export/Entpacken, Papierkorb und Download-Pfade prüfen Ziele vor Dateioperationen erneut gegen erlaubte WinoMC-Root-Verzeichnisse.
+* Add-on-Version auf 1.6.1.2 angehoben, damit Home Assistant die Sicherheitskorrektur als Update erkennt.
+
+### 1.6.1.1
+
+* Fehler bei der Erstellung der `allowlist.json` behoben.
+* `ALLOW_LIST_USERS` im Format `Gamertag:XUID` wird jetzt korrekt in getrennte `name`- und `xuid`-Felder geschrieben.
+* Name-only-Einträge wie `Gamertag` bleiben als Fallback weiterhin möglich.
+* Verbindungsabbrüche mit Bedrock-Fehlerdetails wie `Boat` oder `Spyglass` bei aktivierter Allowlist behoben.
+
 ### 1.6.1
 
 * Klassische Dateiexplorer-Ansicht korrigiert: Ordner- und Dateiliste besitzen jetzt eine eigene Scrollhöhe.

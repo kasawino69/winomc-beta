@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
-description: Bedrock Minecraft Server auf Home Assistant
-version: 1.6.1
+description: "[BETA] Bedrock Minecraft Server auf Home Assistant"
+version: 1.6.14.3b
 slug: winomc-bedrock
 init: false
 boot: auto
@@ -14,8 +14,7 @@ arch:
 host_network: true
 
 ingress: true
-#ingress_port: 8099
-ingress_port: 23411
+ingress_port: 8099
 ingress_stream: true
 panel_icon: mdi:console
 panel_title: "[BETA] WinoMC Console"
@@ -30,7 +29,7 @@ options:
   VERSION: LATEST
   BDS_AUTO_UPDATE: true
   BDS_DIRECT_DOWNLOAD_URL: ""
-  SERVER_NAME: WinoMC Server
+  SERVER_NAME: "[BETA] WinoMC Server"
   LEVEL_NAME: world
   LEVEL_SEED: ""
   LEVEL_TYPE: DEFAULT
@@ -221,6 +220,5 @@ map:
 
 environment:
   EULA: "TRUE"
-  #WINOMC_CONSOLE_PORT: "8099"
-  WINOMC_CONSOLE_PORT: "23411"
+  WINOMC_CONSOLE_PORT: "8099"
   WINOMC_CONSOLE_ALLOWED_PROXIES: "172.30.32.2,127.0.0.1,::1"
