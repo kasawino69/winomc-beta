@@ -14,6 +14,14 @@
 * Mobile, Datei-API und Serverlogik wurden nicht funktional umgebaut.
 * Version gesetzt auf WinoMCConsole/1.6.14.15.
 
+### 1.6.14.14b
+
+* Klassische PC-Ansicht: persönliches Dashboard bekommt eine belastbare Scrollfläche im oberen Inhalts-Frame.
+* Editor: Vollbild in der klassischen PC-Ansicht öffnet wieder als echtes Editor-Fenster statt nur ein Blur-Overlay zu zeigen.
+* Editor: alte Card-Maximize-/Blur-Zustände werden in der klassischen PC-Ansicht beim Editor-Vollbild entfernt.
+* PC-Workbench, Mobile, Datei-API und Serverlogik wurden nicht funktional umgebaut.
+* Version gesetzt auf WinoMCConsole/1.6.14.14.
+
 ### 1.6.14.13b
 
 * Klassische PC-Ansicht weiter gehärtet: Navigation, Inhalt und Live Console bleiben als drei klare Frames erhalten.
