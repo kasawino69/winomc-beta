@@ -71,7 +71,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Adaptive Workbench 1.6.11.3</title>
+  <title>WinoMC Adaptive Workbench 1.6.14.13</title>
   <style>
     :root {
       color-scheme: dark;
@@ -4266,6 +4266,154 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+
+    /* v1.6.14.13b classic PC Explorer/Dashboard hardening
+       Scope: PC classic shell only. Keep the 3-frame layout intact, but remove
+       the closed editor from the Explorer frame so the file list owns the
+       available space. The editor returns only when a file is opened. Dashboard
+       cards and command suggestions are contained inside their frames. */
+    @media (min-width: 1051px) {
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-manager-grid {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        grid-template-rows: minmax(0, 1fr) !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        gap: 0 !important;
+        overflow: hidden !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-manager-grid.editor-visible {
+        grid-template-columns: minmax(320px, var(--files-left-width)) 10px minmax(360px, 1fr) !important;
+        gap: 12px !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-manager-grid:not(.editor-visible) .split-resizer,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .editor-panel:not(.editor-open):not(.editor-fullscreen) {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-manager-grid.editor-visible .split-resizer {
+        display: block !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+        min-height: 100% !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-explorer-panel {
+        width: 100% !important;
+        min-width: 0 !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        display: grid !important;
+        grid-template-rows: auto auto minmax(0, 1fr) !important;
+        overflow: hidden !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-table-wrap {
+        min-height: 260px !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: auto !important;
+        padding-bottom: 18px !important;
+        scroll-padding-bottom: 18px !important;
+        overscroll-behavior: contain !important;
+        -webkit-overflow-scrolling: touch !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .editor-panel.editor-open:not(.editor-fullscreen) {
+        position: static !important;
+        inset: auto !important;
+        width: auto !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        display: flex !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .editor-panel.editor-fullscreen {
+        position: fixed !important;
+        z-index: 80 !important;
+        inset: 18px 18px calc(var(--console-height) + 18px) 18px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode).console-maximized .tab-panel[data-panel="files"] .editor-panel.editor-fullscreen {
+        bottom: 18px !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"].active {
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        padding-right: 6px !important;
+        padding-bottom: 18px !important;
+        scroll-padding-bottom: 24px !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-add-card,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-active-card {
+        min-width: 0 !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-add-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, .85fr) auto !important;
+        max-width: 100% !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .dashboard-action-preview {
+        min-width: 0 !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
+        grid-template-columns: minmax(0, max-content) auto minmax(0, 1fr) !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .dashboard-action-preview b,
+      body.ux-desktop:not(.desktop-mode) .dashboard-action-preview p,
+      body.ux-desktop:not(.desktop-mode) .dashboard-action-preview span {
+        min-width: 0 !important;
+        max-width: 100% !important;
+        overflow-wrap: anywhere !important;
+        word-break: break-word !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .dashboard-action-preview span {
+        width: auto !important;
+        white-space: normal !important;
+      }
+    }
+
+    .console-assistant {
+      border-top-width: 2px !important;
+      border-top-color: rgba(96, 165, 250, .50) !important;
+      padding-top: 12px !important;
+    }
+
+    .console-assistant-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 8px;
+      margin-bottom: 2px;
+      border-bottom: 1px solid rgba(51, 65, 85, .72);
+    }
+
+    .command-suggestion-list {
+      padding-top: 4px;
+    }
+
 </style>
 </head>
 <body>
@@ -7668,6 +7816,88 @@ INDEX_HTML = r"""<!doctype html>
       window.setTimeout(syncClassicPcConsole161411, 250);
     })();
 
+
+    /* v1.6.14.13b classic PC Explorer/Dashboard runtime guard
+       The CSS hides the idle editor. This guard keeps stale editor-open/fullscreen
+       classes from surviving root changes, layout resets, and browser restores. */
+    (function hardenClassicPcExplorerDashboard161413() {
+      function isClassicPcShell161413() {
+        return document.body.classList.contains('ux-desktop') && !document.body.classList.contains('desktop-mode');
+      }
+
+      function editorVisible161413() {
+        return !!(editorPanel && (editorPanel.classList.contains('editor-open') || editorPanel.classList.contains('editor-fullscreen')));
+      }
+
+      function syncFileGridEditorState161413() {
+        if (!fileManagerGrid) return;
+        fileManagerGrid.classList.toggle('editor-visible', isClassicPcShell161413() && editorVisible161413());
+      }
+
+      function syncClosedEditor161413() {
+        if (!editorPanel) return;
+        if (!currentEditorFile && !editorPanel.classList.contains('preview-only')) {
+          editorPanel.classList.remove('editor-open', 'editor-fullscreen');
+          if (editorFullscreen) editorFullscreen.textContent = 'Vollbild';
+        }
+        syncFileGridEditorState161413();
+      }
+
+      const previousOpenEditorOverlay161413 = openEditorOverlay;
+      openEditorOverlay = function() {
+        previousOpenEditorOverlay161413();
+        window.requestAnimationFrame(syncFileGridEditorState161413);
+      };
+
+      const previousCloseEditorOverlay161413 = closeEditorOverlay;
+      closeEditorOverlay = function() {
+        previousCloseEditorOverlay161413();
+        window.requestAnimationFrame(syncFileGridEditorState161413);
+      };
+
+      const previousClearEditor161413 = clearEditor;
+      clearEditor = function() {
+        previousClearEditor161413();
+        window.requestAnimationFrame(syncClosedEditor161413);
+      };
+
+      const previousLoadFileList161413 = loadFileList;
+      loadFileList = async function(path) {
+        const result = await previousLoadFileList161413(path);
+        if (isClassicPcShell161413() && !currentEditorFile && editorPanel && !editorPanel.classList.contains('preview-only')) {
+          syncClosedEditor161413();
+        } else {
+          syncFileGridEditorState161413();
+        }
+        return result;
+      };
+
+      const previousRenderActionPicker161413 = renderActionPicker;
+      renderActionPicker = function() {
+        previousRenderActionPicker161413();
+        if (actionPicker) {
+          actionPicker.style.maxWidth = '100%';
+          actionPicker.style.minWidth = '0';
+        }
+      };
+
+      const previousUpdateDashboardActionPreview161413 = updateDashboardActionPreview;
+      updateDashboardActionPreview = function() {
+        previousUpdateDashboardActionPreview161413();
+        if (actionPicker) {
+          actionPicker.style.maxWidth = '100%';
+          actionPicker.style.minWidth = '0';
+        }
+      };
+
+      if (editorPanel && 'MutationObserver' in window) {
+        new MutationObserver(syncFileGridEditorState161413).observe(editorPanel, { attributes: true, attributeFilter: ['class'] });
+      }
+      window.addEventListener('resize', () => window.requestAnimationFrame(syncClosedEditor161413), { passive: true });
+      window.requestAnimationFrame(syncClosedEditor161413);
+      window.setTimeout(syncClosedEditor161413, 250);
+    })();
+
 </script>
 </body>
 </html>
@@ -8923,7 +9153,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCConsole/1.6.14.12"
+    server_version = "WinoMCConsole/1.6.14.13"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")

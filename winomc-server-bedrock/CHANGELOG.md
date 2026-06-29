@@ -5,6 +5,16 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.14.13b
+
+* Klassische PC-Ansicht weiter gehärtet: Navigation, Inhalt und Live Console bleiben als drei klare Frames erhalten.
+* Dateimanager: Der Editor ist im Explorer wieder ausgeblendet und erscheint erst beim Öffnen/Bearbeiten einer Datei.
+* Dateimanager: Die Explorer-Inhaltsfläche nutzt den verfügbaren Platz wieder vollständig und bleibt intern scrollbar.
+* Persönliches Dashboard: neue Befehle und aktive Kacheln bleiben innerhalb des Dashboard-Frames scrollbar erreichbar.
+* Befehlshilfe: Vorschläge und Hilfstext sind optisch sauberer getrennt.
+* PC-Workbench, Mobile, Datei-API und Serverlogik wurden nicht funktional umgebaut.
+* Version gesetzt auf WinoMCConsole/1.6.14.13.
+
 ### 1.6.14.12b
 
 * klassische PC-Ansicht nutzt jetzt sauber:
