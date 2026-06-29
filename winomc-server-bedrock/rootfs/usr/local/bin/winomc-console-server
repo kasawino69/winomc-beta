@@ -3860,6 +3860,412 @@ INDEX_HTML = r"""<!doctype html>
       z-index: 180 !important;
     }
 
+
+
+    /* v1.6.14.4 Desktop Workbench blocker hardening
+       Surgical scope: remove stale classic/editor/modal blockers while the
+       PC Workbench is active. The desktop windows, icons, taskbar and movable
+       Live Console keep their existing behavior. */
+    body.desktop-mode.has-maximized-card::after {
+      content: none !important;
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+
+    body.desktop-mode .card.maximized {
+      position: static !important;
+      inset: auto !important;
+      z-index: auto !important;
+      width: auto !important;
+      height: auto !important;
+      max-width: none !important;
+      max-height: none !important;
+      overflow: visible !important;
+      box-shadow: none !important;
+    }
+
+    body.desktop-mode .tab-panel:not(.desktop-open),
+    body.desktop-mode .tab-panel.desktop-minimized {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+
+    body.desktop-mode:not(.editor-modal-open) .editor-modal-backdrop,
+    body.desktop-mode .editor-modal-backdrop[aria-hidden="true"],
+    body.desktop-mode .modal-backdrop:not(.open) {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+      opacity: 0 !important;
+    }
+
+    body.desktop-mode .desktop-layer {
+      pointer-events: none !important;
+    }
+
+    body.desktop-mode .desktop-icon-grid,
+    body.desktop-mode .desktop-icon,
+    body.desktop-mode .desktop-taskbar,
+    body.desktop-mode .desktop-taskbar *,
+    body.desktop-mode .desktop-window-bar,
+    body.desktop-mode .desktop-window-bar *,
+    body.desktop-mode .tab-panel.desktop-open,
+    body.desktop-mode .tab-panel.desktop-open *,
+    body.desktop-mode .console-dock,
+    body.desktop-mode .console-dock * {
+      pointer-events: auto;
+    }
+
+
+
+    /* v1.6.14.7 PC Desktop free-space hardening
+       Surgical scope: only the PC Workbench file window. Older desktop file
+       scroll rules forced a tall lower scaffold even when no visible content
+       needed it. That scaffold looked like an empty, non-operable desktop box
+       and intercepted clicks below the real file-manager controls. */
+    body.ux-desktop.desktop-mode .tab-panel.desktop-open:not(.desktop-minimized):not(.desktop-maximized) {
+      max-height: calc(100dvh - 62px) !important;
+      overscroll-behavior: contain;
+    }
+
+    body.ux-desktop.desktop-mode .tab-panel[data-panel="files"].desktop-open:not(.desktop-minimized):not(.desktop-maximized) {
+      min-height: 0 !important;
+      overflow: auto !important;
+      grid-template-rows: auto minmax(0, auto) !important;
+    }
+
+    body.ux-desktop.desktop-mode .tab-panel[data-panel="files"].desktop-open:not(.desktop-minimized):not(.desktop-maximized) .file-manager-grid {
+      min-height: 0 !important;
+      height: auto !important;
+      overflow: visible !important;
+    }
+
+    body.ux-desktop.desktop-mode .tab-panel[data-panel="files"].desktop-open:not(.desktop-minimized):not(.desktop-maximized) .file-explorer-panel {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: max(220px, min(330px, calc(100dvh - 420px))) !important;
+      grid-template-rows: auto auto minmax(150px, 1fr) !important;
+    }
+
+    body.ux-desktop.desktop-mode .tab-panel[data-panel="files"].desktop-open:not(.desktop-minimized):not(.desktop-maximized) .file-table-wrap {
+      height: auto !important;
+      min-height: 150px !important;
+      max-height: max(150px, min(220px, calc(100dvh - 520px))) !important;
+      overflow: auto !important;
+      padding-bottom: 24px !important;
+      scroll-padding-bottom: 24px !important;
+    }
+
+    body.ux-desktop.desktop-mode .tab-panel[data-panel="files"].desktop-maximized .file-explorer-panel {
+      min-height: 0 !important;
+    }
+
+
+
+    /* v1.6.14.9 PC Desktop canvas hardening
+       Surgical scope: PC Workbench canvas only. A global .content align-self rule
+       made the fixed desktop canvas shrink to its content height, leaving a dark
+       body area below it that intercepted desktop clicks. Force the canvas to
+       stretch to the taskbar, without touching classic/mobile layouts or the
+       movable Live Console. */
+    body.desktop-mode main.content {
+      position: fixed !important;
+      inset: 0 0 46px 0 !important;
+      width: auto !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      align-self: stretch !important;
+      justify-self: stretch !important;
+      overflow: hidden !important;
+      pointer-events: auto !important;
+    }
+
+    @media (max-width: 850px) {
+      body.desktop-mode main.content {
+        inset: 0 0 56px 0 !important;
+        overflow: auto !important;
+      }
+    }
+
+
+
+    /* v1.6.14.10 classic PC console hardening
+       Scope: classic PC view only. The floating PC-Workbench console keeps its
+       draggable/resizable window behavior. In classic PC view the free drag
+       handle is hidden so it cannot resize the sidebar/navigation area; the
+       explicit console size buttons remain the supported controls. */
+    body.ux-desktop:not(.desktop-mode) .console-resize-handle {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      height: 0 !important;
+    }
+
+    body.ux-desktop:not(.desktop-mode) .console-inner {
+      padding-top: 10px;
+    }
+
+
+
+    /* v1.6.14.11 classic PC console + file layout hardening
+       Surgical scope: PC classic shell only. Restore the explicit drag resize
+       handle, but stop console height changes from recalculating the navigation
+       and file-manager work area. The bottom console may overlay dashboard/file
+       content; the file list keeps an internal scroll area with bottom padding
+       so rows remain reachable above the console. Mobile and PC Workbench keep
+       their existing behavior. */
+    body.ux-desktop:not(.desktop-mode) {
+      --classic-pc-workspace-reserve: 330px;
+    }
+
+    body.ux-desktop:not(.desktop-mode).console-collapsed {
+      --classic-pc-workspace-reserve: 76px;
+    }
+
+    body.ux-desktop:not(.desktop-mode).console-hidden {
+      --classic-pc-workspace-reserve: 46px;
+    }
+
+    body.ux-desktop:not(.desktop-mode) .console-resize-handle {
+      display: flex !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      height: 12px !important;
+      touch-action: none !important;
+    }
+
+    body.ux-desktop:not(.desktop-mode).console-collapsed .console-resize-handle,
+    body.ux-desktop:not(.desktop-mode).console-hidden .console-resize-handle,
+    body.ux-desktop:not(.desktop-mode).console-maximized .console-resize-handle {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      height: 0 !important;
+    }
+
+    body.ux-desktop:not(.desktop-mode) nav {
+      height: calc(100dvh - var(--classic-pc-workspace-reserve) - 92px) !important;
+      max-height: calc(100dvh - var(--classic-pc-workspace-reserve) - 92px) !important;
+      min-height: min(320px, calc(100dvh - var(--classic-pc-workspace-reserve) - 92px)) !important;
+      overflow: auto !important;
+    }
+
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"].active {
+      height: calc(100dvh - var(--classic-pc-workspace-reserve) - 84px) !important;
+      min-height: min(560px, calc(100dvh - var(--classic-pc-workspace-reserve) - 84px)) !important;
+      max-height: none !important;
+      display: grid !important;
+      grid-template-rows: auto minmax(0, 1fr) !important;
+      overflow: hidden !important;
+    }
+
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-manager-grid {
+      min-height: 0 !important;
+      height: 100% !important;
+      max-height: none !important;
+      overflow: hidden !important;
+    }
+
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-explorer-panel {
+      min-height: 0 !important;
+      height: 100% !important;
+      max-height: none !important;
+      display: grid !important;
+      grid-template-rows: auto auto minmax(0, 1fr) !important;
+      overflow: hidden !important;
+    }
+
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-table-wrap {
+      min-height: 300px !important;
+      height: 100% !important;
+      max-height: none !important;
+      overflow: auto !important;
+      padding-bottom: calc(min(var(--console-height), 440px) + 24px) !important;
+      scroll-padding-bottom: calc(min(var(--console-height), 440px) + 24px) !important;
+      overscroll-behavior: contain !important;
+      -webkit-overflow-scrolling: touch !important;
+    }
+
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .editor-panel.editor-open,
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .editor-panel.editor-fullscreen {
+      inset-bottom: calc(var(--classic-pc-workspace-reserve) + 18px) !important;
+    }
+
+
+
+
+    /* v1.6.14.12 classic PC three-frame layout
+       Scope: classic PC shell only. The upper work area is now one stable
+       two-column frame (navigation + current module) and the Live Console is
+       the third bottom frame. Resizing the console moves the separator between
+       upper work area and console; it no longer changes only the sidebar or
+       leaves Explorer/Dashboard cramped by an overlay. PC Workbench and mobile
+       keep their own behavior. */
+    @media (min-width: 1051px) {
+      body.ux-desktop:not(.desktop-mode) {
+        --classic-pc-header-height: 52px;
+        --classic-pc-console-reserve: var(--console-height);
+        --classic-pc-workspace-reserve: var(--classic-pc-console-reserve);
+        height: 100dvh !important;
+        min-height: 100dvh !important;
+        padding-bottom: var(--classic-pc-console-reserve) !important;
+        overflow: hidden !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode).console-hidden {
+        --classic-pc-console-reserve: 42px;
+        --classic-pc-workspace-reserve: 42px;
+      }
+
+      body.ux-desktop:not(.desktop-mode) header {
+        height: var(--classic-pc-header-height) !important;
+        min-height: var(--classic-pc-header-height) !important;
+        max-height: var(--classic-pc-header-height) !important;
+        flex: 0 0 var(--classic-pc-header-height) !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .layout {
+        height: calc(100dvh - var(--classic-pc-header-height) - var(--classic-pc-console-reserve)) !important;
+        min-height: 0 !important;
+        max-height: calc(100dvh - var(--classic-pc-header-height) - var(--classic-pc-console-reserve)) !important;
+        overflow: hidden !important;
+        align-items: stretch !important;
+        grid-template-rows: minmax(0, 1fr) !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) nav {
+        position: relative !important;
+        top: auto !important;
+        align-self: stretch !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: auto !important;
+        overscroll-behavior: contain !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode).sidebar-collapsed nav {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) main.content {
+        position: static !important;
+        inset: auto !important;
+        align-self: stretch !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+        align-content: stretch !important;
+        grid-template-rows: auto minmax(0, 1fr) !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .hero.compact-hero {
+        min-height: 0 !important;
+        flex: 0 0 auto !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel.active {
+        align-self: stretch !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: auto !important;
+        overscroll-behavior: contain !important;
+        align-content: start !important;
+        padding-right: 4px;
+        scrollbar-width: thin;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"].active {
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        scroll-padding-bottom: 24px;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-active-card {
+        min-height: 0 !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"].active {
+        align-self: stretch !important;
+        height: auto !important;
+        display: grid !important;
+        grid-template-rows: auto minmax(0, 1fr) !important;
+        overflow: hidden !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-manager-grid {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+        align-items: stretch !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-explorer-panel,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .editor-panel {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-explorer-panel > .card-header,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .editor-panel > .card-header,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .drop-zone,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-path,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-meta,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .editor-actions,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .readonly-note,
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .info.warning-box {
+        flex: 0 0 auto !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .file-table-wrap {
+        flex: 1 1 auto !important;
+        height: auto !important;
+        min-height: 180px !important;
+        max-height: none !important;
+        overflow: auto !important;
+        padding-bottom: 18px !important;
+        scroll-padding-bottom: 18px !important;
+        overscroll-behavior: contain !important;
+        -webkit-overflow-scrolling: touch !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="files"] .editor-box {
+        flex: 1 1 auto !important;
+        height: auto !important;
+        min-height: 180px !important;
+        max-height: none !important;
+        resize: none !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode) .console-dock {
+        height: var(--console-height) !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode).console-hidden .console-dock {
+        height: 42px !important;
+      }
+
+      body.ux-desktop:not(.desktop-mode).console-maximized .console-dock {
+        height: var(--console-height) !important;
+      }
+    }
+
 </style>
 </head>
 <body>
@@ -5303,7 +5709,9 @@ INDEX_HTML = r"""<!doctype html>
       const index = DESKTOP_MODULES.findIndex(item => item.id === id);
       const offset = Math.max(0, index) * 26;
       const width = Math.min(980, Math.max(560, window.innerWidth - 240));
-      const height = Math.min(660, Math.max(360, window.innerHeight - 160));
+      const heightCap = id === 'files' ? 540 : 660;
+      const heightOffset = id === 'files' ? 330 : 160;
+      const height = Math.min(heightCap, Math.max(360, window.innerHeight - heightOffset));
       return {
         left: 140 + offset + 'px',
         top: 68 + offset + 'px',
@@ -6678,6 +7086,7 @@ INDEX_HTML = r"""<!doctype html>
     document.addEventListener('click', event => {
       const button = event.target.closest?.('[data-console-size]');
       if (!button) return;
+      if (!isMobileConsoleShell16142()) return;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
@@ -6687,6 +7096,7 @@ INDEX_HTML = r"""<!doctype html>
     document.addEventListener('pointerdown', event => {
       const button = event.target.closest?.('[data-console-size]');
       if (!button) return;
+      if (!isMobileConsoleShell16142()) return;
       // Prevent mobile Safari from converting taps around the console controls
       // into text selection or delayed synthetic clicks.
       event.stopPropagation();
@@ -6827,6 +7237,7 @@ INDEX_HTML = r"""<!doctype html>
       document.addEventListener('click', event => {
         const button = event.target.closest?.('[data-console-size]');
         if (!button) return;
+        if (!mobileShell()) return;
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
@@ -6842,6 +7253,7 @@ INDEX_HTML = r"""<!doctype html>
         }
         const button = event.target.closest?.('[data-console-size]');
         if (!button) return;
+        if (!mobileShell()) return;
         event.stopPropagation();
       }, true);
 
@@ -6910,6 +7322,350 @@ INDEX_HTML = r"""<!doctype html>
       syncEditorModalState();
       updateFullscreenButtons();
       console.info('[WinoMC UX] Mobile hardening loaded ' + VERSION_16143);
+    })();
+
+
+
+    /* v1.6.14.4 Desktop Workbench blocker hardening
+       Only clears stale blocking layers in PC Workbench mode. It does not
+       change window sizing, mobile behavior, file APIs, or console logic. */
+    (function hardenDesktopWorkbenchBlockers16144() {
+      const VERSION_16144 = '1.6.14.4';
+
+      function desktopActive16144() {
+        return document.body.classList.contains('desktop-mode');
+      }
+
+      function editorIsReallyOpen16144() {
+        return !!(window.editorPanel && (editorPanel.classList.contains('editor-open') || editorPanel.classList.contains('editor-fullscreen')));
+      }
+
+      function clearDesktopWorkbenchBlockers16144() {
+        if (!desktopActive16144()) return;
+
+        // Classic card maximization uses body.has-maximized-card + ::after.
+        // In the PC Workbench this state is stale and can create an invisible
+        // click-blocking panel over the lower desktop area.
+        document.body.classList.remove('has-maximized-card');
+        document.querySelectorAll('.card.maximized').forEach(card => card.classList.remove('maximized'));
+
+        // Non-open or minimized windows must never receive pointer events.
+        document.querySelectorAll('.tab-panel').forEach(panel => {
+          const open = panel.classList.contains('desktop-open') && !panel.classList.contains('desktop-minimized');
+          if (open) {
+            panel.style.removeProperty('pointer-events');
+            panel.style.removeProperty('visibility');
+          } else {
+            panel.style.pointerEvents = 'none';
+            panel.style.visibility = 'hidden';
+          }
+        });
+
+        // The editor modal backdrop is valid only while the editor is really open.
+        if (!editorIsReallyOpen16144()) {
+          document.body.classList.remove('editor-modal-open');
+          const editorBackdrop = document.getElementById('editorModalBackdrop');
+          if (editorBackdrop) {
+            editorBackdrop.setAttribute('aria-hidden', 'true');
+            editorBackdrop.style.pointerEvents = 'none';
+            editorBackdrop.style.display = 'none';
+          }
+        }
+      }
+
+      function wrapDesktopFunction16144(name, after) {
+        try {
+          const original = window[name] || globalThis[name];
+          if (typeof original !== 'function' || original.__winomc16144Wrapped) return;
+          const wrapped = function(...args) {
+            const result = original.apply(this, args);
+            window.requestAnimationFrame(after);
+            return result;
+          };
+          wrapped.__winomc16144Wrapped = true;
+          globalThis[name] = wrapped;
+          try { window[name] = wrapped; } catch (_) {}
+        } catch (_) {
+          // Non-critical hardening hook. CSS still protects the workbench.
+        }
+      }
+
+      wrapDesktopFunction16144('setDesktopMode', clearDesktopWorkbenchBlockers16144);
+      wrapDesktopFunction16144('openDesktopWindow', clearDesktopWorkbenchBlockers16144);
+      wrapDesktopFunction16144('updateDesktopTaskbar', clearDesktopWorkbenchBlockers16144);
+
+      document.addEventListener('pointerdown', () => {
+        if (desktopActive16144()) clearDesktopWorkbenchBlockers16144();
+      }, true);
+
+      window.addEventListener('resize', () => window.requestAnimationFrame(clearDesktopWorkbenchBlockers16144), { passive: true });
+      window.addEventListener('orientationchange', () => window.setTimeout(clearDesktopWorkbenchBlockers16144, 150), { passive: true });
+
+      window.requestAnimationFrame(clearDesktopWorkbenchBlockers16144);
+      window.setTimeout(clearDesktopWorkbenchBlockers16144, 300);
+      console.info('[WinoMC UX] Desktop Workbench blocker hardening loaded ' + VERSION_16144);
+    })();
+
+
+
+    /* v1.6.14.7 Desktop Workbench free-space hardening
+       One-time cleanup for old localStorage window heights. Users can resize
+       the file window afterwards; maximized windows are intentionally untouched. */
+    (function hardenDesktopFilesFreeSpace16147() {
+      const VERSION_16147 = '1.6.14.7';
+      const MIGRATION_KEY_16147 = 'winomc.desktop.filesFreeSpaceMigrated.1.6.14.7';
+      const MAX_FILES_HEIGHT_16147 = 540;
+
+      function desktopFilesHardeningActive16147() {
+        return document.body.classList.contains('ux-desktop') && document.body.classList.contains('desktop-mode');
+      }
+
+      function readDesktopPositions16147() {
+        try {
+          if (typeof desktopPositions === 'function') return desktopPositions() || {};
+        } catch (_) {}
+        try {
+          return JSON.parse(localStorage.getItem(STORE_DESKTOP_POSITIONS) || '{}') || {};
+        } catch (_) {
+          return {};
+        }
+      }
+
+      function writeDesktopPositions16147(positions) {
+        try {
+          localStorage.setItem(STORE_DESKTOP_POSITIONS, JSON.stringify(positions || {}));
+        } catch (_) {}
+      }
+
+      function clampStoredFilesRect16147() {
+        const positions = readDesktopPositions16147();
+        const files = positions.files;
+        if (!files) return;
+        let changed = false;
+        let storedHeight = parseFloat(files.height || '0');
+        if (Number.isFinite(storedHeight) && storedHeight > MAX_FILES_HEIGHT_16147) {
+          storedHeight = MAX_FILES_HEIGHT_16147;
+          files.height = MAX_FILES_HEIGHT_16147 + 'px';
+          changed = true;
+        }
+        const storedTop = parseFloat(files.top || '0');
+        const taskbarLimit = Math.max(360, window.innerHeight - 58);
+        if (Number.isFinite(storedTop) && Number.isFinite(storedHeight) && storedHeight > 0 && storedTop + storedHeight > taskbarLimit) {
+          files.top = Math.max(8, taskbarLimit - storedHeight) + 'px';
+          changed = true;
+        }
+        if (changed) writeDesktopPositions16147(positions);
+      }
+
+      function clampOpenFilesWindow16147() {
+        if (!desktopFilesHardeningActive16147()) return;
+        const panel = document.querySelector('.tab-panel[data-panel="files"].desktop-open:not(.desktop-minimized):not(.desktop-maximized)');
+        if (!panel) return;
+        let changed = false;
+        let currentHeight = parseFloat(panel.style.height || '0') || panel.getBoundingClientRect().height;
+        if (Number.isFinite(currentHeight) && currentHeight > MAX_FILES_HEIGHT_16147) {
+          currentHeight = MAX_FILES_HEIGHT_16147;
+          panel.style.height = MAX_FILES_HEIGHT_16147 + 'px';
+          changed = true;
+        }
+        const rect = panel.getBoundingClientRect();
+        const taskbarLimit = Math.max(360, window.innerHeight - 58);
+        if (rect.bottom > taskbarLimit && rect.height > 0) {
+          panel.style.top = Math.max(8, taskbarLimit - Math.min(rect.height, MAX_FILES_HEIGHT_16147)) + 'px';
+          changed = true;
+        }
+        if (changed) {
+          try {
+            if (typeof saveDesktopPosition === 'function') saveDesktopPosition('files', panel);
+          } catch (_) {}
+        }
+      }
+
+      function runFilesFreeSpaceMigration16147() {
+        if (localStorage.getItem(MIGRATION_KEY_16147) === 'done') return;
+        clampStoredFilesRect16147();
+        window.requestAnimationFrame(() => {
+          clampOpenFilesWindow16147();
+          try { localStorage.setItem(MIGRATION_KEY_16147, 'done'); } catch (_) {}
+        });
+      }
+
+      function wrapDesktopFunction16147(name, after) {
+        try {
+          const original = window[name] || globalThis[name];
+          if (typeof original !== 'function' || original.__winomc16147Wrapped) return;
+          const wrapped = function(...args) {
+            const result = original.apply(this, args);
+            window.requestAnimationFrame(after);
+            return result;
+          };
+          wrapped.__winomc16147Wrapped = true;
+          globalThis[name] = wrapped;
+          try { window[name] = wrapped; } catch (_) {}
+        } catch (_) {}
+      }
+
+      wrapDesktopFunction16147('setDesktopMode', runFilesFreeSpaceMigration16147);
+      wrapDesktopFunction16147('openDesktopWindow', runFilesFreeSpaceMigration16147);
+
+      window.addEventListener('resize', () => {
+        if (localStorage.getItem(MIGRATION_KEY_16147) !== 'done') runFilesFreeSpaceMigration16147();
+      }, { passive: true });
+
+      runFilesFreeSpaceMigration16147();
+      console.info('[WinoMC UX] Desktop file free-space hardening loaded ' + VERSION_16147);
+    })();
+
+
+
+    /* v1.6.14.9 Desktop canvas runtime guard
+       Keep the Workbench canvas stretched after adaptive/profile changes.
+       This deliberately does not wrap or clamp Live Console geometry. */
+    (function hardenDesktopCanvas16149() {
+      const VERSION_16149 = '1.6.14.9';
+
+      function isPcDesktopCanvas16149() {
+        return document.body.classList.contains('desktop-mode') &&
+          !(typeof isDesktopMobile === 'function' && isDesktopMobile());
+      }
+
+      function enforceDesktopCanvas16149() {
+        const main = document.querySelector('main.content');
+        if (!main) return;
+        if (!isPcDesktopCanvas16149()) {
+          main.style.removeProperty('height');
+          main.style.removeProperty('min-height');
+          main.style.removeProperty('align-self');
+          main.style.removeProperty('justify-self');
+          return;
+        }
+        main.style.height = 'auto';
+        main.style.minHeight = '0px';
+        main.style.alignSelf = 'stretch';
+        main.style.justifySelf = 'stretch';
+      }
+
+      function wrapCanvasFunction16149(name) {
+        try {
+          const original = window[name] || globalThis[name];
+          if (typeof original !== 'function' || original.__winomc16149Wrapped) return;
+          const wrapped = function(...args) {
+            const result = original.apply(this, args);
+            window.requestAnimationFrame(enforceDesktopCanvas16149);
+            return result;
+          };
+          wrapped.__winomc16149Wrapped = true;
+          globalThis[name] = wrapped;
+          try { window[name] = wrapped; } catch (_) {}
+        } catch (_) {}
+      }
+
+      wrapCanvasFunction16149('setDesktopMode');
+      wrapCanvasFunction16149('applyAdaptiveUx');
+      window.addEventListener('resize', () => window.requestAnimationFrame(enforceDesktopCanvas16149), { passive: true });
+      window.requestAnimationFrame(enforceDesktopCanvas16149);
+      window.setTimeout(enforceDesktopCanvas16149, 250);
+      console.info('[WinoMC UX] Desktop canvas hardening loaded ' + VERSION_16149);
+    })();
+
+
+
+    /* v1.6.14.10 classic PC console runtime guard
+       Prevent older mobile hardening listeners from double-processing desktop
+       console buttons by relying on the original per-button handlers in PC
+       classic view. Keep labels synchronized after any mode change. */
+    (function hardenClassicPcConsole161410() {
+      function isClassicPcShell() {
+        return document.body.classList.contains('ux-desktop') && !document.body.classList.contains('desktop-mode');
+      }
+      function syncClassicPcConsoleLabels() {
+        if (!isClassicPcShell()) return;
+        const isFull = document.body.classList.contains('console-maximized');
+        document.querySelectorAll('[data-console-size="compact"]').forEach(button => button.setAttribute('aria-pressed', document.body.classList.contains('console-compact') ? 'true' : 'false'));
+        document.querySelectorAll('[data-console-size="normal"]').forEach(button => button.setAttribute('aria-pressed', (!document.body.classList.contains('console-compact') && !document.body.classList.contains('console-large') && !isFull) ? 'true' : 'false'));
+        document.querySelectorAll('[data-console-size="large"]').forEach(button => {
+          button.textContent = 'Groß';
+          button.setAttribute('aria-pressed', document.body.classList.contains('console-large') ? 'true' : 'false');
+        });
+        document.querySelectorAll('[data-console-size="fullscreen"]').forEach(button => {
+          button.textContent = isFull ? 'Normal' : 'Vollbild';
+          button.setAttribute('aria-pressed', isFull ? 'true' : 'false');
+        });
+        if (consoleCollapse) consoleCollapse.textContent = (document.body.classList.contains('console-collapsed') || document.body.classList.contains('console-hidden')) ? 'Ausklappen' : 'Einklappen';
+      }
+      window.addEventListener('resize', () => requestAnimationFrame(syncClassicPcConsoleLabels), { passive: true });
+      requestAnimationFrame(syncClassicPcConsoleLabels);
+    })();
+
+
+
+    /* v1.6.14.11 classic PC console runtime guard
+       Keep the restored drag handle usable in classic PC view and resync the
+       file-manager viewport after console size changes without touching mobile
+       or PC Workbench. */
+    (function hardenClassicPcConsole161411() {
+      function isClassicPcShell161411() {
+        return document.body.classList.contains('ux-desktop') && !document.body.classList.contains('desktop-mode');
+      }
+
+      function modeName161411() {
+        if (document.body.classList.contains('console-collapsed')) return 'collapsed';
+        if (document.body.classList.contains('console-hidden')) return 'hidden';
+        if (document.body.classList.contains('console-maximized')) return 'maximized';
+        if (document.body.classList.contains('console-compact')) return 'compact';
+        if (document.body.classList.contains('console-large')) return 'large';
+        return 'normal';
+      }
+
+      function syncClassicPcConsole161411() {
+        if (!isClassicPcShell161411()) return;
+        if (consoleResizeHandle) {
+          const blocked = document.body.classList.contains('console-collapsed') ||
+            document.body.classList.contains('console-hidden') ||
+            document.body.classList.contains('console-maximized');
+          consoleResizeHandle.hidden = blocked;
+          consoleResizeHandle.setAttribute('aria-hidden', blocked ? 'true' : 'false');
+          if (!blocked) {
+            consoleResizeHandle.style.removeProperty('display');
+            consoleResizeHandle.style.removeProperty('pointer-events');
+            consoleResizeHandle.style.removeProperty('visibility');
+            consoleResizeHandle.style.removeProperty('height');
+          }
+        }
+
+        const mode = modeName161411();
+        document.querySelectorAll('[data-console-size="compact"]').forEach(button => {
+          button.setAttribute('aria-pressed', mode === 'compact' ? 'true' : 'false');
+        });
+        document.querySelectorAll('[data-console-size="normal"]').forEach(button => {
+          button.setAttribute('aria-pressed', mode === 'normal' ? 'true' : 'false');
+        });
+        document.querySelectorAll('[data-console-size="large"]').forEach(button => {
+          button.textContent = 'Groß';
+          button.setAttribute('aria-pressed', mode === 'large' ? 'true' : 'false');
+        });
+        document.querySelectorAll('[data-console-size="fullscreen"]').forEach(button => {
+          button.textContent = mode === 'maximized' ? 'Normal' : 'Vollbild';
+          button.setAttribute('aria-pressed', mode === 'maximized' ? 'true' : 'false');
+        });
+        if (consoleCollapse) consoleCollapse.textContent = (mode === 'collapsed' || mode === 'hidden') ? 'Ausklappen' : 'Einklappen';
+      }
+
+      const previousSetConsoleMode161411 = setConsoleMode;
+      setConsoleMode = function(mode) {
+        previousSetConsoleMode161411(mode || 'normal');
+        window.requestAnimationFrame(syncClassicPcConsole161411);
+      };
+
+      const previousApplyConsoleSize161411 = applyConsoleSize;
+      applyConsoleSize = function(size) {
+        previousApplyConsoleSize161411(size || 'normal');
+        window.requestAnimationFrame(syncClassicPcConsole161411);
+      };
+
+      window.addEventListener('resize', () => window.requestAnimationFrame(syncClassicPcConsole161411), { passive: true });
+      window.requestAnimationFrame(syncClassicPcConsole161411);
+      window.setTimeout(syncClassicPcConsole161411, 250);
     })();
 
 </script>
@@ -8167,7 +8923,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCConsole/1.6.14.3"
+    server_version = "WinoMCConsole/1.6.14.12"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
