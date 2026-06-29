@@ -5,6 +5,15 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.14.15b
+
+* Klassische PC-Ansicht: aktive Kacheln im persönlichen Dashboard bleiben auch bei vielen Kacheln scrollbar erreichbar.
+* Editor: Vollbild entfernt alte Blur-/Card-Maximize-Zustände und öffnet wieder als echtes Editor-Fenster.
+* Desktop-Modus: Dateiexplorer nutzt die verfügbare Fensterhöhe wieder stabiler und ohne ungenutzten Editor-/Leerbereich.
+* Desktop-Modus: Dateitabelle bleibt intern scrollbar und erhält wieder eine brauchbare Inhaltsfläche.
+* Mobile, Datei-API und Serverlogik wurden nicht funktional umgebaut.
+* Version gesetzt auf WinoMCConsole/1.6.14.15.
+
 ### 1.6.14.13b
 
 * Klassische PC-Ansicht weiter gehärtet: Navigation, Inhalt und Live Console bleiben als drei klare Frames erhalten.
