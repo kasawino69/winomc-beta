@@ -136,6 +136,8 @@ pc_fix_15 = '''
        Scope: Desktop-Dateifenster, klassisches Dashboard-Scrolling und Editor-Vollbild.
        Keine Datei-API-, Mobile- oder Serverlogik-Aenderungen. */
     @media (min-width: 1051px) {
+      body.ux-desktop.has-maximized-card.editor-fullscreen-active::after,
+      body.desktop-mode.has-maximized-card.editor-fullscreen-active::after,
       body.ux-desktop.has-maximized-card:has(.editor-panel.editor-fullscreen)::after,
       body.desktop-mode.has-maximized-card:has(.editor-panel.editor-fullscreen)::after {
         content: none !important;
@@ -323,6 +325,7 @@ runtime_fix_15 = r'''
 
       function clearEditorBlur161415() {
         document.body.classList.remove('has-maximized-card');
+        document.body.classList.toggle('editor-fullscreen-active', !!editorPanel?.classList.contains('editor-fullscreen'));
         document.querySelectorAll('.card.maximized').forEach(card => card.classList.remove('maximized'));
       }
 
@@ -349,9 +352,10 @@ runtime_fix_15 = r'''
 
       function setEditorFullscreen161415(active) {
         if (!editorPanel) return;
-        clearEditorBlur161415();
         editorPanel.classList.add('editor-open');
         editorPanel.classList.toggle('editor-fullscreen', !!active);
+        document.body.classList.toggle('editor-fullscreen-active', !!active);
+        clearEditorBlur161415();
         if (fileManagerGrid) fileManagerGrid.classList.add('editor-visible');
         if (editorFullscreen) editorFullscreen.textContent = active ? 'Normal' : 'Vollbild';
 
@@ -371,6 +375,7 @@ runtime_fix_15 = r'''
           editorPanel.style.opacity = '1';
           window.setTimeout(() => fileEditor?.focus({ preventScroll: true }), 60);
         } else {
+          document.body.classList.remove('editor-fullscreen-active');
           ['position','zIndex','inset','width','height','display','flexDirection','overflow','pointerEvents','visibility','opacity'].forEach(prop => editorPanel.style[prop] = '');
         }
       }
