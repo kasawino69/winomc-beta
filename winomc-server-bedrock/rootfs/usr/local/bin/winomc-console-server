@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import base64
 import hashlib
-import http.client
 import ipaddress
 import json
 import mimetypes
@@ -18,7 +17,7 @@ import time
 import zipfile
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, quote, unquote, urlparse, urljoin
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("WINOMC_CONSOLE_PORT", "8099"))
@@ -54,6 +53,7 @@ SERVER_PROPERTIES_PATH = os.environ.get("WINOMC_SERVER_PROPERTIES", os.path.join
 WINOMC_STATE_DIR = os.environ.get("WINOMC_STATE_DIR", os.path.join(DATA_DIR, ".winomc"))
 WEB_PROTECTION_FILE = os.environ.get("WINOMC_WEB_PROTECTION_FILE", os.path.join(WINOMC_STATE_DIR, "web_protection.json"))
 IMPORT_STATUS_FILE = os.environ.get("WINOMC_IMPORT_STATUS_FILE", os.path.join(WINOMC_STATE_DIR, "import-status.json"))
+ADDON_HISTORY_FILE = os.environ.get("WINOMC_ADDON_HISTORY_FILE", os.path.join(WINOMC_STATE_DIR, "addons", "install-history.json"))
 QUARANTINE_DIR = os.environ.get("WINOMC_QUARANTINE_DIR", os.path.join(WINOMC_STATE_DIR, "quarantine"))
 MAX_IMPORT_REDIRECTS = int(os.environ.get("WINOMC_IMPORT_MAX_REDIRECTS", "3"))
 MAX_IMPORT_ARCHIVE_FILES = int(os.environ.get("WINOMC_IMPORT_MAX_ARCHIVE_FILES", "4000"))
@@ -7426,7 +7426,8 @@ body.winomc-mobile .editor-panel.editor-open {
     async function loadPacks2() { try { const data = await fetchJson('/api/packs'); const panel = document.querySelector('[data-panel="packs"]'); let target = document.getElementById('packs2Grid'); if (!target && panel) { panel.insertAdjacentHTML('beforeend', '<div class="card"><h3>Pack-Verwaltung 2.0</h3><p>Aktiviere/deaktiviere Packs für die aktuelle Welt. Vor Änderungen wird die Welt-Pack-Datei gesichert.</p><div id="packs2Grid" class="dashboard-grid auto"></div></div>'); target = document.getElementById('packs2Grid'); } if (!target) return; const render = (p,t) => '<article class="tile"><div class="tile-title">'+escapeHtml(p.name)+'</div><div class="tile-desc">'+escapeHtml((p.uuid||'Keine UUID')+' · '+(p.version||'keine Version')+' · '+(p.description||''))+'</div><span class="badge '+(p.active?'':'warn')+'">'+(p.active?'Aktiv':'Inaktiv')+'</span><div class="tile-actions"><button data-pack-activate="'+escapeHtml(t)+'" data-pack-path="'+escapeHtml(p.path||'')+'">Aktivieren</button><button data-pack-deactivate="'+escapeHtml(t)+'" data-pack-uuid="'+escapeHtml(p.uuid||'')+'">Deaktivieren</button></div></article>'; target.innerHTML = [...(data.resource_packs||[]).map(p=>render(p,'resource')), ...(data.behavior_packs||[]).map(p=>render(p,'behavior'))].join('') || frameworkCard('Keine Packs','-', 'Installierte Packs erscheinen hier.', 'Warnung'); } catch (err) { appendLine('[Packs] '+err.message,'error'); } }
     async function loadPlayers2() { try { const data = await fetchJson('/api/players'); window.winomcPlayers2 = data.players || []; const w = document.getElementById('playersWarnings'); if (w) w.textContent = (data.warnings || []).join(' · ') || 'Keine akuten Warnungen.'; const t = document.getElementById('playersTable'); if (t) t.innerHTML = window.winomcPlayers2.map((p,i)=>'<tr><td><input data-player-field="name" data-player-index="'+i+'" value="'+escapeHtml(p.name||'')+'"></td><td><input data-player-field="xuid" data-player-index="'+i+'" value="'+escapeHtml(p.xuid||'')+'"></td><td><select data-player-field="allowlisted" data-player-index="'+i+'"><option value="true" '+(p.allowlisted?'selected':'')+'>Ja</option><option value="false" '+(!p.allowlisted?'selected':'')+'>Nein</option></select></td><td><select data-player-field="role" data-player-index="'+i+'"><option value="member" '+(p.role==='member'?'selected':'')+'>Member</option><option value="operator" '+(p.role==='operator'?'selected':'')+'>Operator</option><option value="visitor" '+(p.role==='visitor'?'selected':'')+'>Visitor</option></select></td><td>'+escapeHtml((p.issues||[]).join(', ')||'OK')+'</td></tr>').join('') || '<tr><td colspan="5">Noch keine Spieler. Nutze „Spieler hinzufügen“.</td></tr>'; const panel=document.querySelector('[data-panel="players"] .card-header .actions') || document.querySelector('[data-panel="players"] .card-header'); if(panel && !document.getElementById('playersSave2')) panel.insertAdjacentHTML('beforeend','<div class="actions"><button id="playersAdd2" type="button">Spieler hinzufügen</button><button class="primary" id="playersSave2" type="button">Speichern</button></div>'); } catch (err) { appendLine('[Spielerrechte] '+err.message,'error'); } }
     function collectPlayers2(){ document.querySelectorAll('[data-player-field]').forEach(el=>{ const i=Number(el.dataset.playerIndex); const f=el.dataset.playerField; if(!window.winomcPlayers2[i]) return; window.winomcPlayers2[i][f]= f==='allowlisted' ? el.value==='true' : el.value; }); return window.winomcPlayers2 || []; }
-    async function loadTransfer2(){ try{ const data=await fetchJson('/api/import-export'); const e=document.getElementById('transferSummary'); if(e) e.innerHTML=frameworkCard('Import',data.import_count+' Dateien','/share/winomc/import','OK')+frameworkCard('Export',data.export_count+' Dateien','/share/winomc/export','OK')+frameworkCard('Sicherheit',data.zip_slip_protection?'Aktiv':'Prüfen','Kein stilles Überschreiben; ZIP Slip geschützt','OK')+'<article class="tile"><div class="tile-title">Von URL installieren</div><input id="urlImportInput2" placeholder="https://example.com/pack.mcaddon"><label><input type="checkbox" id="urlImportActivate2" checked> Nach Installation aktivieren</label><div class="tile-actions"><button id="urlImportCheck2">Prüfen</button><button class="primary" id="urlImportInstall2">Installieren</button></div><div id="urlImportStatus2" class="info">Direkte Bedrock-Datei-URL verwenden. Java-.jar wird abgelehnt.</div></article>'; }catch(err){ appendLine('[Import/Export] '+err.message,'error'); } }
+    async function loadTransfer2(){ try{ const data=await fetchJson('/api/addons/catalog'); const e=document.getElementById('transferSummary'); if(e) { const c=data.counts||{}; const cards=frameworkCard('Import-Eingang',c.inbox||0,'/share/winomc/import','OK')+frameworkCard('Installiert',c.installed||0,'Lokale Packs','OK')+frameworkCard('Aktiv',c.active||0,'Für aktuelle Welt aktiv','OK')+frameworkCard('Lokale Updates',c.updates||0,'Keine Internetprüfung','Warnung')+frameworkCard('Probleme',c.issues||0,'Bitte Details prüfen',c.issues?'Warnung':'OK'); const items=(data.items||[]).map(i=>'<article class="tile"><div class="tile-title">'+escapeHtml(i.name||i.filename||i.item_id)+'</div><div class="tile-desc">'+escapeHtml((i.type||'-')+' · '+(i.version||'keine Version')+' · '+(i.source||''))+'</div><span class="badge '+(i.risk==='red'?'danger':(i.risk==='yellow'?'warn':''))+'">Risiko '+escapeHtml(i.risk||'-')+'</span><div class="tile-desc">'+escapeHtml((i.update_status||'')+' '+((i.issues||[]).join(' · ')))+'</div><div class="tile-actions"><button data-addon-plan="'+escapeHtml(i.item_id)+'">Plan</button>'+(i.source==='Importordner'?'<button class="primary" data-addon-install="'+escapeHtml(i.item_id)+'">Installieren</button><button data-addon-install-activate="'+escapeHtml(i.item_id)+'">Installieren & aktivieren</button><button data-addon-remove="'+escapeHtml(i.item_id)+'">Aus Import entfernen</button>':'')+'</div></article>').join('') || '<article class="tile"><div class="tile-title">Noch keine Dateien im Import-Eingang.</div><div class="tile-desc">Lade ein .mcpack, .mcaddon, .mcworld oder .mctemplate herunter und lege es in /share/winomc/import.</div></article>'; e.innerHTML=cards+'<article class="tile"><div class="tile-title">WinoMC Add-on Manager</div><div class="tile-desc">User brings the file. WinoMC makes it safe and simple. Freier URL-Download ist deaktiviert.</div><div class="tile-actions"><button id="addonsScan2">Importordner scannen</button><button data-open-root="import">Importordner öffnen</button></div></article>'+items; } }catch(err){ appendLine('[Add-on Manager] '+err.message,'error'); } }
+
     async function loadUpdates2(){ try{ const data=await fetchJson('/api/update-guard'); const e=document.getElementById('updatesSummary'); if(e) e.innerHTML=data.checks.map(c=>frameworkCard(c.title,c.status,c.message,c.status)).join('') + '<div class="tile"><button class="primary" id="updatesPrepare2" type="button">Update vorbereiten</button><p>Erstellt Backup und markiert Update-Bereitschaft. Danach Add-on neu starten.</p></div>'; }catch(err){ appendLine('[Updates] '+err.message,'error'); } }
     async function loadProfiles2(){ try{ const data=await fetchJson('/api/profiles'); const e=document.getElementById('profilesGrid'); if(e) e.innerHTML=data.profiles.map(p=>'<article class="tile"><div class="tile-title">'+escapeHtml(p.name)+'</div><div class="tile-desc">'+escapeHtml(p.description)+'</div><pre>'+escapeHtml(JSON.stringify(p.defaults,null,2))+'</pre><button data-profile-prepare="'+escapeHtml(p.name)+'">Profil vorbereiten</button></article>').join(''); }catch(err){ appendLine('[Profile] '+err.message,'error'); } }
     document.addEventListener('click', async (ev) => {
@@ -7444,8 +7445,10 @@ body.winomc-mobile .editor-panel.editor-open {
         if (t?.id === 'playersSave2') { await postJson('/api/players/save',{players:collectPlayers2()}); await loadPlayers2(); }
         if (t?.id === 'updatesPrepare2') { const r=await postJson('/api/updates/prepare',{warning:'Serverupdate wird vorbereitet. Bitte gleich neu verbinden.'}); alert(r.message); await loadUpdates2(); }
         if (t?.dataset?.profilePrepare) { const r=await postJson('/api/profiles/prepare',{profile:t.dataset.profilePrepare}); alert(r.message); }
-        if (t?.id === 'urlImportCheck2') { const box=document.getElementById('urlImportStatus2'); box.textContent='URL wird geprüft...'; const r=await postJson('/api/import/url/check',{url:document.getElementById('urlImportInput2').value}); box.textContent=r.message + (r.plan ? (' Risiko: '+r.plan.risk+' — '+(r.plan.changes||[]).join(' | ')) : ''); }
-        if (t?.id === 'urlImportInstall2') { const box=document.getElementById('urlImportStatus2'); const confirmInstall=confirm('Safety Planner: Download erfolgt in Quarantäne, Manifest wird geprüft und gelb/rote Risiken benötigen Bestätigung. Fortfahren?'); if(!confirmInstall) return; box.textContent='Download, Quarantäne-Prüfung und Installation laufen...'; const r=await postJson('/api/import/url/install',{url:document.getElementById('urlImportInput2').value, activate:document.getElementById('urlImportActivate2').checked, confirm:true}); box.textContent=r.message + ' Risiko: ' + (r.plan?.risk || '-') + ' ' + (r.installed||[]).map(i=>i.name).join(', '); await loadPacks2(); }
+        if (t?.id === 'addonsScan2') { await postJson('/api/addons/scan',{}); await loadTransfer2(); }
+        if (t?.dataset?.addonPlan) { const r=await postJson('/api/addons/plan',{item_id:t.dataset.addonPlan,action:'install'}); alert('Risiko '+r.risk+'\n'+(r.changes||[]).join('\n')+'\n'+(r.warnings||[]).join('\n')); }
+        if (t?.dataset?.addonInstall || t?.dataset?.addonInstallActivate) { const id=t.dataset.addonInstall||t.dataset.addonInstallActivate; const activate=Boolean(t.dataset.addonInstallActivate); const plan=await postJson('/api/addons/plan',{item_id:id,action:'install',activate}); const ok=!plan.requires_confirmation || confirm('Add-on Manager Risiko '+plan.risk+'\n'+(plan.warnings||[]).join('\n')+'\nFortfahren?'); if(ok){ await postJson('/api/addons/apply',{item_id:id,action:'install',activate,confirm:true}); await loadTransfer2(); await loadPacks2(); } }
+        if (t?.dataset?.addonRemove) { if(confirm('Importdatei entfernen?')) { await postJson('/api/addons/apply',{item_id:t.dataset.addonRemove,action:'remove_import',confirm:true}); await loadTransfer2(); } }
       } catch (err) { alert(err.message); appendLine('[WinoMC 2.0] '+err.message,'error'); }
     });
 
@@ -10866,82 +10869,31 @@ HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
 
 
 
+
 def quarantine_dir_path():
     return makedirs_internal(QUARANTINE_DIR, QUARANTINE_DIR, exist_ok=True)
 
 
-def build_validated_download_target(url):
-    parsed = urlparse(str(url or "").strip())
-    if parsed.scheme != "https":
-        raise ValueError("URL-Import erlaubt nur https:// Direktdownloads.")
-    if not parsed.hostname:
-        raise ValueError("URL enthält keinen Hostnamen.")
-    host = parsed.hostname.strip().lower()
-    if host in ("localhost", "localhost.localdomain"):
-        raise ValueError("Lokale Hosts sind für URL-Import blockiert.")
-    port = int(parsed.port or 443)
-    if port != 443:
-        raise ValueError("URL-Import erlaubt nur den sicheren HTTPS-Port 443.")
-    try:
-        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
-    except socket.gaierror as exc:
-        raise ValueError("Host konnte nicht aufgelöst werden: %s" % exc)
-    resolved_ip = None
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
-            raise ValueError("URL-Import blockiert lokale/private Zieladressen.")
-        resolved_ip = str(ip)
-    name = os.path.basename(unquote(parsed.path or ""))
-    ext = file_extension(name)
-    if ext in REJECTED_IMPORT_EXTENSIONS:
-        raise ValueError("Diese Datei sieht nach einem Java-Mod oder ausführbaren Paket aus. WinoMC unterstützt nur Minecraft Bedrock Packs/Add-ons.")
-    if ext not in SUPPORTED_IMPORT_EXTENSIONS:
-        if "curseforge" in host:
-            raise ValueError("CurseForge-Projektseiten werden nicht automatisch installiert. WinoMC unterstützt direkte Bedrock-Dateien, nicht bestimmte Webseiten. Bitte direkten Download kopieren; Java-Mods (.jar) werden nicht unterstützt.")
-        raise ValueError("Bitte einen direkten Bedrock-Dateidownload mit .mcpack, .mcaddon, .mcworld, .mctemplate oder geeigneter .zip verwenden.")
-    path = parsed.path or "/"
-    if parsed.query:
-        path += "?" + parsed.query
-    if urlparse(path).scheme or urlparse(path).netloc:
-        raise ValueError("Download-Pfad darf keine eigene URL enthalten.")
-    return {"ok": True, "scheme": "https", "host": host, "port": port, "path": path, "filename": safe_download_name(name, "winomc-import" + ext), "extension": ext, "resolved_ip": resolved_ip}
+def manual_url_import_disabled_response():
+    return {
+        "ok": False,
+        "manual_import_required": True,
+        "addon_manager_available": True,
+        "message": "Freier serverseitiger URL-Download ist deaktiviert. Lade die Datei selbst herunter und lege sie in /share/winomc/import oder lade sie über WinoMC hoch.",
+    }
 
 
 def validate_external_download_url(url):
-    return build_validated_download_target(url)
+    # Keinen Netzwerkzugriff auslösen: URL-Import ist bewusst durch lokalen Add-on Manager ersetzt.
+    return manual_url_import_disabled_response()
 
 
-def download_target_public_url(target):
-    # Only used as a redirect base; never passed to an HTTP sink.
-    return "https://%s%s" % (target["host"], target["path"])
+def check_import_url(url):
+    return manual_url_import_disabled_response()
 
 
-def open_external_download(url):
-    target = build_validated_download_target(url)
-    redirects = []
-    for _ in range(MAX_IMPORT_REDIRECTS + 1):
-        conn = http.client.HTTPSConnection(target["host"], target["port"], timeout=20)
-        try:
-            conn.request("GET", target["path"], headers={"User-Agent": "WinoMC/2.0 URL Import", "Accept": "application/octet-stream, application/zip, */*"})
-            response = conn.getresponse()
-            if response.status in (301, 302, 303, 307, 308):
-                location = response.getheader("Location")
-                response.close(); conn.close()
-                if not location:
-                    raise ValueError("Redirect ohne Location blockiert.")
-                next_url = urljoin(download_target_public_url(target), location)
-                target = build_validated_download_target(next_url)
-                redirects.append({"host": target["host"], "path": target["path"], "resolved_ip": target.get("resolved_ip")})
-                continue
-            return {"response": response, "connection": conn, "target": target, "redirects": redirects}
-        except Exception:
-            try:
-                conn.close()
-            except Exception as exc:
-                log_warning("URL-Import-Verbindung konnte nicht geschlossen werden: %s" % exc)
-            raise
-    raise ValueError("Zu viele Redirects beim URL-Import.")
+def download_external_pack(url):
+    raise PermissionError(manual_url_import_disabled_response()["message"])
 
 def zip_member_is_symlink(member):
     return stat.S_ISLNK((getattr(member, "external_attr", 0) >> 16) & 0o170000)
@@ -11019,6 +10971,36 @@ def classify_bedrock_archive(archive_path, ext):
     return {"supported": True, "kind": kind, "packs": packs, "risk": risk, "warnings": warnings, "message": "Bedrock-Manifest gefunden."}
 
 
+def classify_local_bedrock_archive(root_key, archive_path, ext):
+    archive_path = assert_safe_path(root_key, archive_path, require_exists=True)
+    manifests = safe_zip_members(archive_path)
+    if ext in (".mcworld", ".mctemplate"):
+        return {"supported": True, "kind": "world" if ext == ".mcworld" else "template", "manifests": manifests, "packs": [], "risk": "yellow", "warnings": ["Welt/Template wird nur als neues Ziel importiert, niemals still überschrieben."], "message": "Bedrock-Welt/Template erkannt."}
+    packs = []
+    warnings = []
+    for manifest in manifests:
+        data = manifest.get("data") or {}
+        header = data.get("header", {}) if isinstance(data, dict) else {}
+        modules = data.get("modules", []) if isinstance(data, dict) else []
+        if not data.get("format_version") or not header.get("uuid") or not isinstance(header.get("version"), list) or not isinstance(modules, list):
+            continue
+        module_types = {str(m.get("type", "")).lower() for m in modules if isinstance(m, dict)}
+        pack_type = "behavior" if any("data" in t or "script" in t for t in module_types) else "resource"
+        deps = data.get("dependencies", []) if isinstance(data.get("dependencies", []), list) else []
+        caps = data.get("capabilities", []) if isinstance(data.get("capabilities", []), list) else []
+        pack = {"manifest_path": manifest["path"], "name": header.get("name") or os.path.splitext(os.path.basename(archive_path))[0], "uuid": header.get("uuid"), "version": header.get("version"), "type": pack_type, "module_types": sorted(module_types), "dependencies": deps, "capabilities": caps, "min_engine_version": header.get("min_engine_version") or data.get("min_engine_version"), "metadata": data.get("metadata", {})}
+        packs.append(pack)
+        if deps:
+            warnings.append("Pack %s nennt Abhängigkeiten; bitte zusammengehörige Packs prüfen." % pack["name"])
+        if caps or pack.get("min_engine_version"):
+            warnings.append("Pack %s nennt capabilities/min_engine_version; bitte Bedrock-Kompatibilität testen." % pack["name"])
+    if not packs:
+        raise ValueError("Kein gültiges Bedrock manifest.json gefunden.")
+    kind = "mcaddon" if len(packs) > 1 or ext == ".mcaddon" else packs[0]["type"]
+    risk = "red" if any(p["type"] == "behavior" for p in packs) else ("yellow" if warnings or len(packs) > 1 else "green")
+    return {"supported": True, "kind": kind, "packs": packs, "risk": risk, "warnings": warnings, "message": "Lokales Bedrock-Manifest gefunden."}
+
+
 def existing_pack_uuid_index():
     index = {}
     for pack in scan_packs(RESOURCE_PACKS_DIR, "resource") + scan_packs(BEHAVIOR_PACKS_DIR, "behavior"):
@@ -11071,126 +11053,266 @@ def build_import_plan(source):
     return build_import_plan_from_quarantine(source.get("quarantine_id", ""), source.get("filename"), source.get("extension"))
 
 
-def download_external_pack(url):
-    target_info = validate_external_download_url(url)
-    write_import_status("downloading", "Download startet in Quarantäne.", {"filename": target_info["filename"]})
-    opened = open_external_download(url)
-    response = opened["response"]
-    connection = opened["connection"]
-    final_target = opened["target"]
-    redirects = opened["redirects"]
-    try:
-        content_type = (response.getheader("Content-Type") or "").split(";", 1)[0].strip().lower()
-        if content_type in HTML_CONTENT_TYPES:
-            raise ValueError("Download liefert HTML statt einer Bedrock-Datei.")
-        content_length = response.getheader("Content-Length")
-        if content_length and int(content_length) > MAX_UPLOAD_BYTES:
-            raise ValueError("Download ist zu groß.")
-        quarantine = quarantine_dir_path()
-        filename = safe_download_name("%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), final_target["filename"]), "winomc-import")
-        target = assert_safe_internal_path(quarantine, os.path.join(quarantine, filename))
-        total = 0
-        with open_safe_internal(quarantine, target, "wb") as handle:
-            while True:
-                chunk = response.read(1024 * 1024)
-                if not chunk:
-                    break
-                total += len(chunk)
-                if total > MAX_UPLOAD_BYTES:
-                    raise ValueError("Download ist zu groß.")
-                handle.write(chunk)
-    finally:
-        try:
-            response.close()
-            connection.close()
-        except Exception as exc:
-            log_warning("URL-Import-Response konnte nicht geschlossen werden: %s" % exc)
-    return {"quarantine_id": filename, "root": "quarantine", "rel_path": normalize_rel_path("/" + filename), "filename": filename, "extension": file_extension(filename), "size": total, "redirects": redirects, "content_type": content_type}
-
-
-def check_import_url(url):
-    info = validate_external_download_url(url)
-    plan = {"ok": True, "kind": "import", "risk": "yellow", "summary": "URL sieht wie ein direkter Bedrock-Dateidownload aus.", "changes": ["Download erfolgt zuerst in Quarantäne.", "Manifest und Typ werden vor Installation geprüft."], "warnings": ["Noch kein Download ausgeführt; endgültiger Plan entsteht nach Quarantäne-Prüfung."], "backup_plan": ["Keine Änderung vor Installation."], "requires_confirmation": True}
-    return {"ok": True, "supported": True, "kind": info["extension"].lstrip("."), "risk": plan["risk"], "plan": plan, "message": "Direkter Bedrock-Dateidownload erkannt. WinoMC lädt erst in Quarantäne und installiert nur nach Plan/Bestätigung.", "filename": info["filename"]}
 
 
 def install_import_url(url, activate=False, confirm=False):
-    downloaded = None
+    return manual_url_import_disabled_response()
+
+
+def addon_history_path():
+    base = makedirs_internal(os.path.dirname(ADDON_HISTORY_FILE), os.path.dirname(ADDON_HISTORY_FILE), exist_ok=True)
+    return assert_safe_internal_path(base, ADDON_HISTORY_FILE, require_exists=False)
+
+
+def read_addon_history():
+    try:
+        path = addon_history_path()
+        if not os.path.exists(path):
+            return []
+        with open_safe_internal(os.path.dirname(path), path, "r", encoding="utf-8", errors="replace") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, list) else []
+    except Exception as exc:
+        log_warning("Add-on-History konnte nicht gelesen werden: %s" % exc)
+        return []
+
+
+def append_addon_history(entry):
+    history = read_addon_history()
+    entry = dict(entry or {})
+    entry["installed_at"] = time.strftime("%Y-%m-%d_%H-%M-%S")
+    history.insert(0, entry)
+    path = addon_history_path()
+    with open_safe_internal(os.path.dirname(path), path, "w", encoding="utf-8") as handle:
+        json.dump(history[:200], handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+
+
+def version_tuple(value):
+    if isinstance(value, list):
+        return tuple(int(x) for x in value if str(x).isdigit())
+    return tuple(int(x) for x in re.findall(r"\d+", str(value or "")))
+
+
+def addon_item_id(prefix, value):
+    return "%s:%s" % (prefix, safe_download_name(value, "item"))
+
+
+def resolve_addon_item(item_id):
+    item_id = str(item_id or "")
+    if ":" not in item_id:
+        raise ValueError("item_id fehlt oder ist ungültig.")
+    prefix, raw = item_id.split(":", 1)
+    safe_id = safe_download_name(raw, "item")
+    if prefix == "import":
+        path = assert_safe_path("import", os.path.join(IMPORT_DIR, safe_id), require_exists=True)
+        return {"prefix": prefix, "id": item_id, "safe_id": safe_id, "root_key": "import", "path": path, "filename": safe_id}
+    if prefix in ("installed", "active"):
+        for item in addon_catalog_items(include_import=False):
+            if item.get("uuid") == raw or item.get("item_id") == item_id:
+                return item
+    if prefix == "world":
+        path = assert_safe_path("worlds", os.path.join(WORLDS_DIR, safe_id), require_exists=True)
+        return {"prefix": prefix, "id": item_id, "safe_id": safe_id, "root_key": "worlds", "path": path, "filename": safe_id}
+    if prefix == "template":
+        path = assert_safe_path("world_templates", os.path.join(WORLD_TEMPLATES_DIR, safe_id), require_exists=True)
+        return {"prefix": prefix, "id": item_id, "safe_id": safe_id, "root_key": "world_templates", "path": path, "filename": safe_id}
+    raise ValueError("Unbekannte item_id: %s" % item_id)
+
+
+def installed_uuid_status():
+    installed = {}
+    active = {"resource": {e.get("pack_id") for e in read_world_pack_entries("resource")}, "behavior": {e.get("pack_id") for e in read_world_pack_entries("behavior")}}
+    for pack in scan_packs(RESOURCE_PACKS_DIR, "resource") + scan_packs(BEHAVIOR_PACKS_DIR, "behavior"):
+        uuid = pack.get("uuid")
+        if uuid:
+            installed[uuid] = {"installed": True, "active": uuid in active.get(pack.get("type"), set()), "installed_version": pack.get("version"), "pack": pack}
+    return installed
+
+
+def import_catalog_item(filename):
+    path = assert_safe_path("import", os.path.join(IMPORT_DIR, safe_download_name(filename, "import")), require_exists=True)
+    stat_info = stat_root("import", path)
+    ext = file_extension(filename)
+    item = {"item_id": addon_item_id("import", filename), "name": filename, "filename": filename, "type": "unsupported", "source": "Importordner", "status": "Import-Eingang", "risk": "red", "size": stat_info.st_size, "size_label": human_bytes(stat_info.st_size), "detected_at": int(stat_info.st_mtime), "manifest_status": "not_checked", "installed": False, "active": False, "local_update_available": False, "duplicate_uuid": False, "warnings": [], "issues": []}
+    if ext in REJECTED_IMPORT_EXTENSIONS:
+        item["issues"].append("Nicht unterstützt. WinoMC unterstützt Minecraft Bedrock Packs, keine Java-Mods oder ausführbaren Dateien.")
+        return item
+    if ext not in SUPPORTED_IMPORT_EXTENSIONS:
+        item["issues"].append("Dateityp wird nicht unterstützt.")
+        return item
+    try:
+        classification = classify_local_bedrock_archive("import", path, ext)
+        item.update({"type": classification.get("kind", ext.lstrip(".")), "risk": classification.get("risk", "yellow"), "manifest_status": "ok", "classification": classification, "warnings": classification.get("warnings", [])})
+        packs = classification.get("packs", [])
+        if packs:
+            first = packs[0]
+            item.update({"name": first.get("name") or filename, "uuid": first.get("uuid"), "version": ".".join(map(str, first.get("version", []))), "detected_type": first.get("type")})
+            installed = installed_uuid_status().get(first.get("uuid"), {})
+            item["installed"] = bool(installed.get("installed"))
+            item["active"] = bool(installed.get("active"))
+            item["installed_version"] = installed.get("installed_version")
+            item["duplicate_uuid"] = item["installed"]
+            iv = version_tuple(item.get("version")); xv = version_tuple(item.get("installed_version"))
+            if item["installed"] and iv and xv:
+                if iv > xv:
+                    item["local_update_available"] = True; item["update_status"] = "Lokales Update verfügbar"
+                elif iv == xv:
+                    item["update_status"] = "Bereits installiert"
+                else:
+                    item["update_status"] = "Ältere Version"
+            elif item["installed"]:
+                item["update_status"] = "Version unklar"
+        return item
+    except Exception as exc:
+        item["manifest_status"] = "error"
+        item["issues"].append(str(exc))
+        return item
+
+
+def addon_catalog_items(include_import=True):
+    items = []
+    if include_import and os.path.isdir(IMPORT_DIR):
+        for name in sorted(os.listdir(IMPORT_DIR)):
+            full = os.path.join(IMPORT_DIR, name)
+            if os.path.isfile(full):
+                items.append(import_catalog_item(name))
+    for pack in scan_packs(RESOURCE_PACKS_DIR, "resource") + scan_packs(BEHAVIOR_PACKS_DIR, "behavior"):
+        uuid = pack.get("uuid") or pack.get("path")
+        active = bool(pack.get("uuid") in {e.get("pack_id") for e in read_world_pack_entries(pack.get("type"))}) if pack.get("uuid") else False
+        items.append({"item_id": addon_item_id("active" if active else "installed", uuid), "name": pack.get("name"), "filename": pack.get("path"), "type": pack.get("type"), "source": "Aktiv" if active else "Installiert", "status": "Aktiv" if active else "Installiert", "uuid": pack.get("uuid"), "version": pack.get("version"), "risk": "green", "manifest_status": pack.get("status"), "installed": True, "active": active, "local_update_available": False, "duplicate_uuid": False, "warnings": [] if pack.get("status") == "OK" else [pack.get("description", "Warnung")], "issues": [] if pack.get("status") == "OK" else [pack.get("description", "Warnung")]})
+    return items
+
+
+def addon_counts(items):
+    return {"inbox": sum(1 for i in items if i.get("source") == "Importordner"), "installed": sum(1 for i in items if i.get("installed")), "active": sum(1 for i in items if i.get("active")), "updates": sum(1 for i in items if i.get("local_update_available")), "issues": sum(1 for i in items if i.get("issues")), "resource": sum(1 for i in items if i.get("type") == "resource"), "behavior": sum(1 for i in items if i.get("type") == "behavior"), "worlds": sum(1 for i in items if i.get("type") == "world"), "templates": sum(1 for i in items if i.get("type") == "template")}
+
+
+def addons_overview_payload():
+    items = addon_catalog_items()
+    return {"ok": True, "counts": addon_counts(items), "message": "User brings the file. WinoMC makes it safe and simple."}
+
+
+def addons_catalog_payload(filters=None):
+    filters = filters or {}
+    items = addon_catalog_items()
+    q = str(filters.get("q", [""])[0] if isinstance(filters.get("q"), list) else filters.get("q", "")).lower()
+    type_filter = str(filters.get("type", [""])[0] if isinstance(filters.get("type"), list) else filters.get("type", "")).lower()
+    risk_filter = str(filters.get("risk", [""])[0] if isinstance(filters.get("risk"), list) else filters.get("risk", "")).lower()
+    def keep(item):
+        if q and q not in json.dumps(item, ensure_ascii=False).lower(): return False
+        if type_filter and item.get("type") != type_filter: return False
+        if risk_filter and item.get("risk") != risk_filter: return False
+        for flag in ("updates", "active", "installed", "issues"):
+            val = filters.get(flag, [""])[0] if isinstance(filters.get(flag), list) else filters.get(flag, "")
+            if str(val).lower() in ("1", "true", "yes") and not (item.get("local_update_available") if flag == "updates" else item.get(flag)):
+                return False
+        return True
+    filtered = [item for item in items if keep(item)]
+    return {"ok": True, "items": filtered, "counts": addon_counts(items), "filters": filters}
+
+
+def addons_item_payload(item_id):
+    for item in addon_catalog_items():
+        if item.get("item_id") == item_id:
+            return {"ok": True, "item": item}
+    raise FileNotFoundError("Add-on Manager Eintrag wurde nicht gefunden.")
+
+
+def build_addon_plan(item_id, action="install", activate=False):
+    item = addons_item_payload(item_id)["item"]
+    risk = item.get("risk", "yellow")
+    changes = []
+    warnings = list(item.get("warnings") or item.get("issues") or [])
+    if action in ("install", "update"):
+        changes.append("Lokale Importdatei wird analysiert und in den passenden WinoMC-Ordner installiert.")
+        if item.get("duplicate_uuid"):
+            risk = risk_level(risk, "yellow" if item.get("local_update_available") else "red")
+            warnings.append("UUID ist bereits installiert; kein stilles Ersetzen.")
+    if activate or action == "activate":
+        risk = risk_level(risk, "yellow")
+        changes.append("World-Pack-Datei wird nach Backup aktualisiert.")
+    if item.get("type") == "behavior" or (item.get("classification", {}).get("kind") == "mcaddon" and any(p.get("type") == "behavior" for p in item.get("classification", {}).get("packs", []))):
+        risk = risk_level(risk, "red")
+    return {"ok": True, "kind": "addon", "item_id": item_id, "action": action, "risk": risk, "summary": "Add-on Manager Plan für %s" % item.get("name"), "changes": changes, "warnings": warnings, "backup_plan": ["Sicherung vor Änderungen", "Rollback/Cleanup bei Fehler"], "requires_confirmation": risk in ("yellow", "red"), "item": item}
+
+
+def install_local_import_item(item, activate=False):
+    path = resolve_addon_item(item["item_id"])["path"]
+    classification = item.get("classification") or classify_local_bedrock_archive("import", path, file_extension(item.get("filename")))
+    installed = []
     created = []
     try:
-        downloaded = download_external_pack(url)
-        write_import_status("validating", "Datei wird in Quarantäne geprüft.", {"filename": downloaded["filename"]})
-        plan = build_import_plan_from_quarantine(downloaded["quarantine_id"], downloaded["filename"], downloaded["extension"])
-        if activate:
-            plan["risk"] = risk_level(plan["risk"], "yellow")
-            plan["requires_confirmation"] = True
-            plan["changes"].append("Aktivierung schreibt world_*_packs.json nach Backup.")
-        assert_plan_confirmed(plan, confirm, "expert" if plan.get("risk") == "red" else "safe")
-        installed = []
-        classification = plan["classification"]
-        if plan.get("duplicate_uuids"):
-            raise FileExistsError("Doppelte Pack-UUID erkannt. Automatisches Ersetzen ist blockiert; bitte vorhandenes Pack bewusst sichern/ersetzen.")
         if classification["kind"] in ("world", "template"):
             target_root = "world_templates" if classification["kind"] == "template" else "worlds"
-            base_name = safe_download_name(os.path.splitext(downloaded["filename"])[0], classification["kind"])
+            base_name = safe_download_name(os.path.splitext(item["filename"])[0], classification["kind"])
             dest_base, _ = resolve_safe_path(target_root, "/")
             dest = assert_safe_path(target_root, os.path.join(dest_base, base_name))
-            if path_exists_root(target_root, dest):
-                raise FileExistsError("Ziel existiert bereits. WinoMC überschreibt Welten/Templates nicht still.")
+            if path_exists_root(target_root, dest): raise FileExistsError("Ziel existiert bereits; kein stilles Überschreiben.")
             makedirs_root(target_root, dest, exist_ok=False); created.append((target_root, dest))
-            with zipfile.ZipFile(quarantine_file_path(downloaded["quarantine_id"]), "r") as archive:
+            with zipfile.ZipFile(path, "r") as archive:
                 for member in archive.infolist():
                     raw = str(member.filename or "").replace("\\", "/")
-                    if not raw or raw.startswith("/") or raw.startswith("../") or "/../" in raw or zip_member_is_symlink(member):
-                        raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
-                    rel = posixpath.normpath(raw)
-                    target = assert_safe_path(target_root, os.path.join(dest, rel))
-                    if member.is_dir():
-                        makedirs_root(target_root, target, exist_ok=True); continue
+                    if not raw or raw.startswith("/") or raw.startswith("../") or "/../" in raw or zip_member_is_symlink(member): raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
+                    target = assert_safe_path(target_root, os.path.join(dest, posixpath.normpath(raw)))
+                    if member.is_dir(): makedirs_root(target_root, target, exist_ok=True); continue
                     makedirs_root(target_root, os.path.dirname(target), exist_ok=True)
-                    with archive.open(member, "r") as source, open_safe(target_root, target, "wb") as out:
-                        shutil.copyfileobj(source, out, length=1024 * 1024)
+                    with archive.open(member, "r") as src, open_safe(target_root, target, "wb") as out: shutil.copyfileobj(src, out, length=1024*1024)
             installed.append({"type": classification["kind"], "name": base_name, "active": False})
         else:
-            with zipfile.ZipFile(quarantine_file_path(downloaded["quarantine_id"]), "r") as archive:
+            with zipfile.ZipFile(path, "r") as archive:
                 for pack in classification["packs"]:
-                    pack_type = pack["type"]
-                    root_key, base_dir = pack_base_dir(pack_type)
-                    pack_name = safe_download_name(pack.get("name"), pack_type + "-pack")
+                    root_key, base_dir = pack_base_dir(pack["type"])
+                    pack_name = safe_download_name(pack.get("name"), pack["type"] + "-pack")
                     dest = assert_safe_path(root_key, os.path.join(base_dir, pack_name))
-                    if path_exists_root(root_key, dest):
-                        raise FileExistsError("Pack-Ziel existiert bereits: %s" % pack_name)
+                    if path_exists_root(root_key, dest): raise FileExistsError("Pack-Ziel existiert bereits: %s" % pack_name)
                     prefix = posixpath.dirname(pack["manifest_path"])
                     makedirs_root(root_key, dest, exist_ok=False); created.append((root_key, dest))
                     for member in archive.infolist():
                         raw = str(member.filename or "").replace("\\", "/")
-                        if prefix and not (raw == prefix or raw.startswith(prefix + "/")):
-                            continue
+                        if prefix and not (raw == prefix or raw.startswith(prefix + "/")): continue
                         rel = posixpath.relpath(raw, prefix) if prefix else raw
-                        if rel in (".", "") or raw.lower().startswith("__macosx/"):
-                            continue
-                        if zip_member_is_symlink(member) or rel.startswith("../") or rel.startswith("/") or "/../" in rel:
-                            raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
+                        if rel in (".", "") or raw.lower().startswith("__macosx/"): continue
+                        if rel.startswith("../") or rel.startswith("/") or "/../" in rel or zip_member_is_symlink(member): raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
                         target = assert_safe_path(root_key, os.path.join(dest, rel))
-                        if member.is_dir():
-                            makedirs_root(root_key, target, exist_ok=True); continue
+                        if member.is_dir(): makedirs_root(root_key, target, exist_ok=True); continue
                         makedirs_root(root_key, os.path.dirname(target), exist_ok=True)
-                        with archive.open(member, "r") as source, open_safe(root_key, target, "wb") as out:
-                            shutil.copyfileobj(source, out, length=1024 * 1024)
+                        with archive.open(member, "r") as src, open_safe(root_key, target, "wb") as out: shutil.copyfileobj(src, out, length=1024*1024)
                     active = False
                     if activate:
-                        activate_pack(pack_type, "/" + pack_name); active = True
-                    installed.append({"type": pack_type, "name": pack_name, "active": active})
-        write_import_status("done", "URL-Import abgeschlossen.", {"installed": installed, "plan": plan})
-        return {"ok": True, "installed": installed, "plan": plan, "classification": classification, "message": "Import abgeschlossen."}
-    except Exception as exc:
-        for root_key, path in reversed(created):
+                        activate_pack(pack["type"], "/" + pack_name); active = True
+                    installed.append({"type": pack["type"], "name": pack_name, "uuid": pack.get("uuid"), "active": active})
+        append_addon_history({"item_id": item["item_id"], "source_filename": item.get("filename"), "action": "install", "detected_name": item.get("name"), "detected_uuid": item.get("uuid"), "detected_version": item.get("version"), "detected_type": item.get("type"), "activated": activate, "result": "ok", "warnings": item.get("warnings", [])})
+        return {"ok": True, "installed": installed, "message": "Lokaler Import wurde installiert."}
+    except Exception:
+        for root_key, dest in reversed(created):
             try:
-                if path_is_dir_root(root_key, path): shutil.rmtree(path)
-            except Exception as cleanup_exc:
-                log_warning("Import-Cleanup fehlgeschlagen: %s" % cleanup_exc)
-        write_import_status("error", str(exc))
+                if path_is_dir_root(root_key, dest): shutil.rmtree(dest)
+            except Exception as cleanup_exc: log_warning("Add-on Manager Cleanup fehlgeschlagen: %s" % cleanup_exc)
         raise
+
+
+def apply_addon_action(item_id, action="install", activate=False, confirm=False):
+    action = str(action or "install")
+    plan = build_addon_plan(item_id, action, activate)
+    assert_plan_confirmed(plan, confirm, "expert" if plan.get("risk") == "red" else "safe")
+    item = plan["item"]
+    if action in ("install", "update"):
+        result = install_local_import_item(item, activate)
+        result["plan"] = plan
+        return result
+    if action == "activate":
+        if not item.get("uuid") or item.get("source") == "Importordner": raise ValueError("Aktivieren erfordert ein installiertes Pack.")
+        pack = resolve_addon_item(item_id)
+        result = activate_pack(pack.get("type", item.get("type")), pack.get("path", item.get("filename")))
+        append_addon_history({"item_id": item_id, "action": "activate", "detected_uuid": item.get("uuid"), "detected_type": item.get("type"), "activated": True, "result": "ok", "warnings": item.get("warnings", [])})
+        result["plan"] = plan
+        return result
+    if action == "remove_import":
+        resolved = resolve_addon_item(item_id)
+        remove_safe("import", resolved["path"])
+        return {"ok": True, "plan": plan, "message": "Importdatei wurde entfernt."}
+    raise ValueError("Unbekannte Add-on Manager Aktion: %s" % action)
 
 def status_payload():
     env_keys = ["SERVER_NAME", "LEVEL_NAME", "VERSION", "BDS_AUTO_UPDATE", "SERVER_PORT", "SERVER_PORT_V6", "ENABLE_LAN_VISIBILITY", "ENABLE_BDS_V6BIND_FIX", "GAMEMODE", "DIFFICULTY", "ALLOW_CHEATS", "ALLOW_LIST", "ONLINE_MODE", "MAX_PLAYERS", "TEXTUREPACK_REQUIRED", "PACKAGE_BACKUP_KEEP"]
@@ -11447,6 +11569,18 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith("/api/profiles") or path == "/api/profiles":
             self._send_json(200, profiles_payload())
             return
+        if path.endswith("/api/addons/overview") or path == "/api/addons/overview":
+            self._send_json(200, addons_overview_payload())
+            return
+        if path.endswith("/api/addons/catalog") or path == "/api/addons/catalog":
+            self._send_json(200, addons_catalog_payload(query))
+            return
+        if path.endswith("/api/addons/item") or path == "/api/addons/item":
+            try:
+                self._send_json(200, addons_item_payload(query.get("id", [""])[0]))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
         if path.endswith("/api/files/list") or path == "/api/files/list":
             try:
                 self._send_json(200, list_directory(query.get("root", ["config"])[0], query.get("path", ["/"])[0]))
@@ -11507,6 +11641,27 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 payload = self._read_json_payload()
                 self._send_json(200, set_web_protection_state(bool(payload.get("enabled", False)), "web-ui"))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/addons/scan") or path == "/api/addons/scan":
+            try:
+                self._send_json(200, addons_catalog_payload({}))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/addons/plan") or path == "/api/addons/plan":
+            try:
+                payload = self._read_json_payload()
+                self._send_json(200, build_addon_plan(str(payload.get("item_id", "")), str(payload.get("action", "install")), bool(payload.get("activate", False))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/addons/apply") or path == "/api/addons/apply":
+            try:
+                self.require_web_write_allowed("Add-on Manager Aktion ausführen")
+                payload = self._read_json_payload()
+                self._send_json(200, apply_addon_action(str(payload.get("item_id", "")), str(payload.get("action", "install")), bool(payload.get("activate", False)), bool(payload.get("confirm", False))))
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return

@@ -54,7 +54,7 @@ WinoMC nutzt für Reparatur, Import und Restore einen Safety Planner: erst analy
 
 ## URL-Import
 
-WinoMC unterstützt direkte Bedrock-Dateien, nicht bestimmte Webseiten. Direkte HTTPS-Links auf `.mcpack`, `.mcaddon`, `.mcworld`, `.mctemplate` oder geeignete `.zip` können funktionieren; MCPEDL, GitHub Releases oder eigene Webseiten sind möglich, wenn sie echte Dateien liefern. Downloads landen zuerst in Quarantäne, werden auf Manifest, Größe, Symlinks, ZIP Slip, Java-Mod-Marker und Duplicate UUIDs geprüft und erst nach Plan/Bestätigung installiert. Java-Mods (`.jar`, Forge/Fabric/NeoForge) werden freundlich abgelehnt. Lokale/private Ziele werden blockiert. CurseForge-Projektseiten werden nicht garantiert automatisch installiert; ein direkter Datei-Download ist zuverlässiger. Restore nutzt eine Vorschau mit Speicherplatzprüfung und Safety-Backup.
+WinoMC ist kein Internet-Downloader: freier URL-Download ist deaktiviert. Nutzer laden Bedrock-Dateien selbst von MCPEDL, CurseForge, GitHub, Marketplace Export oder eigenen Quellen herunter und legen sie in `/share/winomc/import` oder laden sie über WinoMC hoch. Der Add-on Manager erkennt `.mcpack`, `.mcaddon`, `.mcworld`, `.mctemplate` und geeignete `.zip`, katalogisiert Import-Eingang/Installiert/Aktiv/Lokale Updates/Probleme, prüft Manifest, Größe, Symlinks, ZIP Slip, Java-Mod-Marker und Duplicate UUIDs und installiert erst nach Safety-Plan/Bestätigung. Java-Mods (`.jar`, Forge/Fabric/NeoForge) werden freundlich abgelehnt. Restore nutzt eine Vorschau mit Speicherplatzprüfung und Safety-Backup.
 
 ## Nicht-Ziele
 

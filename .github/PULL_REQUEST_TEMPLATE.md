@@ -83,3 +83,11 @@
 - [ ] URL-Import lädt zuerst in Quarantäne und liefert einen Plan
 - [ ] Duplicate UUIDs werden nicht automatisch ersetzt
 - [ ] Restore-Plan zeigt Pack-/Add-on-Auswirkungen und verlangt Bestätigung
+
+### Add-on Manager local import checks
+- [ ] Freier URL-Download ist deaktiviert und öffnet kein Netzwerk
+- [ ] Import-Eingang `/share/winomc/import` wird katalogisiert
+- [ ] `.mcpack`, `.mcaddon`, `.mcworld`, `.mctemplate` werden erkannt
+- [ ] `.jar` / ausführbare Dateien werden als nicht unterstützt angezeigt
+- [ ] Lokale Updates über UUID/Version werden angezeigt
+- [ ] Add-on Manager Apply wird durch Webschutz blockiert

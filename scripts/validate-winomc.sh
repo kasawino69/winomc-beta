@@ -30,8 +30,9 @@ required_symbols = [
     'def download_external_pack', 'def check_import_url', 'def install_import_url',
     'def atomic_write_json_root', 'def restore_backup', 'def build_restore_plan', 'def analyze_world_safety',
     'def build_repair_plan', 'def build_import_plan', 'def risk_level', 'def requires_confirmation',
-    'def assert_plan_confirmed', 'QUARANTINE_DIR', 'def quarantine_file_path', 'def build_validated_download_target',
-    'http.client.HTTPSConnection', 'def activate_pack', 'def deactivate_pack',
+    'def assert_plan_confirmed', 'QUARANTINE_DIR', 'def quarantine_file_path', 'manual_url_import_disabled_response',
+    'def addons_overview_payload', 'def addons_catalog_payload', 'def build_addon_plan', 'def apply_addon_action',
+    'def activate_pack', 'def deactivate_pack',
     'def save_players', 'def prepare_update', 'def prepare_profile', 'winomc-mobile-assistant'
 ]
 for symbol in required_symbols:
@@ -43,7 +44,8 @@ required_routes = [
     '/api/web-protection', '/api/diagnostics/repair', '/api/import/status',
     '/api/import/url/check', '/api/import/url/install', '/api/backups/restore',
     '/api/backups/delete', '/api/backups/restore/plan', '/api/packs/activate', '/api/packs/deactivate',
-    '/api/players/save', '/api/updates/prepare', '/api/profiles/prepare'
+    '/api/players/save', '/api/updates/prepare', '/api/profiles/prepare',
+    '/api/addons/overview', '/api/addons/catalog', '/api/addons/item', '/api/addons/scan', '/api/addons/plan', '/api/addons/apply'
 ]
 for route in required_routes:
     if route not in source:
@@ -54,7 +56,7 @@ protected_routes = [
     '/api/packs/deactivate','/api/players/save','/api/updates/prepare','/api/profiles/prepare',
     '/api/files/upload','/api/files/upload-json','/api/files/write','/api/files/zip',
     '/api/files/unzip','/api/files/delete','/api/files/move','/api/files/trash/restore',
-    '/api/files/trash/settings','/api/files/trash/empty','/api/worlds/export-safe'
+    '/api/files/trash/empty','/api/worlds/export-safe','/api/addons/apply'
 ]
 for route in protected_routes:
     needle = 'if path.endswith("' + route + '")'
@@ -66,23 +68,23 @@ for route in protected_routes:
     block = source[idx:idx+1400]
     if 'require_web_write_allowed' not in block:
         raise SystemExit(f'route is not guarded by web protection: {route}')
-for snippet in ['.jar', 'Java-Mod', 'ip.is_private', 'parsed.scheme != "https"', 'CurseForge-Projektseiten', 'MAX_IMPORT_REDIRECTS', 'zip_member_is_symlink', 'duplicate_uuids', 'requires_confirmation', 'green', 'yellow', 'red', 'quarantine_file_path', 'build_import_plan_from_quarantine']:
+for snippet in ['.jar', 'Java-Mod', 'zip_member_is_symlink', 'duplicate_uuids', 'requires_confirmation', 'green', 'yellow', 'red', 'quarantine_file_path', 'build_import_plan_from_quarantine', 'local_update_available', 'installed_version', 'item_id', 'Importordner']:
     if snippet not in source:
         raise SystemExit(f'URL import safety snippet missing: {snippet}')
 
-for forbidden in ['urlopen', 'opener.open', 'Request(current', 'Request(info["url"]', 'source["path"]', 'HTTPRedirectHandler', 'build_opener']:
+for forbidden in ['urlopen', 'opener.open', 'Request(current', 'Request(info["url"]', 'source["path"]', 'HTTPRedirectHandler', 'build_opener', 'http.client.HTTPSConnection', 'requests.get']:
     if forbidden in source:
         raise SystemExit(f'CodeQL URL/path forbidden pattern remains: {forbidden}')
-if 'http.client.HTTPSConnection' not in source:
-    raise SystemExit('URL import must use CodeQL-friendly HTTPSConnection flow')
-if 'verify_internal_path(QUARANTINE_DIR' not in source or 'quarantine_file_path' not in source:
+if 'Freier serverseitiger URL-Download ist deaktiviert' not in source:
+    raise SystemExit('free server-side URL download must be disabled')
+if 'quarantine_file_path' not in source:
     raise SystemExit('quarantine path validation helper missing')
 addon_readme = (root/'winomc-server-bedrock/README.md').read_text()
-for snippet in ['URL-Import', 'CurseForge', 'Java-Mods', 'Mobile Befehlshilfe', 'serverseitig persistent', 'Safety Planner', 'Risikoampel', 'Quarantäne']:
+for snippet in ['URL-Import', 'CurseForge', 'Java-Mods', 'Mobile Befehlshilfe', 'serverseitig persistent', 'Safety Planner', 'Risikoampel', 'Quarantäne', 'Add-on Manager', 'kein Internet-Downloader', '/share/winomc/import']:
     if snippet not in addon_readme:
         raise SystemExit(f'add-on README missing required RC note: {snippet}')
 changelog = (root/'winomc-server-bedrock/CHANGELOG.md').read_text()
-for snippet in ['serverseitig persistenter Webschutz', 'Diagnose-Reparaturaktionen', 'URL-Import', 'Mobile Befehlshilfe', 'Safety Planner']:
+for snippet in ['serverseitig persistenter Webschutz', 'Diagnose-Reparaturaktionen', 'URL-Import', 'Mobile Befehlshilfe', 'Safety Planner', 'Add-on Manager', 'freier URL-Download deaktiviert']:
     if snippet not in changelog:
         raise SystemExit(f'changelog missing RC note: {snippet}')
 for doc in ['README.md','winomc-server-bedrock/README.md','winomc-server-bedrock/CHANGELOG.md']:
