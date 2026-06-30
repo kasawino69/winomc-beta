@@ -32,6 +32,7 @@ required_symbols = [
     'def build_repair_plan', 'def build_import_plan', 'def risk_level', 'def requires_confirmation',
     'def assert_plan_confirmed', 'QUARANTINE_DIR', 'def quarantine_file_path', 'manual_url_import_disabled_response',
     'def addons_overview_payload', 'def addons_catalog_payload', 'def build_addon_plan', 'def apply_addon_action',
+    'def is_builtin_bedrock_pack', 'def is_system_pack_path',
     'def activate_pack', 'def deactivate_pack',
     'def save_players', 'def prepare_update', 'def prepare_profile', 'winomc-mobile-assistant'
 ]
@@ -68,23 +69,25 @@ for route in protected_routes:
     block = source[idx:idx+1400]
     if 'require_web_write_allowed' not in block:
         raise SystemExit(f'route is not guarded by web protection: {route}')
-for snippet in ['.jar', 'Java-Mod', 'zip_member_is_symlink', 'duplicate_uuids', 'requires_confirmation', 'green', 'yellow', 'red', 'quarantine_file_path', 'build_import_plan_from_quarantine', 'local_update_available', 'installed_version', 'item_id', 'Importordner']:
+for snippet in ['.jar', 'Java-Mod', 'zip_member_is_symlink', 'duplicate_uuids', 'requires_confirmation', 'green', 'yellow', 'red', 'quarantine_file_path', 'build_import_plan_from_quarantine', 'local_update_available', 'installed_version', 'item_id', 'Importordner', 'BUILTIN_BEDROCK_PACK_NAMES', 'Packs & Add-ons', 'Expertenmodus aktivieren', 'Ich habe verstanden', 'Papierkorb', 'data-open-root="trash"']:
     if snippet not in source:
         raise SystemExit(f'URL import safety snippet missing: {snippet}')
 
 for forbidden in ['urlopen', 'opener.open', 'Request(current', 'Request(info["url"]', 'source["path"]', 'HTTPRedirectHandler', 'build_opener', 'http.client.HTTPSConnection', 'requests.get']:
     if forbidden in source:
         raise SystemExit(f'CodeQL URL/path forbidden pattern remains: {forbidden}')
+if 'data-panel="transfer"' in source and 'Import und Export findest du jetzt unter Packs & Add-ons' not in source:
+    raise SystemExit('legacy Import/Export must clearly redirect to Packs & Add-ons')
 if 'Freier serverseitiger URL-Download ist deaktiviert' not in source:
     raise SystemExit('free server-side URL download must be disabled')
 if 'quarantine_file_path' not in source:
     raise SystemExit('quarantine path validation helper missing')
 addon_readme = (root/'winomc-server-bedrock/README.md').read_text()
-for snippet in ['URL-Import', 'CurseForge', 'Java-Mods', 'Mobile Befehlshilfe', 'serverseitig persistent', 'Safety Planner', 'Risikoampel', 'Quarantäne', 'Add-on Manager', 'kein Internet-Downloader', '/share/winomc/import']:
+for snippet in ['URL-Import', 'CurseForge', 'Java-Mods', 'Mobile Befehlshilfe', 'serverseitig persistent', 'Safety Planner', 'Risikoampel', 'Quarantäne', 'Add-on Manager', 'kein Internet-Downloader', '/share/winomc/import', 'Packs & Add-ons']:
     if snippet not in addon_readme:
         raise SystemExit(f'add-on README missing required RC note: {snippet}')
 changelog = (root/'winomc-server-bedrock/CHANGELOG.md').read_text()
-for snippet in ['serverseitig persistenter Webschutz', 'Diagnose-Reparaturaktionen', 'URL-Import', 'Mobile Befehlshilfe', 'Safety Planner', 'Add-on Manager', 'freier URL-Download deaktiviert']:
+for snippet in ['serverseitig persistenter Webschutz', 'Diagnose-Reparaturaktionen', 'URL-Import', 'Mobile Befehlshilfe', 'Safety Planner', 'Add-on Manager', 'freier URL-Download deaktiviert', 'Packs & Add-ons', 'Systempacks']:
     if snippet not in changelog:
         raise SystemExit(f'changelog missing RC note: {snippet}')
 for doc in ['README.md','winomc-server-bedrock/README.md','winomc-server-bedrock/CHANGELOG.md']:
