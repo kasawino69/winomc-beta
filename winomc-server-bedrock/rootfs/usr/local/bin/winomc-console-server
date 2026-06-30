@@ -10091,6 +10091,7 @@ def world_dir_path():
 def dir_size(path, max_entries=250000):
     total = 0
     count = 0
+    skipped = 0
     try:
         base = verify_root_path("config", path, require_exists=False, allow_missing=True).path
         if not os.path.exists(base):
@@ -10104,8 +10105,12 @@ def dir_size(path, max_entries=250000):
                 try:
                     total += os.path.getsize(fp)
                 except OSError:
-                    pass
-    except Exception:
+                    skipped += 1
+                    continue
+        if skipped:
+            log_warning("dir_size skipped %s unreadable or vanished files under %s" % (skipped, base))
+    except Exception as exc:
+        log_warning("dir_size failed for %s: %s" % (path, exc))
         return 0
     return total
 
@@ -11061,8 +11066,10 @@ def download_external_pack(url):
                     raise ValueError("Download ist zu groß.")
                 handle.write(chunk)
     finally:
-        try: response.close()
-        except Exception: pass
+        try:
+            response.close()
+        except Exception as exc:
+            log_warning("URL-Import-Response konnte nicht geschlossen werden: %s" % exc)
     return {"path": target, "root": "quarantine", "rel_path": normalize_rel_path("/" + filename), "filename": filename, "extension": file_extension(filename), "size": total, "redirects": redirects, "content_type": content_type}
 
 
