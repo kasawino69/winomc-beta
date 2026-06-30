@@ -12,27 +12,10 @@ if not path.exists():
 text = path.read_text(encoding='utf-8')
 original = text
 
-text = re.sub(
-    r'<title>WinoMC Adaptive Workbench [^<]+</title>',
-    '<title>WinoMC Adaptive Workbench 1.6.14.18</title>',
-    text,
-    count=1,
-)
-text = re.sub(
-    r'server_version = "WinoMCConsole/[^"]+"',
-    'server_version = "WinoMCConsole/1.6.14.18"',
-    text,
-    count=1,
-)
+text = re.sub(r'<title>WinoMC Adaptive Workbench [^<]+</title>', '<title>WinoMC Adaptive Workbench 1.6.14.18</title>', text, count=1)
+text = re.sub(r'server_version = "WinoMCConsole/[^"]+"', 'server_version = "WinoMCConsole/1.6.14.18"', text, count=1)
 
-# Runtime-Guards aus vorherigen Beta-Fixes entfernen. Diese wurden am Ende des
-# Skripts eingefügt und konnten Klicks/Editor-Zustände doppelt behandeln.
-for fn in (
-    'hardenClassicPcDashboardEditor161414',
-    'hardenPcDashboardFilesEditor161415',
-    'separatePcEditorFilesDashboard161416',
-    'repairUiAfter161416',
-):
+for fn in ('hardenClassicPcDashboardEditor161414', 'hardenPcDashboardFilesEditor161415', 'separatePcEditorFilesDashboard161416', 'repairUiAfter161416'):
     text = re.sub(
         r'\n\s*/\*[^*]*v1\.6\.14\.(?:14|15|16|17)b[\s\S]*?\*/\s*\n\s*\(function ' + fn + r'\(\) \{[\s\S]*?\n\s*\}\)\(\);\s*\n',
         '\n',
@@ -40,9 +23,6 @@ for fn in (
         count=1,
     )
 
-# Core-Funktionen hart trennen: Mobile nutzt sein Modal; PC nutzt ein eigenes
-# großes Editor-Overlay ohne Card-Maximize/Blur-Backdrop. Die Funktionen werden
-# im eigentlichen Webconsole-Code ersetzt, nicht als weiterer Button-Flicker.
 old_open = """    function openEditorOverlay() {
       if (!editorPanel) return;
       editorPanel.classList.add('editor-open');
@@ -143,22 +123,17 @@ if old_toggle in text:
     text = text.replace(old_toggle, new_toggle, 1)
 
 mobile_css = r'''
-
-    /* v1.6.14.18b MOBILE SCOPE ONLY
-       Mobile ist getrennt: nur der aktive Menüpunkt wird angezeigt. Keine PC-
-       Workbench-/Desktop-Fensterregeln greifen hier. */
+    /* v1.6.14.18b MOBILE SCOPE ONLY */
     body.ux-mobile:not(.desktop-mode) .content > .tab-panel:not(.active) {
       display: none !important;
       visibility: hidden !important;
       pointer-events: none !important;
     }
-
     body.ux-mobile:not(.desktop-mode) .content > .tab-panel.active {
       display: grid !important;
       visibility: visible !important;
       pointer-events: auto !important;
     }
-
     body.ux-mobile:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .file-manager-grid,
     body.ux-mobile:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .file-explorer-panel,
     body.ux-mobile:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .editor-panel {
@@ -169,11 +144,7 @@ mobile_css = r'''
 '''
 
 pc_css = r'''
-
-    /* v1.6.14.18b PC SCOPE ONLY
-       PC wird neu abgegrenzt: Dateiexplorer nutzt ein einspaltiges, hohes Fenster.
-       Der Editor ist ein eigenes Vordergrundfenster und nicht mehr Teil des
-       Explorer-Grids. Dadurch beeinflusst Mobile diese Regeln nicht mehr. */
+    /* v1.6.14.18b PC SCOPE ONLY */
     @media (min-width: 1051px) {
       body.ux-desktop:not(.ux-mobile) .editor-modal-backdrop,
       body.ux-desktop:not(.ux-mobile).editor-modal-open .editor-modal-backdrop,
@@ -186,13 +157,6 @@ pc_css = r'''
         pointer-events: none !important;
         opacity: 0 !important;
         backdrop-filter: none !important;
-      }
-
-      body.ux-desktop:not(.ux-mobile).pc-editor-open,
-      body.ux-desktop:not(.ux-mobile).pc-editor-fullscreen,
-      body.desktop-mode:not(.ux-mobile).pc-editor-open,
-      body.desktop-mode:not(.ux-mobile).pc-editor-fullscreen {
-        overflow: hidden !important;
       }
 
       body.ux-desktop:not(.ux-mobile).pc-editor-open::after,
@@ -272,7 +236,6 @@ pc_css = r'''
         min-width: min(960px, calc(100dvw - 32px)) !important;
         min-height: min(680px, calc(100dvh - 72px)) !important;
       }
-
       body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"].desktop-maximized {
         left: 8px !important;
         top: 8px !important;
@@ -281,7 +244,6 @@ pc_css = r'''
         min-width: 0 !important;
         min-height: 0 !important;
       }
-
       body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-manager-grid,
       body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-manager-grid.editor-visible,
       body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-manager-grid:not(.editor-visible) {
@@ -295,14 +257,12 @@ pc_css = r'''
         overflow: hidden !important;
         align-items: stretch !important;
       }
-
       body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .split-resizer,
       body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .editor-panel:not(.editor-open):not(.editor-fullscreen) {
         display: none !important;
         visibility: hidden !important;
         pointer-events: none !important;
       }
-
       body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-explorer-panel {
         display: flex !important;
         flex-direction: column !important;
@@ -311,12 +271,10 @@ pc_css = r'''
         max-height: 100% !important;
         overflow: hidden !important;
       }
-
       body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-explorer-panel > .card-header,
       body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-explorer-panel > .drop-zone {
         flex: 0 0 auto !important;
       }
-
       body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-table-wrap {
         flex: 1 1 auto !important;
         min-height: 360px !important;
@@ -328,42 +286,16 @@ pc_css = r'''
         scrollbar-gutter: stable !important;
         overscroll-behavior: contain !important;
       }
-
-      body.ux-desktop:not(.ux-mobile):not(.desktop-mode) .tab-panel[data-panel="dashboard"].active {
-        display: flex !important;
-        flex-direction: column !important;
-        height: 100% !important;
-        min-height: 0 !important;
-        max-height: 100% !important;
-        overflow: hidden !important;
-      }
-
-      body.ux-desktop:not(.ux-mobile):not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-layout,
-      body.ux-desktop:not(.ux-mobile):not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-add-card {
-        flex: 0 0 auto !important;
-        min-height: 0 !important;
-      }
-
-      body.ux-desktop:not(.ux-mobile):not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-active-card {
-        flex: 1 1 auto !important;
-        min-height: 0 !important;
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-        scrollbar-gutter: stable !important;
-        overscroll-behavior: contain !important;
-        padding-bottom: 22px !important;
-      }
     }
 '''
 
-if 'v1.6.14.18b MOBILE SCOPE ONLY' not in text:
-    text = text.replace('  </style>', mobile_css + '  </style>', 1)
-if 'v1.6.14.18b PC SCOPE ONLY' not in text:
-    text = text.replace('  </style>', pc_css + '  </style>', 1)
+if 'winomc-split-overrides-161418' not in text:
+    override_style = '\n  <style id="winomc-split-overrides-161418">\n' + mobile_css + pc_css + '\n  </style>'
+    text = text.replace('  </style>', '  </style>' + override_style, 1)
 
 runtime = r'''
 
-    /* v1.6.14.18b split runtime: Mobile stays mobile, PC gets its own editor/window logic. */
+    /* v1.6.14.18b split runtime: Mobile and PC are isolated. */
     (function splitMobileAndPcRuntime161418() {
       function mobileShell161418() {
         return document.body.classList.contains('ux-mobile') && !document.body.classList.contains('desktop-mode');
@@ -405,7 +337,6 @@ runtime = r'''
         if (rect.height < minHeight) { panel.style.height = Math.max(620, minHeight) + 'px'; changed = true; }
         if (changed && typeof saveDesktopPosition === 'function') saveDesktopPosition('files', panel);
       }
-
       const originalActivateTab161418 = activateTab;
       activateTab = function(tab) {
         const result = originalActivateTab161418.apply(this, arguments);
@@ -416,7 +347,6 @@ runtime = r'''
         });
         return result;
       };
-
       const originalOpenDesktopWindow161418 = openDesktopWindow;
       openDesktopWindow = function(id) {
         const result = originalOpenDesktopWindow161418.apply(this, arguments);
@@ -426,7 +356,6 @@ runtime = r'''
         });
         return result;
       };
-
       document.addEventListener('click', event => {
         if (event.target.closest('#editorFullscreen') && pcShell161418()) {
           event.preventDefault();
@@ -434,13 +363,11 @@ runtime = r'''
           toggleEditorFullscreen(event);
         }
       }, true);
-
       window.addEventListener('resize', () => window.requestAnimationFrame(() => {
         isolateMobileTabs161418();
         clearPcBlockers161418();
         repairPcFilesWindow161418();
       }), { passive: true });
-
       window.requestAnimationFrame(() => {
         isolateMobileTabs161418();
         clearPcBlockers161418();
