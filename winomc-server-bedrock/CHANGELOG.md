@@ -5,6 +5,16 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.14.18b
+
+* Mobile- und PC-UI-Regeln sauber getrennt, damit Änderungen am PC die Mobile-Ansicht nicht mehr beeinflussen.
+* PC-Editor neu verdrahtet: Öffnen, Schließen und Vollbild nutzen eigene PC-Zustände statt Mobile-/Card-Overlay-Logik.
+* PC-Editor entfernt alte Blur-/Modal-/Card-Maximize-Zustände und öffnet als großes Vordergrundfenster.
+* PC-Workbench/Desktop-Modus: Dateiexplorer nutzt ein einspaltiges, hohes Dateifenster ohne reservierten Editor-/Splitter-Leerraum.
+* Desktop-Dateiliste bleibt intern scrollbar und erhält eine brauchbare Mindesthöhe.
+* Die neuen UI-Overrides werden in einem eigenen finalen Style-Block nach alten Desktop-Ingress-Regeln eingefügt.
+* Version gesetzt auf WinoMCConsole/1.6.14.18.
+
 ### 1.6.14.17b
 
 * Mobile: Dateiexplorer wird nur noch im aktiven Dateien-Menü angezeigt und nicht mehr auf allen Menüpunkten eingeblendet.
