@@ -1,4 +1,4 @@
-/* WinoMC shell router 1.6.14.21b
+/* WinoMC shell router 1.6.14.22b
    The router is the only bridge between strict PC and Mobile UI modules.
    Shared application modules stay in the existing console server functions. */
 (function WinoMCShellRouter() {
@@ -82,7 +82,7 @@
   }, true);
 
   const observer = new MutationObserver(() => window.requestAnimationFrame(Router.tick));
-  observer.observe(document.body, { attributes: true, childList: true, subtree: true, attributeFilter: ['class', 'style'] });
+  observer.observe(document.body, { attributes: true, childList: true, subtree: false, attributeFilter: ['class'] });
 
   window.addEventListener('resize', () => window.requestAnimationFrame(Router.tick), { passive: true });
   document.addEventListener('click', () => window.requestAnimationFrame(Router.tick), true);

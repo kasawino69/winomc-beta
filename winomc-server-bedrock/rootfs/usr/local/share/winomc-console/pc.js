@@ -1,4 +1,4 @@
-/* WinoMC PC UI 1.6.14.21b
+/* WinoMC PC UI 1.6.14.22b
    PC-only behaviour. Shared modules remain the existing API/file/console functions. */
 (function WinoMCPCUI() {
   const PC = {};
@@ -218,6 +218,35 @@
     }
   };
 
+  PC.repairClassicFiles = function repairClassicFiles() {
+    if (!PC.syncShell() || document.body.classList.contains('desktop-mode')) return;
+    const panel = document.querySelector('.tab-panel[data-panel="files"].active');
+    if (!panel) return;
+
+    const grid = byId('fileManagerGrid');
+    if (grid) {
+      grid.classList.remove('editor-visible');
+      grid.style.gridTemplateColumns = 'minmax(0, 1fr)';
+      grid.style.gridTemplateRows = 'minmax(0, 1fr)';
+      grid.style.overflow = 'hidden';
+    }
+
+    const split = byId('filesSplitHandle');
+    if (split) split.style.display = 'none';
+
+    const explorer = panel.querySelector('.file-explorer-panel');
+    if (explorer) {
+      explorer.style.minHeight = '0';
+      explorer.style.overflow = 'hidden';
+    }
+
+    const tableWrap = panel.querySelector('.file-table-wrap');
+    if (tableWrap) {
+      tableWrap.style.minHeight = '360px';
+      tableWrap.style.overflow = 'auto';
+    }
+  };
+
   PC.tick = function tick() {
     if (!PC.syncShell()) {
       PC.restoreEditorHome();
@@ -227,6 +256,7 @@
     if (panel?.classList.contains('editor-open')) {
       PC.openEditor({ fullscreen: panel.classList.contains('editor-fullscreen') });
     }
+    PC.repairClassicFiles();
     PC.repairDesktopFiles();
   };
 

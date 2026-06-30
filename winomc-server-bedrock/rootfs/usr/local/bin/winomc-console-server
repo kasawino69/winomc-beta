@@ -71,7 +71,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Adaptive Workbench 1.6.14.13</title>
+  <title>WinoMC Adaptive Workbench 1.6.14.22</title>
   <style>
     :root {
       color-scheme: dark;
@@ -4415,6 +4415,282 @@ INDEX_HTML = r"""<!doctype html>
     }
 
 </style>
+
+  <style id="winomc-pc-ui-161422">
+/* WinoMC PC UI 1.6.14.22b
+   PC-only layout. This file must never contain mobile rules.
+   Shared modules remain the existing file/API/console logic in winomc-console-server. */
+
+body.winomc-pc {
+  --winomc-pc-editor-gap: 14px;
+  --winomc-pc-editor-radius: 16px;
+}
+
+body.winomc-pc.winomc-pc-editor-open {
+  overflow: hidden !important;
+}
+
+body.winomc-pc .editor-modal-backdrop,
+body.winomc-pc.editor-modal-open .editor-modal-backdrop,
+body.winomc-pc .modal-backdrop:not(.open),
+body.winomc-pc.winomc-pc-editor-open::after,
+body.winomc-pc.winomc-pc-editor-fullscreen::after,
+body.winomc-pc.has-maximized-card.winomc-pc-editor-open::after,
+body.winomc-pc.has-maximized-card.winomc-pc-editor-fullscreen::after {
+  content: none !important;
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  backdrop-filter: none !important;
+  background: transparent !important;
+}
+
+body.winomc-pc .card.maximized {
+  /* Card maximize must not participate while the PC editor owns the foreground. */
+}
+
+#winomcPcLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147482000;
+  pointer-events: none;
+  display: none;
+}
+
+body.winomc-pc #winomcPcLayer {
+  display: block;
+}
+
+body.winomc-pc #winomcPcLayer #editorPanel:not(.editor-open) {
+  display: none !important;
+}
+
+body.winomc-pc #winomcPcLayer #editorPanel.editor-open {
+  pointer-events: auto;
+}
+
+body.winomc-pc #editorPanel.winomc-pc-editor {
+  position: fixed !important;
+  z-index: 2147483000 !important;
+  left: 50% !important;
+  top: var(--winomc-pc-editor-gap) !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: min(1040px, calc(100dvw - (2 * var(--winomc-pc-editor-gap)))) !important;
+  height: min(78dvh, calc(100dvh - (2 * var(--winomc-pc-editor-gap)))) !important;
+  min-width: 0 !important;
+  min-height: min(440px, calc(100dvh - (2 * var(--winomc-pc-editor-gap)))) !important;
+  max-width: none !important;
+  max-height: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  background: rgba(15, 23, 42, .998) !important;
+  border: 1px solid rgba(96, 165, 250, .42) !important;
+  border-radius: var(--winomc-pc-editor-radius) !important;
+  box-shadow: 0 34px 110px rgba(0, 0, 0, .78) !important;
+  backdrop-filter: none !important;
+  transform: translateX(-50%) !important;
+}
+
+body.winomc-pc #editorPanel.winomc-pc-editor.editor-fullscreen {
+  inset: var(--winomc-pc-editor-gap) !important;
+  left: var(--winomc-pc-editor-gap) !important;
+  top: var(--winomc-pc-editor-gap) !important;
+  right: var(--winomc-pc-editor-gap) !important;
+  bottom: var(--winomc-pc-editor-gap) !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  transform: none !important;
+}
+
+body.winomc-pc #editorPanel.winomc-pc-editor::before {
+  content: none !important;
+  display: none !important;
+}
+
+body.winomc-pc #editorPanel.winomc-pc-editor > .card-header,
+body.winomc-pc #editorPanel.winomc-pc-editor > .file-path,
+body.winomc-pc #editorPanel.winomc-pc-editor > .file-meta,
+body.winomc-pc #editorPanel.winomc-pc-editor > .readonly-note,
+body.winomc-pc #editorPanel.winomc-pc-editor > .info {
+  flex: 0 0 auto !important;
+  position: static !important;
+  inset: auto !important;
+  transform: none !important;
+}
+
+body.winomc-pc #editorPanel.winomc-pc-editor > .editor-actions {
+  flex: 0 0 auto !important;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  padding: 10px 0 !important;
+}
+
+body.winomc-pc #editorPanel.winomc-pc-editor > .editor-actions button {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
+  padding: 10px 14px !important;
+}
+
+body.winomc-pc #editorPanel.winomc-pc-editor #fileEditor {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  display: block !important;
+  resize: none !important;
+  overflow: auto !important;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active #fileManagerGrid,
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active #fileManagerGrid.editor-visible {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  min-height: clamp(520px, 72dvh, 900px) !important;
+  overflow: hidden !important;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active #filesSplitHandle,
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active #editorPanel:not(.winomc-pc-editor) {
+  display: none !important;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active .file-explorer-panel {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active .file-table-wrap {
+  min-height: 360px !important;
+  overflow: auto !important;
+}
+
+body.winomc-pc.desktop-mode .tab-panel[data-panel="files"].desktop-open:not(.desktop-minimized) {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  left: 12px !important;
+  top: 12px !important;
+  width: calc(100dvw - 24px) !important;
+  height: calc(100dvh - 72px) !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  resize: none !important;
+}
+
+body.winomc-pc.desktop-mode .tab-panel[data-panel="files"] #fileManagerGrid,
+body.winomc-pc.desktop-mode .tab-panel[data-panel="files"] #fileManagerGrid.editor-visible,
+body.winomc-pc.desktop-mode .tab-panel[data-panel="files"] #fileManagerGrid:not(.editor-visible) {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  gap: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+body.winomc-pc.desktop-mode #filesSplitHandle,
+body.winomc-pc.desktop-mode .tab-panel[data-panel="files"] #editorPanel:not(.editor-open):not(.editor-fullscreen) {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.winomc-pc.desktop-mode .tab-panel[data-panel="files"] .file-explorer-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+body.winomc-pc.desktop-mode .tab-panel[data-panel="files"] .file-explorer-panel > .card-header,
+body.winomc-pc.desktop-mode .tab-panel[data-panel="files"] .file-explorer-panel > .drop-zone {
+  flex: 0 0 auto !important;
+}
+
+body.winomc-pc.desktop-mode .tab-panel[data-panel="files"] .file-table-wrap {
+  flex: 1 1 auto !important;
+  min-height: 360px !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: auto !important;
+  padding-bottom: 24px !important;
+  scroll-padding-bottom: 24px !important;
+  scrollbar-gutter: stable !important;
+  overscroll-behavior: contain !important;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="dashboard"].active {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-active-card {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+  </style>
+  <style id="winomc-mobile-ui-161422">
+/* WinoMC Mobile UI 1.6.14.22b
+   Mobile-only layout. This file must never contain PC rules. */
+
+body.winomc-mobile #winomcPcLayer {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.winomc-mobile:not(.desktop-mode) .content > .tab-panel:not(.active) {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.winomc-mobile:not(.desktop-mode) .content > .tab-panel.active {
+  display: grid !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+body.winomc-mobile:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .file-manager-grid,
+body.winomc-mobile:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .file-explorer-panel,
+body.winomc-mobile:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .editor-panel {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.winomc-mobile .editor-panel.editor-open {
+  max-width: calc(100dvw - 16px) !important;
+  width: calc(100dvw - 16px) !important;
+  left: 8px !important;
+  right: 8px !important;
+}
+  </style>
+
 </head>
 <body>
   <header>
@@ -7897,6 +8173,421 @@ INDEX_HTML = r"""<!doctype html>
       window.requestAnimationFrame(syncClosedEditor161413);
       window.setTimeout(syncClosedEditor161413, 250);
     })();
+    /* END winomc-pc-ui-161422 */
+    /* END winomc-mobile-ui-161422 */
+    /* END winomc-shell-router-161422 */
+
+    /* BEGIN winomc-pc-ui-161422 */
+/* WinoMC PC UI 1.6.14.22b
+   PC-only behaviour. Shared modules remain the existing API/file/console functions. */
+(function WinoMCPCUI() {
+  const PC = {};
+  const byId = (id) => document.getElementById(id);
+
+  let originalEditorParent = null;
+  let originalEditorNext = null;
+  let pcLayer = null;
+
+  function hasFinePointer() {
+    try {
+      return Boolean(window.matchMedia && window.matchMedia('(pointer: fine)').matches);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  PC.isActive = function isActive() {
+    const fine = hasFinePointer();
+    const touchOnly = navigator.maxTouchPoints > 0 && !fine;
+    return fine || (!touchOnly && window.innerWidth >= 720);
+  };
+
+  PC.syncShell = function syncShell() {
+    const active = PC.isActive();
+    document.body.classList.toggle('winomc-pc', active);
+    document.body.classList.toggle('winomc-mobile', !active);
+    return active;
+  };
+
+  function ensurePcLayer() {
+    if (pcLayer && document.body.contains(pcLayer)) return pcLayer;
+    pcLayer = document.getElementById('winomcPcLayer');
+    if (!pcLayer) {
+      pcLayer = document.createElement('div');
+      pcLayer.id = 'winomcPcLayer';
+      pcLayer.setAttribute('aria-hidden', 'false');
+      document.body.appendChild(pcLayer);
+    }
+    return pcLayer;
+  }
+
+  function rememberEditorHome(panel) {
+    if (!panel || originalEditorParent) return;
+    originalEditorParent = panel.parentNode;
+    originalEditorNext = panel.nextSibling;
+  }
+
+  function moveEditorToPcLayer() {
+    const panel = byId('editorPanel');
+    if (!panel) return null;
+    rememberEditorHome(panel);
+    const layer = ensurePcLayer();
+    if (panel.parentNode !== layer) layer.appendChild(panel);
+    return panel;
+  }
+
+  PC.restoreEditorHome = function restoreEditorHome() {
+    const panel = byId('editorPanel');
+    if (!panel || !originalEditorParent || panel.parentNode === originalEditorParent) return;
+    try {
+      if (originalEditorNext && originalEditorNext.parentNode === originalEditorParent) {
+        originalEditorParent.insertBefore(panel, originalEditorNext);
+      } else {
+        originalEditorParent.appendChild(panel);
+      }
+    } catch (_) {
+      originalEditorParent.appendChild(panel);
+    }
+    panel.classList.remove('winomc-pc-editor');
+  };
+
+  PC.clearBlockers = function clearBlockers() {
+    document.body.classList.remove('editor-modal-open', 'has-maximized-card');
+    document.querySelectorAll('.card.maximized').forEach((card) => card.classList.remove('maximized'));
+    document.querySelectorAll('.editor-modal-backdrop, .modal-backdrop').forEach((backdrop) => {
+      backdrop.setAttribute('aria-hidden', 'true');
+      backdrop.style.display = 'none';
+      backdrop.style.visibility = 'hidden';
+      backdrop.style.pointerEvents = 'none';
+      backdrop.style.opacity = '0';
+      backdrop.style.background = 'transparent';
+      backdrop.style.backdropFilter = 'none';
+    });
+  };
+
+  function setCompactEditorActions(panel) {
+    const actions = panel?.querySelector(':scope > .editor-actions');
+    if (!actions) return;
+    actions.style.display = 'flex';
+    actions.style.flexDirection = 'row';
+    actions.style.flexWrap = 'wrap';
+    actions.style.alignItems = 'center';
+    actions.style.justifyContent = 'flex-start';
+    actions.style.gap = '8px';
+    actions.style.flex = '0 0 auto';
+    actions.querySelectorAll('button').forEach((button) => {
+      button.style.width = 'auto';
+      button.style.minWidth = '0';
+      button.style.maxWidth = 'none';
+      button.style.flex = '0 0 auto';
+    });
+  }
+
+  function setEditorStaticHeader(panel) {
+    panel?.querySelectorAll(':scope > .card-header, :scope > .file-path, :scope > .file-meta, :scope > .readonly-note, :scope > .info').forEach((el) => {
+      el.style.flex = '0 0 auto';
+      el.style.position = 'static';
+      el.style.inset = 'auto';
+      el.style.transform = 'none';
+    });
+  }
+
+  function setEditorTextarea() {
+    const editor = byId('fileEditor');
+    if (!editor) return;
+    editor.style.flex = '1 1 auto';
+    editor.style.width = '100%';
+    editor.style.height = 'auto';
+    editor.style.minHeight = '0';
+    editor.style.maxHeight = 'none';
+    editor.style.display = 'block';
+    editor.style.resize = 'none';
+    editor.style.overflow = 'auto';
+  }
+
+  PC.openEditor = function openEditor({ fullscreen = false } = {}) {
+    if (!PC.syncShell()) return false;
+    const panel = moveEditorToPcLayer();
+    if (!panel) return false;
+
+    PC.clearBlockers();
+    panel.classList.add('editor-open', 'winomc-pc-editor');
+    panel.classList.toggle('editor-fullscreen', Boolean(fullscreen));
+    document.body.classList.add('winomc-pc-editor-open');
+    document.body.classList.toggle('winomc-pc-editor-fullscreen', Boolean(fullscreen));
+
+    const grid = byId('fileManagerGrid');
+    if (grid) grid.classList.remove('editor-visible');
+
+    const fullscreenButton = byId('editorFullscreen');
+    if (fullscreenButton) fullscreenButton.textContent = fullscreen ? 'Normal' : 'Vollbild';
+    const closeButton = byId('fileCloseEditor');
+    if (closeButton) closeButton.textContent = 'Schließen';
+
+    setCompactEditorActions(panel);
+    setEditorStaticHeader(panel);
+    setEditorTextarea();
+
+    window.requestAnimationFrame(() => byId('fileEditor')?.focus({ preventScroll: true }));
+    return true;
+  };
+
+  PC.closeEditor = function closeEditor() {
+    const panel = byId('editorPanel');
+    if (!panel) return;
+    panel.classList.remove('editor-open', 'editor-fullscreen', 'winomc-pc-editor');
+    document.body.classList.remove('winomc-pc-editor-open', 'winomc-pc-editor-fullscreen', 'editor-modal-open');
+    const fullscreenButton = byId('editorFullscreen');
+    if (fullscreenButton) fullscreenButton.textContent = 'Vollbild';
+    PC.clearBlockers();
+  };
+
+  PC.toggleFullscreen = function toggleFullscreen() {
+    const panel = byId('editorPanel');
+    if (!panel) return;
+    PC.openEditor({ fullscreen: !panel.classList.contains('editor-fullscreen') });
+  };
+
+  PC.repairDesktopFiles = function repairDesktopFiles() {
+    if (!PC.syncShell() || !document.body.classList.contains('desktop-mode')) return;
+    const panel = document.querySelector('.tab-panel[data-panel="files"]');
+    if (!panel || !panel.classList.contains('desktop-open') || panel.classList.contains('desktop-minimized')) return;
+
+    panel.style.left = '12px';
+    panel.style.top = '12px';
+    panel.style.width = 'calc(100dvw - 24px)';
+    panel.style.height = 'calc(100dvh - 72px)';
+    panel.style.display = 'grid';
+    panel.style.gridTemplateRows = 'auto minmax(0, 1fr)';
+    panel.style.overflow = 'hidden';
+    panel.style.resize = 'none';
+
+    const grid = byId('fileManagerGrid');
+    if (grid) {
+      grid.classList.remove('editor-visible');
+      grid.style.display = 'grid';
+      grid.style.gridTemplateColumns = 'minmax(0, 1fr)';
+      grid.style.gridTemplateRows = 'minmax(0, 1fr)';
+      grid.style.height = '100%';
+      grid.style.minHeight = '0';
+      grid.style.maxHeight = '100%';
+      grid.style.overflow = 'hidden';
+    }
+
+    const split = byId('filesSplitHandle');
+    if (split) split.style.display = 'none';
+
+    const explorer = panel.querySelector('.file-explorer-panel');
+    if (explorer) {
+      explorer.style.display = 'flex';
+      explorer.style.flexDirection = 'column';
+      explorer.style.height = '100%';
+      explorer.style.minHeight = '0';
+      explorer.style.maxHeight = '100%';
+      explorer.style.overflow = 'hidden';
+    }
+
+    const tableWrap = panel.querySelector('.file-table-wrap');
+    if (tableWrap) {
+      tableWrap.style.flex = '1 1 auto';
+      tableWrap.style.minHeight = '360px';
+      tableWrap.style.height = 'auto';
+      tableWrap.style.maxHeight = 'none';
+      tableWrap.style.overflow = 'auto';
+      tableWrap.style.paddingBottom = '24px';
+    }
+  };
+
+  PC.repairClassicFiles = function repairClassicFiles() {
+    if (!PC.syncShell() || document.body.classList.contains('desktop-mode')) return;
+    const panel = document.querySelector('.tab-panel[data-panel="files"].active');
+    if (!panel) return;
+
+    const grid = byId('fileManagerGrid');
+    if (grid) {
+      grid.classList.remove('editor-visible');
+      grid.style.gridTemplateColumns = 'minmax(0, 1fr)';
+      grid.style.gridTemplateRows = 'minmax(0, 1fr)';
+      grid.style.overflow = 'hidden';
+    }
+
+    const split = byId('filesSplitHandle');
+    if (split) split.style.display = 'none';
+
+    const explorer = panel.querySelector('.file-explorer-panel');
+    if (explorer) {
+      explorer.style.minHeight = '0';
+      explorer.style.overflow = 'hidden';
+    }
+
+    const tableWrap = panel.querySelector('.file-table-wrap');
+    if (tableWrap) {
+      tableWrap.style.minHeight = '360px';
+      tableWrap.style.overflow = 'auto';
+    }
+  };
+
+  PC.tick = function tick() {
+    if (!PC.syncShell()) {
+      PC.restoreEditorHome();
+      return;
+    }
+    const panel = byId('editorPanel');
+    if (panel?.classList.contains('editor-open')) {
+      PC.openEditor({ fullscreen: panel.classList.contains('editor-fullscreen') });
+    }
+    PC.repairClassicFiles();
+    PC.repairDesktopFiles();
+  };
+
+  window.WinoMCPCUI = PC;
+})();
+    /* END winomc-pc-ui-161422 */
+
+    /* BEGIN winomc-mobile-ui-161422 */
+/* WinoMC Mobile UI 1.6.14.22b
+   Mobile-only behaviour. This file must not touch PC editor/window logic. */
+(function WinoMCMobileUI() {
+  const Mobile = {};
+
+  function hasFinePointer() {
+    try {
+      return Boolean(window.matchMedia && window.matchMedia('(pointer: fine)').matches);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Mobile.isActive = function isActive() {
+    const fine = hasFinePointer();
+    const touchOnly = navigator.maxTouchPoints > 0 && !fine;
+    return touchOnly || (!fine && window.innerWidth < 720);
+  };
+
+  Mobile.syncShell = function syncShell() {
+    const active = Mobile.isActive();
+    document.body.classList.toggle('winomc-mobile', active);
+    document.body.classList.toggle('winomc-pc', !active);
+    return active;
+  };
+
+  Mobile.isolateTabs = function isolateTabs() {
+    if (!Mobile.syncShell()) return;
+    document.body.classList.remove('desktop-mode', 'winomc-pc-editor-open', 'winomc-pc-editor-fullscreen', 'has-maximized-card');
+    document.querySelectorAll('.tab-panel').forEach((panel) => {
+      panel.classList.remove('desktop-open', 'desktop-minimized', 'desktop-maximized');
+    });
+    const activePanel = document.querySelector('.tab-panel.active') || document.querySelector('.tab-panel[data-panel="overview"]');
+    const active = activePanel?.dataset?.panel || 'overview';
+    document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === active));
+    document.querySelectorAll('[data-tab]').forEach((button) => button.classList.toggle('active', button.dataset.tab === active));
+    window.WinoMCPCUI?.restoreEditorHome?.();
+  };
+
+  Mobile.tick = function tick() {
+    Mobile.isolateTabs();
+  };
+
+  window.WinoMCMobileUI = Mobile;
+})();
+    /* END winomc-mobile-ui-161422 */
+
+    /* BEGIN winomc-shell-router-161422 */
+/* WinoMC shell router 1.6.14.22b
+   The router is the only bridge between strict PC and Mobile UI modules.
+   Shared application modules stay in the existing console server functions. */
+(function WinoMCShellRouter() {
+  const Router = {};
+
+  Router.isPc = function isPc() {
+    return Boolean(window.WinoMCPCUI?.isActive?.());
+  };
+
+  Router.tick = function tick() {
+    if (Router.isPc()) {
+      window.WinoMCPCUI?.tick?.();
+    } else {
+      window.WinoMCMobileUI?.tick?.();
+    }
+  };
+
+  const originalOpenEditorOverlay = openEditorOverlay;
+  const originalCloseEditorOverlay = closeEditorOverlay;
+  const originalToggleEditorFullscreen = toggleEditorFullscreen;
+  const originalActivateTab = activateTab;
+  const originalOpenDesktopWindow = openDesktopWindow;
+
+  openEditorOverlay = function routedOpenEditorOverlay() {
+    if (Router.isPc()) return window.WinoMCPCUI.openEditor({ fullscreen: false });
+    window.WinoMCPCUI?.restoreEditorHome?.();
+    return originalOpenEditorOverlay.apply(this, arguments);
+  };
+
+  closeEditorOverlay = function routedCloseEditorOverlay() {
+    if (Router.isPc()) return window.WinoMCPCUI.closeEditor();
+    return originalCloseEditorOverlay.apply(this, arguments);
+  };
+
+  toggleEditorFullscreen = function routedToggleEditorFullscreen(event) {
+    if (Router.isPc()) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      return window.WinoMCPCUI.toggleFullscreen();
+    }
+    return originalToggleEditorFullscreen.apply(this, arguments);
+  };
+
+  activateTab = function routedActivateTab(tab) {
+    const result = originalActivateTab.apply(this, arguments);
+    window.requestAnimationFrame(Router.tick);
+    return result;
+  };
+
+  openDesktopWindow = function routedOpenDesktopWindow(id) {
+    const result = originalOpenDesktopWindow.apply(this, arguments);
+    window.requestAnimationFrame(Router.tick);
+    return result;
+  };
+
+  document.addEventListener('click', (event) => {
+    if (!Router.isPc()) return;
+    if (event.target.closest('#editorFullscreen')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      window.WinoMCPCUI.toggleFullscreen();
+      return;
+    }
+    if (event.target.closest('#fileCloseEditor')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (typeof clearEditor === 'function') clearEditor();
+      else window.WinoMCPCUI.closeEditor();
+    }
+  }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (!Router.isPc()) return;
+    if (event.key === 'Escape' && document.getElementById('editorPanel')?.classList.contains('editor-open')) {
+      event.preventDefault();
+      if (typeof clearEditor === 'function') clearEditor();
+      else window.WinoMCPCUI.closeEditor();
+    }
+  }, true);
+
+  const observer = new MutationObserver(() => window.requestAnimationFrame(Router.tick));
+  observer.observe(document.body, { attributes: true, childList: true, subtree: false, attributeFilter: ['class'] });
+
+  window.addEventListener('resize', () => window.requestAnimationFrame(Router.tick), { passive: true });
+  document.addEventListener('click', () => window.requestAnimationFrame(Router.tick), true);
+
+  window.WinoMCShellRouter = Router;
+  Router.tick();
+  window.setTimeout(Router.tick, 100);
+  window.setTimeout(Router.tick, 350);
+})();
+    /* END winomc-shell-router-161422 */
 
 </script>
 </body>
@@ -9153,7 +9844,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCConsole/1.6.14.13"
+    server_version = "WinoMCConsole/1.6.14.22"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")

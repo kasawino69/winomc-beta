@@ -1,4 +1,4 @@
-/* WinoMC PC UI 1.6.14.21b
+/* WinoMC PC UI 1.6.14.22b
    PC-only layout. This file must never contain mobile rules.
    Shared modules remain the existing file/API/console logic in winomc-console-server. */
 
@@ -132,6 +132,30 @@ body.winomc-pc #editorPanel.winomc-pc-editor #fileEditor {
   max-height: none !important;
   display: block !important;
   resize: none !important;
+  overflow: auto !important;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active #fileManagerGrid,
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active #fileManagerGrid.editor-visible {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  min-height: clamp(520px, 72dvh, 900px) !important;
+  overflow: hidden !important;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active #filesSplitHandle,
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active #editorPanel:not(.winomc-pc-editor) {
+  display: none !important;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active .file-explorer-panel {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active .file-table-wrap {
+  min-height: 360px !important;
   overflow: auto !important;
 }
 
