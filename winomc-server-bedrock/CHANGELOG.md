@@ -5,6 +5,19 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.14.19b
+
+* PC-Erkennung läuft nicht mehr über @media (min-width: 1051px), weil Home-Assistant-Ingress auf PC oft schmale Iframes erzeugt.
+* Neue Trennung über Eingabegerät/Browser:
+* PC: winomc-pc-shell
+* Mobile: winomc-mobile-shell
+* PC-Editor wird per Runtime hart als großes Vordergrundfenster gesetzt.
+* Alte Blur-/Modal-/Card-Overlays werden beim PC-Editor aktiv entfernt.
+* Editor-Größe wird zusätzlich per Inline-Styles stabilisiert, damit alte CSS-Regeln ihn nicht wieder klein/rechts anordnen.
+* Desktop-Dateiexplorer wird im Desktop-Modus auf eine große nutzbare Fensterfläche gezwungen.
+* Datei-Grid im Desktop-Modus bleibt einspaltig; versteckter Editor/Splitter reserviert keinen Platz mehr.
+* Version steht auf 1.6.14.19b.
+
 ### 1.6.14.18b
 
 * Mobile- und PC-UI-Regeln sauber getrennt, damit Änderungen am PC die Mobile-Ansicht nicht mehr beeinflussen.
