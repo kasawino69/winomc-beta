@@ -5,6 +5,17 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.14.20b
+
+* PC-Editor weiter stabilisiert: normales Öffnen nutzt jetzt ein zentriertes, großes Arbeitsfenster statt ein breakpoint-abhängiges Seitenfenster.
+* PC-Editor ist nicht mehr von der Home-Assistant-Ingress-Iframe-Breite abhängig.
+* PC-Editor-Größe wird beim Öffnen, bei Fenstergrößenänderung und bei alten Editor-Zuständen laufend stabilisiert.
+* Editor-Aktionsleiste wird auf PC wieder als kompakte Button-Zeile dargestellt und nicht mehr als große vertikale Mobile-Schaltflächen.
+* Editor-Vollbild bleibt ein eigener Vollbildzustand innerhalb des WinoMC-Iframes.
+* Alte Blur-, Modal- und Card-Maximize-Zustände werden beim PC-Editor entfernt.
+* Desktop-Dateiexplorer bleibt weiterhin auf eine große, einspaltige Fensterfläche mit intern scrollbarer Dateiliste gehärtet.
+* Version gesetzt auf `WinoMCConsole/1.6.14.20`.
+
 ### 1.6.14.19b
 
 * PC-Erkennung läuft nicht mehr über @media (min-width: 1051px), weil Home-Assistant-Ingress auf PC oft schmale Iframes erzeugt.
