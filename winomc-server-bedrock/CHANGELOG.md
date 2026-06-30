@@ -5,6 +5,16 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.14.16b
+
+* PC-UI-Zustände getrennt: Card-Maximize, Editor-Vollbild und Desktop-Fenster-Maximize verwenden nicht mehr dieselbe Overlay-/Blur-Logik.
+* Editor: Vollbild entfernt Card-Maximize-Zustände und öffnet als eigener Vordergrundzustand ohne Blur-Overlay.
+* Editor: normal geöffnete Dateien bleiben als Editorbereich im Dateimanager statt als falsches globales Overlay zu erscheinen.
+* Desktop-Modus: Dateifenster öffnet wieder mit brauchbarer Standardgröße und korrigiert alte gespeicherte zu kleine Dateifenster.
+* Desktop-Modus: Explorer-Liste nutzt die verfügbare Fensterhöhe und bleibt intern scrollbar.
+* Klassische PC-Ansicht: aktive Dashboard-Kacheln erhalten eine eigene Scrollregion, damit untere Kacheln erreichbar bleiben.
+* Version gesetzt auf WinoMCConsole/1.6.14.16.
+
 ### 1.6.14.15b
 
 * Klassische PC-Ansicht: aktive Kacheln im persönlichen Dashboard bleiben auch bei vielen Kacheln scrollbar erreichbar.
