@@ -1,10 +1,17 @@
 # Changelog
 
+# 2.0.0.5b
+
+- Spielerrechte schreiben direkt nach allowlist.json und permissions.json.
+- OP und Visitor brauchen eine bekannte XUID; WinoMC sucht sie aus Optionen, Allowlist und Logs.
+- Erststart: Profile laden zeigt die Profile wieder vollständig an.
+- Mobile, PC und Desktop-Modus erhalten klar getrennte Mode-Klassen und Scope-Regeln.
+
 ### 2.0.0.4b
 
 - Player rights are now kept as persistent WinoMC state.
 - The Bedrock files are written from that state when player id data is available.
-- 
+
 ### 2.0.0.3b
 
 - Diagnose repairs start directly after confirmation.
