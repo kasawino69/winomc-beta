@@ -5,6 +5,17 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.14.22b
+
+* Ursache dokumentiert und behoben: alte UI-Fixes wurden zwar teilweise ausgelagert, aber der Patch-Mechanismus entfernte nur die aktuellen 1.6.14.21b-IDs und konnte beim nächsten Lauf alte oder aktuelle Injektionen parallel stehen lassen.
+* Patch-Mechanismus idempotent erweitert: alte 1.6.14.21b- und neue 1.6.14.22b-Style-/Script-Blöcke werden vor jeder Neu-Injektion entfernt und danach zuverlässig neu eingefügt.
+* Version gesetzt auf `WinoMCConsole/1.6.14.22`.
+* PC- und Mobile-Shell bleiben strikt getrennt über `winomc-pc` und `winomc-mobile`.
+* PC-Dateimanager in der klassischen Ansicht nutzt jetzt ebenfalls ein einspaltiges Explorer-Layout, damit der ausgelagerte PC-Editor nicht mehr über Grid-/Splitter-Spalten klein gerechnet wird.
+* PC-Workbench-Dateifenster bleibt ein großes, intern scrollbar nutzbares Fenster ohne versteckte Editor-/Splitter-Platzhalter.
+* PC-Router beobachtet nur noch relevante Body-Klassen statt alle Style-Änderungen im gesamten DOM, damit die Reparaturlogik keine selbst ausgelösten Mutation-Loops erzeugt.
+* Mobile-Tab-Isolation bleibt eigenständig und blendet den Dateiexplorer außerhalb des aktiven Dateien-Menüs aus.
+
 ### 1.6.14.21b
 
 * PC- und Mobile-UI strikt getrennt: eigene CSS-Dateien, eigene JavaScript-Module und ein kleiner Shell-Router als einzige Brücke.

@@ -1,4 +1,4 @@
-/* WinoMC Mobile UI 1.6.14.21b
+/* WinoMC Mobile UI 1.6.14.22b
    Mobile-only behaviour. This file must not touch PC editor/window logic. */
 (function WinoMCMobileUI() {
   const Mobile = {};
