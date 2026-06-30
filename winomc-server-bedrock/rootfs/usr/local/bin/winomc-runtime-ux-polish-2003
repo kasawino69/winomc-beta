@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+from pathlib import Path
+
+p = Path('/usr/local/bin/winomc-console-server')
+t = p.read_text(encoding='utf-8')
+o = t
+
+t = t.replace('2.0.0.2b', '2.0.0.3b')
+t = t.replace("{ action: 'repair_all_safe', mode: 'safe', confirm: true }", "{ action: 'repair_all_safe', mode: 'expert', confirm: true }")
+t = t.replace("{ action: t.dataset.diagnosticsRepair, mode: 'safe', confirm: true }", "{ action: t.dataset.diagnosticsRepair, mode: 'expert', confirm: true }")
+t = t.replace("alert(result.message || 'Reparatur abgeschlossen.');", "appendLine('[Diagnose] ' + (result.message || 'Reparatur abgeschlossen.'), 'info');")
+t = t.replace("frameworkCard('Keine Packs','-', 'Installierte Packs erscheinen hier.', 'Warnung')", "frameworkCard('Keine Packs','0', 'Keine lokalen Nutzer-Packs installiert.', 'OK')")
+
+old = "data.checks.map(c=>frameworkCard(c.title,c.status,c.message,c.status)).join('') + '<div class=\"tile\"><button class=\"primary\" id=\"updatesPrepare2\" type=\"button\">Update vorbereiten</button><p>Erstellt Backup und markiert Update-Bereitschaft. Danach Add-on neu starten.</p></div>'"
+new = "data.checks.map(c=>frameworkCard(c.title,c.status,c.message,c.status)).join('') + '<article class=\"tile\"><div class=\"tile-title\">Update-Ablauf</div><div class=\"tile-desc\">Kein Extra-Vorbereitungsschritt: Bei aktivem BDS_AUTO_UPDATE oder gesetzter VERSION reicht ein Add-on-Neustart. Erstelle vorher bei Bedarf ein Backup.</div></article>'"
+t = t.replace(old, new)
+
+xuid_helper = r'''
+
+def known_player_xuid_2003(name):
+    wanted = re.sub(r"\s+", " ", str(name or "").strip()).lower()
+    if not wanted:
+        return ""
+    known = {}
+    def add(n, x):
+        n = str(n or "").strip()
+        x = str(x or "").strip()
+        if n and re.match(r"^[0-9]{5,32}$", x):
+            known[re.sub(r"\s+", " ", n).lower()] = x
+    for raw in re.split(r"[,;\n]+", os.environ.get("ALLOW_LIST_USERS", "") or ""):
+        if ":" in raw:
+            n, x = raw.split(":", 1)
+            add(n, x)
+    allow, _ = json_file(os.path.join(DATA_DIR, "allowlist.json"), [])
+    if isinstance(allow, list):
+        for item in allow:
+            if isinstance(item, dict):
+                add(item.get("name"), item.get("xuid"))
+    patterns = (re.compile(r"Player connected:\s*([^,\n]+),\s*xuid:\s*([0-9]{5,32})", re.I), re.compile(r"\bname[:=\s]+([^,\n]+).*?\bxuid[:=\s]+([0-9]{5,32})", re.I))
+    for log_path in (runtime_log_path(), LOG_PATH):
+        try:
+            if not os.path.exists(log_path):
+                continue
+            with open(log_path, "r", encoding="utf-8", errors="replace") as handle:
+                for line in handle.readlines()[-2500:]:
+                    for pat in patterns:
+                        m = pat.search(line)
+                        if m:
+                            add(m.group(1), m.group(2))
+        except Exception:
+            pass
+    return known.get(wanted) or known.get(wanted.replace(" ", ""), "")
+'''
+if 'known_player_xuid_2003' not in t:
+    t = t.replace('\n\ndef normalize_player_entry(item):', xuid_helper + '\n\ndef normalize_player_entry(item):', 1)
+
+t = t.replace('    xuid = str(item.get("xuid") or "").strip()\n    if not name and not xuid:', '    xuid = str(item.get("xuid") or "").strip()\n    if name and not xuid:\n        xuid = known_player_xuid_2003(name)\n    if not name and not xuid:', 1)
+
+old_perm = '''        if player["xuid"]:\n            permissions.append({"permission": player["role"], "xuid": player["xuid"]})\n'''
+new_perm = '''        if player["xuid"] and player["role"] != "member":\n            permissions.append({"permission": player["role"], "xuid": player["xuid"]})\n        elif player["role"] != "member":\n            raise ValueError("Operator/Visitor requires XUID. Let the player join once or add Name:XUID in ALLOW_LIST_USERS.")\n'''
+t = t.replace(old_perm, new_perm)
+
+js = r'''
+    /* v2.0.0.3b feedback polish */
+    (() => {
+      const setBox = (id, message) => { const el = document.getElementById(id); if (el) { el.className = 'info'; el.textContent = message; } };
+      document.addEventListener('click', event => {
+        const b = event.target.closest('button');
+        if (!b) return;
+        if (b.id === 'diagnosticsRun') setBox('diagnosticsSummary', 'Diagnose läuft… Dateien, Ordner und Serverstatus werden geprüft.');
+        if (b.id === 'updatesCheck') { const e = document.getElementById('updatesSummary'); if (e) e.innerHTML = '<article class="tile"><div class="tile-title">Update-Check läuft…</div><div class="tile-desc">Backup, Speicherplatz, Zielversion und Schreibrechte werden geprüft.</div></article>'; }
+        if (b.id === 'profilesLoad') { const e = document.getElementById('profilesGrid'); if (e) e.innerHTML = '<article class="tile"><div class="tile-title">Profile werden geladen…</div><div class="tile-desc">WinoMC liest die verfügbaren Erststart-Profile.</div></article>'; }
+        if (b.id === 'updatesPrepare2') { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); const e = document.getElementById('updatesSummary'); if (e) e.innerHTML += '<article class="tile"><div class="tile-title">Nicht nötig</div><div class="tile-desc">Dieser Schritt wurde entfernt. Ein Add-on-Neustart reicht bei Auto-Update oder gesetzter VERSION.</div></article>'; }
+      }, true);
+    })();
+'''
+if 'v2.0.0.3b feedback polish' not in t:
+    t = t.replace('</script>', js + '\n</script>', 1)
+
+if t != o:
+    p.write_text(t, encoding='utf-8')
+    print('WinoMC 2.0.0.3b polish applied')
+else:
+    print('WinoMC 2.0.0.3b polish already present')

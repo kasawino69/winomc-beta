@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: "[BETA] WinoMC 2.0 Framework für einen sicheren Bedrock Server in Home Assistant"
-version: 2.0.0.2b
+version: 2.0.0.3b
 slug: winomc-beta
 init: false
 boot: auto

@@ -33,6 +33,7 @@ RUN apt-get update \
         apt-get install -y --no-install-recommends box64; \
       fi \
     && python3 /usr/local/bin/winomc-runtime-ux-patch \
+    && python3 /usr/local/bin/winomc-runtime-ux-polish-2003 \
     && gcc -shared -fPIC -O2 -Wall -Wextra \
         -o /opt/winomc-bds-ipv6fix.so \
         /usr/local/src/winomc-bds-ipv6fix.c \
@@ -43,6 +44,7 @@ RUN apt-get update \
         /usr/local/bin/winomc-bedrock-entrypoint \
         /usr/local/bin/winomc-console-server \
         /usr/local/bin/winomc-runtime-ux-patch \
+        /usr/local/bin/winomc-runtime-ux-polish-2003 \
         /usr/local/bin/winomc-host-optimized-exec \
         /usr/local/bin/winomc-native-start \
         /usr/local/bin/winomc-native-content-import \
