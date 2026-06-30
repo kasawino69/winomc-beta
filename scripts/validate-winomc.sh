@@ -30,7 +30,8 @@ required_symbols = [
     'def download_external_pack', 'def check_import_url', 'def install_import_url',
     'def atomic_write_json_root', 'def restore_backup', 'def build_restore_plan', 'def analyze_world_safety',
     'def build_repair_plan', 'def build_import_plan', 'def risk_level', 'def requires_confirmation',
-    'def assert_plan_confirmed', 'QUARANTINE_DIR', 'NoRedirectHandler', 'def activate_pack', 'def deactivate_pack',
+    'def assert_plan_confirmed', 'QUARANTINE_DIR', 'def quarantine_file_path', 'def build_validated_download_target',
+    'http.client.HTTPSConnection', 'def activate_pack', 'def deactivate_pack',
     'def save_players', 'def prepare_update', 'def prepare_profile', 'winomc-mobile-assistant'
 ]
 for symbol in required_symbols:
@@ -65,9 +66,17 @@ for route in protected_routes:
     block = source[idx:idx+1400]
     if 'require_web_write_allowed' not in block:
         raise SystemExit(f'route is not guarded by web protection: {route}')
-for snippet in ['.jar', 'Java-Mod', 'ip.is_private', 'parsed.scheme != "https"', 'CurseForge-Projektseiten', 'MAX_IMPORT_REDIRECTS', 'zip_member_is_symlink', 'duplicate_uuids', 'requires_confirmation', 'green', 'yellow', 'red']:
+for snippet in ['.jar', 'Java-Mod', 'ip.is_private', 'parsed.scheme != "https"', 'CurseForge-Projektseiten', 'MAX_IMPORT_REDIRECTS', 'zip_member_is_symlink', 'duplicate_uuids', 'requires_confirmation', 'green', 'yellow', 'red', 'quarantine_file_path', 'build_import_plan_from_quarantine']:
     if snippet not in source:
         raise SystemExit(f'URL import safety snippet missing: {snippet}')
+
+for forbidden in ['urlopen', 'opener.open', 'Request(current', 'Request(info["url"]', 'source["path"]', 'HTTPRedirectHandler', 'build_opener']:
+    if forbidden in source:
+        raise SystemExit(f'CodeQL URL/path forbidden pattern remains: {forbidden}')
+if 'http.client.HTTPSConnection' not in source:
+    raise SystemExit('URL import must use CodeQL-friendly HTTPSConnection flow')
+if 'verify_internal_path(QUARANTINE_DIR' not in source or 'quarantine_file_path' not in source:
+    raise SystemExit('quarantine path validation helper missing')
 addon_readme = (root/'winomc-server-bedrock/README.md').read_text()
 for snippet in ['URL-Import', 'CurseForge', 'Java-Mods', 'Mobile Befehlshilfe', 'serverseitig persistent', 'Safety Planner', 'Risikoampel', 'Quarantäne']:
     if snippet not in addon_readme:

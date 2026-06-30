@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import base64
 import hashlib
+import http.client
 import ipaddress
 import json
 import mimetypes
@@ -18,8 +19,6 @@ import zipfile
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse, urljoin
-from urllib.error import HTTPError
-from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("WINOMC_CONSOLE_PORT", "8099"))
@@ -10866,16 +10865,12 @@ JAVA_MOD_MARKERS = {"mods.toml", "fabric.mod.json", "quilt.mod.json", "meta-inf/
 HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
 
 
-class NoRedirectHandler(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
 
 def quarantine_dir_path():
     return makedirs_internal(QUARANTINE_DIR, QUARANTINE_DIR, exist_ok=True)
 
 
-def validate_external_download_url(url):
+def build_validated_download_target(url):
     parsed = urlparse(str(url or "").strip())
     if parsed.scheme != "https":
         raise ValueError("URL-Import erlaubt nur https:// Direktdownloads.")
@@ -10884,14 +10879,19 @@ def validate_external_download_url(url):
     host = parsed.hostname.strip().lower()
     if host in ("localhost", "localhost.localdomain"):
         raise ValueError("Lokale Hosts sind für URL-Import blockiert.")
+    port = int(parsed.port or 443)
+    if port != 443:
+        raise ValueError("URL-Import erlaubt nur den sicheren HTTPS-Port 443.")
     try:
-        infos = socket.getaddrinfo(host, parsed.port or 443, proto=socket.IPPROTO_TCP)
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
     except socket.gaierror as exc:
         raise ValueError("Host konnte nicht aufgelöst werden: %s" % exc)
+    resolved_ip = None
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
             raise ValueError("URL-Import blockiert lokale/private Zieladressen.")
+        resolved_ip = str(ip)
     name = os.path.basename(unquote(parsed.path or ""))
     ext = file_extension(name)
     if ext in REJECTED_IMPORT_EXTENSIONS:
@@ -10900,33 +10900,48 @@ def validate_external_download_url(url):
         if "curseforge" in host:
             raise ValueError("CurseForge-Projektseiten werden nicht automatisch installiert. WinoMC unterstützt direkte Bedrock-Dateien, nicht bestimmte Webseiten. Bitte direkten Download kopieren; Java-Mods (.jar) werden nicht unterstützt.")
         raise ValueError("Bitte einen direkten Bedrock-Dateidownload mit .mcpack, .mcaddon, .mcworld, .mctemplate oder geeigneter .zip verwenden.")
-    return {"ok": True, "url": parsed.geturl(), "filename": safe_download_name(name, "winomc-import" + ext), "extension": ext, "host": host}
+    path = parsed.path or "/"
+    if parsed.query:
+        path += "?" + parsed.query
+    if urlparse(path).scheme or urlparse(path).netloc:
+        raise ValueError("Download-Pfad darf keine eigene URL enthalten.")
+    return {"ok": True, "scheme": "https", "host": host, "port": port, "path": path, "filename": safe_download_name(name, "winomc-import" + ext), "extension": ext, "resolved_ip": resolved_ip}
+
+
+def validate_external_download_url(url):
+    return build_validated_download_target(url)
+
+
+def download_target_public_url(target):
+    # Only used as a redirect base; never passed to an HTTP sink.
+    return "https://%s%s" % (target["host"], target["path"])
 
 
 def open_external_download(url):
-    info = validate_external_download_url(url)
-    opener = build_opener(NoRedirectHandler)
-    current = info["url"]
+    target = build_validated_download_target(url)
     redirects = []
     for _ in range(MAX_IMPORT_REDIRECTS + 1):
-        request = Request(current, headers={"User-Agent": "WinoMC/2.0 URL Import", "Accept": "application/octet-stream, application/zip, */*"})
+        conn = http.client.HTTPSConnection(target["host"], target["port"], timeout=20)
         try:
-            response = opener.open(request, timeout=20)
-            final_info = validate_external_download_url(current)
-            return response, final_info, redirects
-        except HTTPError as exc:
-            if exc.code in (301, 302, 303, 307, 308):
-                location = exc.headers.get("Location")
+            conn.request("GET", target["path"], headers={"User-Agent": "WinoMC/2.0 URL Import", "Accept": "application/octet-stream, application/zip, */*"})
+            response = conn.getresponse()
+            if response.status in (301, 302, 303, 307, 308):
+                location = response.getheader("Location")
+                response.close(); conn.close()
                 if not location:
                     raise ValueError("Redirect ohne Location blockiert.")
-                next_url = urljoin(current, location)
-                validate_external_download_url(next_url)
-                redirects.append(next_url)
-                current = next_url
+                next_url = urljoin(download_target_public_url(target), location)
+                target = build_validated_download_target(next_url)
+                redirects.append({"host": target["host"], "path": target["path"], "resolved_ip": target.get("resolved_ip")})
                 continue
+            return {"response": response, "connection": conn, "target": target, "redirects": redirects}
+        except Exception:
+            try:
+                conn.close()
+            except Exception as exc:
+                log_warning("URL-Import-Verbindung konnte nicht geschlossen werden: %s" % exc)
             raise
     raise ValueError("Zu viele Redirects beim URL-Import.")
-
 
 def zip_member_is_symlink(member):
     return stat.S_ISLNK((getattr(member, "external_attr", 0) >> 16) & 0o170000)
@@ -10969,6 +10984,7 @@ def safe_zip_members(archive_path):
 
 
 def classify_bedrock_archive(archive_path, ext):
+    archive_path = verify_internal_path(QUARANTINE_DIR, archive_path, require_exists=True, allow_missing=False).path
     manifests = safe_zip_members(archive_path)
     if ext in (".mcworld", ".mctemplate"):
         return {"supported": True, "kind": "world" if ext == ".mcworld" else "template", "manifests": manifests, "packs": [], "risk": "yellow", "warnings": ["Welt/Template wird nur als neues Ziel importiert, niemals still überschrieben."], "message": "Bedrock-Welt/Template erkannt."}
@@ -11011,9 +11027,19 @@ def existing_pack_uuid_index():
     return index
 
 
-def build_import_plan(source):
-    archive_path = source["path"]
-    classification = classify_bedrock_archive(archive_path, source["extension"])
+def quarantine_file_path(quarantine_id):
+    safe_id = safe_download_name(quarantine_id, "winomc-import")
+    base = quarantine_dir_path()
+    path = assert_safe_internal_path(base, os.path.join(base, safe_id), require_exists=True)
+    if not os.path.isfile(path):
+        raise FileNotFoundError("Quarantäne-Datei nicht gefunden.")
+    return path
+
+
+def build_import_plan_from_quarantine(quarantine_id, filename=None, extension=None):
+    archive_path = quarantine_file_path(quarantine_id)
+    extension = extension or file_extension(filename or quarantine_id)
+    classification = classify_bedrock_archive(archive_path, extension)
     warnings = list(classification.get("warnings", []))
     changes = []
     backup_plan = []
@@ -11038,22 +11064,30 @@ def build_import_plan(source):
     if free and free < size * 2:
         warnings.append("Wenig freier Speicher: Import benötigt grob mindestens die doppelte Downloadgröße.")
         risk = risk_level(risk, "red")
-    return {"ok": True, "kind": "import", "risk": risk, "summary": "Importplan für %s" % source.get("filename"), "changes": changes, "warnings": warnings, "backup_plan": backup_plan or ["Rollback/Cleanup bei Fehler", "Sicherung vor Aktivierung von World-Pack-Dateien"], "requires_confirmation": risk in ("yellow", "red"), "classification": classification, "duplicate_uuids": duplicate_uuids, "source": {"filename": source.get("filename"), "size": size}}
+    return {"ok": True, "kind": "import", "risk": risk, "summary": "Importplan für %s" % (filename or quarantine_id), "changes": changes, "warnings": warnings, "backup_plan": backup_plan or ["Rollback/Cleanup bei Fehler", "Sicherung vor Aktivierung von World-Pack-Dateien"], "requires_confirmation": risk in ("yellow", "red"), "classification": classification, "duplicate_uuids": duplicate_uuids, "source": {"filename": filename or quarantine_id, "quarantine_id": safe_download_name(quarantine_id, "winomc-import"), "size": size}}
+
+
+def build_import_plan(source):
+    return build_import_plan_from_quarantine(source.get("quarantine_id", ""), source.get("filename"), source.get("extension"))
 
 
 def download_external_pack(url):
-    info = validate_external_download_url(url)
-    write_import_status("downloading", "Download startet in Quarantäne.", {"filename": info["filename"]})
-    response, info, redirects = open_external_download(info["url"])
+    target_info = validate_external_download_url(url)
+    write_import_status("downloading", "Download startet in Quarantäne.", {"filename": target_info["filename"]})
+    opened = open_external_download(url)
+    response = opened["response"]
+    connection = opened["connection"]
+    final_target = opened["target"]
+    redirects = opened["redirects"]
     try:
-        content_type = (response.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        content_type = (response.getheader("Content-Type") or "").split(";", 1)[0].strip().lower()
         if content_type in HTML_CONTENT_TYPES:
             raise ValueError("Download liefert HTML statt einer Bedrock-Datei.")
-        content_length = response.headers.get("Content-Length")
+        content_length = response.getheader("Content-Length")
         if content_length and int(content_length) > MAX_UPLOAD_BYTES:
             raise ValueError("Download ist zu groß.")
         quarantine = quarantine_dir_path()
-        filename = safe_download_name("%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), info["filename"]), "winomc-import")
+        filename = safe_download_name("%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), final_target["filename"]), "winomc-import")
         target = assert_safe_internal_path(quarantine, os.path.join(quarantine, filename))
         total = 0
         with open_safe_internal(quarantine, target, "wb") as handle:
@@ -11068,9 +11102,10 @@ def download_external_pack(url):
     finally:
         try:
             response.close()
+            connection.close()
         except Exception as exc:
             log_warning("URL-Import-Response konnte nicht geschlossen werden: %s" % exc)
-    return {"path": target, "root": "quarantine", "rel_path": normalize_rel_path("/" + filename), "filename": filename, "extension": file_extension(filename), "size": total, "redirects": redirects, "content_type": content_type}
+    return {"quarantine_id": filename, "root": "quarantine", "rel_path": normalize_rel_path("/" + filename), "filename": filename, "extension": file_extension(filename), "size": total, "redirects": redirects, "content_type": content_type}
 
 
 def check_import_url(url):
@@ -11085,7 +11120,7 @@ def install_import_url(url, activate=False, confirm=False):
     try:
         downloaded = download_external_pack(url)
         write_import_status("validating", "Datei wird in Quarantäne geprüft.", {"filename": downloaded["filename"]})
-        plan = build_import_plan(downloaded)
+        plan = build_import_plan_from_quarantine(downloaded["quarantine_id"], downloaded["filename"], downloaded["extension"])
         if activate:
             plan["risk"] = risk_level(plan["risk"], "yellow")
             plan["requires_confirmation"] = True
@@ -11103,7 +11138,7 @@ def install_import_url(url, activate=False, confirm=False):
             if path_exists_root(target_root, dest):
                 raise FileExistsError("Ziel existiert bereits. WinoMC überschreibt Welten/Templates nicht still.")
             makedirs_root(target_root, dest, exist_ok=False); created.append((target_root, dest))
-            with zipfile.ZipFile(downloaded["path"], "r") as archive:
+            with zipfile.ZipFile(quarantine_file_path(downloaded["quarantine_id"]), "r") as archive:
                 for member in archive.infolist():
                     raw = str(member.filename or "").replace("\\", "/")
                     if not raw or raw.startswith("/") or raw.startswith("../") or "/../" in raw or zip_member_is_symlink(member):
@@ -11117,7 +11152,7 @@ def install_import_url(url, activate=False, confirm=False):
                         shutil.copyfileobj(source, out, length=1024 * 1024)
             installed.append({"type": classification["kind"], "name": base_name, "active": False})
         else:
-            with zipfile.ZipFile(downloaded["path"], "r") as archive:
+            with zipfile.ZipFile(quarantine_file_path(downloaded["quarantine_id"]), "r") as archive:
                 for pack in classification["packs"]:
                     pack_type = pack["type"]
                     root_key, base_dir = pack_base_dir(pack_type)
