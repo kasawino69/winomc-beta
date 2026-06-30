@@ -43,6 +43,11 @@ FILE_BACKUP_DIR = os.environ.get("WINOMC_FILE_BACKUP_DIR", os.path.join(DATA_DIR
 TRASH_DIR = os.environ.get("WINOMC_TRASH_DIR", os.path.join(DATA_DIR, ".winomc", "trash"))
 TRASH_RETENTION_DAYS = int(os.environ.get("WINOMC_TRASH_RETENTION_DAYS", "7"))
 CONSOLE_SETTINGS_FILE = os.environ.get("WINOMC_CONSOLE_SETTINGS_FILE", os.path.join(DATA_DIR, ".winomc", "web_console_settings.json"))
+WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.0.0")
+BACKUP_DIR = os.environ.get("WINOMC_BACKUP_DIR", os.path.join(DATA_DIR, "backups"))
+BACKUP_KEEP = int(os.environ.get("WINOMC_BACKUP_KEEP", os.environ.get("PACKAGE_BACKUP_KEEP", "5")))
+SERVER_DIR = os.environ.get("WINOMC_SERVER_DIR", DATA_DIR)
+SERVER_PROPERTIES_PATH = os.environ.get("WINOMC_SERVER_PROPERTIES", os.path.join(DATA_DIR, "server.properties"))
 
 MAX_TEXT_FILE_BYTES = int(os.environ.get("WINOMC_FILE_EDITOR_MAX_BYTES", str(2 * 1024 * 1024)))
 MAX_UPLOAD_BYTES = int(os.environ.get("WINOMC_FILE_UPLOAD_MAX_BYTES", str(512 * 1024 * 1024)))
@@ -57,6 +62,7 @@ FILE_ROOTS = {
     "world_templates": {"label": "World Templates", "path": WORLD_TEMPLATES_DIR, "description": "Weltvorlagen"},
     "import": {"label": "Import", "path": IMPORT_DIR, "description": "Importordner unter /share/winomc/import"},
     "export": {"label": "Export", "path": EXPORT_DIR, "description": "Exportordner unter /share/winomc/export"},
+    "backups": {"label": "Backups", "path": BACKUP_DIR, "description": "Persistente WinoMC-Backups unter /config/backups"},
     "trash": {"label": "Papierkorb", "path": TRASH_DIR, "description": "Gelöschte Dateien, automatische Bereinigung nach einigen Tagen"},
 }
 
@@ -71,7 +77,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Adaptive Workbench 1.6.14.22</title>
+  <title>WinoMC 2.0.0 Framework Workbench</title>
   <style>
     :root {
       color-scheme: dark;
@@ -275,7 +281,7 @@ INDEX_HTML = r"""<!doctype html>
     .console-inner { padding-top: 16px; }
     .mobile-quickbar { display: none; }
 
-    /* WinoMC Desktop Workbench */
+    /* WinoMC 2.0 Framework Workbench */
     body.desktop-mode {
       padding-bottom: 0;
       overflow: hidden;
@@ -4767,7 +4773,7 @@ body.winomc-mobile .editor-panel.editor-open {
 </head>
 <body>
   <header>
-    <h1 id="appTitle">WinoMC Desktop Workbench</h1>
+    <h1 id="appTitle">WinoMC 2.0 Framework Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
   </header>
 
@@ -4781,6 +4787,11 @@ body.winomc-mobile .editor-panel.editor-open {
       <button class="tab-button" data-tab="server" aria-label="Server"><span class="icon">🌍</span> Server</button>
       <button class="tab-button" data-tab="packs" aria-label="Packs & Add-ons"><span class="icon">📦</span> Packs & Add-ons</button>
       <button class="tab-button" data-tab="backups" aria-label="Backups"><span class="icon">💾</span> Backups</button>
+      <button class="tab-button" data-tab="diagnostics" aria-label="Diagnose"><span class="icon">🩺</span> Diagnose</button>
+      <button class="tab-button" data-tab="players" aria-label="Spielerrechte"><span class="icon">🛡️</span> Spielerrechte</button>
+      <button class="tab-button" data-tab="transfer" aria-label="Import Export"><span class="icon">🔁</span> Import / Export</button>
+      <button class="tab-button" data-tab="updates" aria-label="Updates"><span class="icon">⬆️</span> Updates</button>
+      <button class="tab-button" data-tab="firststart" aria-label="Erststart"><span class="icon">✨</span> Erststart</button>
       <button class="tab-button" data-tab="network" aria-label="Netzwerk"><span class="icon">🛜</span> Netzwerk</button>
       <button class="tab-button" data-tab="files" aria-label="Dateien"><span class="icon">📁</span> Dateien</button>
       <button class="tab-button" data-tab="expert" aria-label="Experten"><span class="icon">🧰</span> Experten</button>
@@ -4799,6 +4810,8 @@ body.winomc-mobile .editor-panel.editor-open {
           <button type="button" class="desktop-icon" data-open-window="server"><span class="desktop-icon-symbol">🌍</span><span class="desktop-icon-label">Server</span></button>
           <button type="button" class="desktop-icon" data-open-window="packs"><span class="desktop-icon-symbol">📦</span><span class="desktop-icon-label">Packs</span></button>
           <button type="button" class="desktop-icon" data-open-window="network"><span class="desktop-icon-symbol">🛜</span><span class="desktop-icon-label">Netzwerk</span></button>
+          <button type="button" class="desktop-icon" data-open-window="diagnostics"><span class="desktop-icon-symbol">🩺</span><span class="desktop-icon-label">Diagnose</span></button>
+          <button type="button" class="desktop-icon" data-open-window="players"><span class="desktop-icon-symbol">🛡️</span><span class="desktop-icon-label">Rechte</span></button>
           <button type="button" class="desktop-icon" data-open-window="dashboard"><span class="desktop-icon-symbol">🧩</span><span class="desktop-icon-label">Dashboard</span></button>
           <button type="button" class="desktop-icon" data-open-window="expert"><span class="desktop-icon-symbol">🧰</span><span class="desktop-icon-label">Experten</span></button>
         </div>
@@ -4827,6 +4840,9 @@ body.winomc-mobile .editor-panel.editor-open {
           <div class="card metric-card"><div class="stat-label">Spieler</div><div class="stat-value" id="statPlayers">-</div><p id="statPlayersHint">Aktuelle Spielerzahl aus dem letzten <code>list</code>-Output.</p></div>
           <div class="card metric-card"><div class="stat-label">Arbeitsspeicher</div><div class="stat-value" id="statMemory">-</div><p id="statMemoryHint">Host-/Container-RAM laut System.</p></div>
           <div class="card metric-card"><div class="stat-label">Speicherplatz</div><div class="stat-value" id="statDisk">-</div><p id="statDiskHint">Datenordner /config.</p></div>
+          <div class="card metric-card"><div class="stat-label">WinoMC</div><div class="stat-value" id="statWinoVersion">2.0.0</div><p id="statHealth">Health: Nicht verfügbar</p></div>
+          <div class="card metric-card"><div class="stat-label">Letztes Backup</div><div class="stat-value" id="statLastBackup">-</div><p id="statBackupHint">/config/backups</p></div>
+          <div class="card metric-card"><div class="stat-label">Schutz</div><div class="stat-value" id="statProtection">-</div><p id="statProtectionHint">Online Mode · Allowlist · Webschutz</p></div>
         </div>
         <div class="grid">
           <div class="card">
@@ -4905,6 +4921,27 @@ body.winomc-mobile .editor-panel.editor-open {
           <div class="card"><div class="card-header"><div><h3>Sicherer Welt-Export</h3><p>Erstellt ein ZIP mit save hold, save query und save resume.</p></div><span class="badge warn">Empfohlen</span></div><div class="pill-group"><button class="primary" id="backupSafeWorldExport" data-write-action="true">Sicheren Welt-Export starten</button><button data-open-root="export">Exportordner öffnen</button></div><div class="info warning-box" style="margin-top:12px">Während des Exports kann der Server kurz verzögert reagieren. save resume wird automatisch im finally-Block ausgeführt.</div></div>
           <div class="card"><div class="card-header"><div><h3>Export & Retention</h3><p>Exporte liegen unter /share/winomc/export. Alte BDS-Pakete werden über PACKAGE_BACKUP_KEEP begrenzt.</p></div></div><div class="pill-group"><button data-open-root="export">Exporte anzeigen</button><button data-jump-tab="files">Dateimanager</button></div></div>
         </div>
+      </section>
+
+
+      <section class="tab-panel" data-panel="diagnostics">
+        <div class="card"><div class="card-header"><div><h2>Diagnose & Reparatur</h2><p>Verständliche Prüfungen für Dateien, Konfiguration, Packs, Rechte, Prozess, Netzwerk und Backups.</p></div><button class="primary" id="diagnosticsRun" type="button">Diagnose starten</button></div><div id="diagnosticsSummary" class="info">Noch nicht geprüft.</div><div id="diagnosticsList" class="dashboard-grid auto"></div></div>
+      </section>
+
+      <section class="tab-panel" data-panel="players">
+        <div class="card"><div class="card-header"><div><h2>Spielerrechte verwalten</h2><p>Allowlist und Rollen ohne JSON-Wissen prüfen. Änderungen an Dateien erfolgen weiterhin über sichere Dateioperationen.</p></div><button id="playersRefresh" type="button">Aktualisieren</button></div><div id="playersWarnings" class="info warning-box">Lade Status…</div><div class="file-table-wrap"><table class="file-table"><thead><tr><th>Spieler</th><th>XUID</th><th>Allowlist</th><th>Rolle</th><th>Hinweis</th></tr></thead><tbody id="playersTable"><tr><td colspan="5">Noch nicht geladen.</td></tr></tbody></table></div></div>
+      </section>
+
+      <section class="tab-panel" data-panel="transfer">
+        <div class="card"><div class="card-header"><div><h2>Import / Export</h2><p>Sichere Übergabe von Welten, Packs und Konfiguration. Vor Überschreiben immer Backup erstellen.</p></div><button id="transferRefresh" type="button">Aktualisieren</button></div><div id="transferSummary" class="dashboard-grid auto"></div><div class="info warning-box">ZIP-Dateien werden gegen Pfad-Ausbruch geprüft. Bestehende Ziele werden nicht still überschrieben.</div></div>
+      </section>
+
+      <section class="tab-panel" data-panel="updates">
+        <div class="card"><div class="card-header"><div><h2>Update-Schutz</h2><p>Prüft Backup, Speicherplatz, Spielerstatus, Zielversion und Schreibrechte vor Bedrock-Updates.</p></div><button id="updatesCheck" type="button">Update-Check</button></div><div id="updatesSummary" class="dashboard-grid auto"></div><div class="info">Updates bleiben ein Ein-Server-Prozess. Multi-Instanzen sind bewusst nicht Teil von WinoMC 2.0.0.</div></div>
+      </section>
+
+      <section class="tab-panel" data-panel="firststart">
+        <div class="card"><div class="card-header"><div><h2>Erststart-Assistent</h2><p>Wähle ein verständliches Profil. Bestehende Installationen werden nicht automatisch überschrieben.</p></div><button id="profilesLoad" type="button">Profile laden</button></div><div id="profilesGrid" class="dashboard-grid auto"></div></div>
       </section>
 
       <section class="tab-panel" data-panel="network">
@@ -5406,10 +5443,10 @@ body.winomc-mobile .editor-panel.editor-open {
       actions.append(toggle, menu);
     }
 
-    function activateTab(tab) { if (document.body.classList.contains('desktop-mode')) { openDesktopWindow(tab); return; } document.body.classList.toggle('hide-hero', tab !== 'overview'); document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (document.body.classList.contains('sidebar-collapsed')) requestAnimationFrame(scrollActiveSidebarIconIntoView); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); }
+    function activateTab(tab) { if (document.body.classList.contains('desktop-mode')) { openDesktopWindow(tab); return; } document.body.classList.toggle('hide-hero', tab !== 'overview'); document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (document.body.classList.contains('sidebar-collapsed')) requestAnimationFrame(scrollActiveSidebarIconIntoView); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); if (tab === 'backups') loadBackups2(); if (tab === 'diagnostics') loadDiagnostics2(); if (tab === 'players') loadPlayers2(); if (tab === 'packs') loadPacks2(); if (tab === 'transfer') loadTransfer2(); if (tab === 'updates') loadUpdates2(); if (tab === 'firststart') loadProfiles2(); }
     function openRoot(root, path = '/') { activateTab('files'); setTimeout(async () => { await initFileManager(); currentFileRoot = root; fileRootSelect.value = root; await loadFileList(path); }, 0); }
 
-    async function loadStatus() { try { const data = await fetchJson('/api/status'); latestStatus = data; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
+    async function loadStatus() { try { const data = await fetchJson('/api/status'); latestStatus = data; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v||'Nicht verfügbar'}; set('statPlayers', data.metrics?.players?.label); set('statMemory', data.metrics?.memory?.label); set('statDisk', data.metrics?.disk?.label); set('statWinoVersion', data.winomc_version || '2.0.0'); set('statHealth', 'Health: ' + (data.health?.overall || 'Nicht verfügbar')); set('statLastBackup', data.backup?.latest?.name || 'Kein Backup'); set('statProtection', 'Online: '+(data.env.ONLINE_MODE||'-')+' · Allowlist: '+(data.env.ALLOW_LIST||'-')); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
 
     async function initFileManager() { if (filesInitialized) { await loadFileList(); return; } filesInitialized = true; try { setFilesStatus('Lade Bereiche...', 'warn'); const data = await fetchJson('/api/files/roots'); fileRootSelect.innerHTML = ''; data.roots.forEach(root => { const option = document.createElement('option'); option.value = root.key; option.textContent = root.label + (root.exists ? '' : ' (fehlt)'); option.disabled = !root.exists || !root.readable; fileRootSelect.appendChild(option); }); const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled); if (![...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) currentFileRoot = firstEnabled ? firstEnabled.value : 'config'; fileRootSelect.value = currentFileRoot; await loadTrashSettings(); applyWebWriteLock(); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
     async function loadFileList(path) { if (path !== undefined) currentFilePath = normalizeUiPath(path); currentFileRoot = fileRootSelect.value || currentFileRoot; try { setFilesStatus('Lade...', 'warn'); updatePathDisplay(); const data = await fetchJson('/api/files/list', { root: currentFileRoot, path: currentFilePath }); currentFilePath = data.path || '/'; fileParent.disabled = currentFilePath === '/'; updatePathDisplay(); renderFileEntries(data.entries || []); setFilesStatus('Bereit', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
@@ -9186,7 +9223,7 @@ def open_safe_download(candidate_path, mode="rb"):
 
 
 def ensure_directories():
-    for path in (DATA_DIR, WORLDS_DIR, RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR, WORLD_TEMPLATES_DIR, IMPORT_DIR, EXPORT_DIR, FILE_BACKUP_DIR, TRASH_DIR):
+    for path in (DATA_DIR, WORLDS_DIR, RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR, WORLD_TEMPLATES_DIR, IMPORT_DIR, EXPORT_DIR, BACKUP_DIR, FILE_BACKUP_DIR, TRASH_DIR):
         try:
             os.makedirs(canonical_path(path), exist_ok=True)
         except OSError as exc:
@@ -9925,8 +9962,227 @@ def player_metrics_from_log(max_players_env=""):
     return result
 
 
+
+def json_file(path, fallback):
+    try:
+        safe = verify_root_path("config", path, require_exists=True, allow_missing=False)
+        if not safe.is_file():
+            return fallback, "Datei ist kein reguläres File"
+        with safe.open("r", encoding="utf-8", errors="replace") as handle:
+            return json.load(handle), None
+    except FileNotFoundError:
+        return fallback, "Datei fehlt"
+    except json.JSONDecodeError as exc:
+        return fallback, "JSON ungültig: Zeile %s" % exc.lineno
+    except Exception as exc:
+        return fallback, str(exc)
+
+
+def world_dir_path():
+    level = os.environ.get("LEVEL_NAME", "world") or "world"
+    return os.path.join(WORLDS_DIR, level)
+
+
+def dir_size(path, max_entries=250000):
+    total = 0
+    count = 0
+    try:
+        base = verify_root_path("config", path, require_exists=False, allow_missing=True).path
+        if not os.path.exists(base):
+            return 0
+        for root, dirs, files in os.walk(base):
+            if count > max_entries:
+                break
+            for name in files:
+                count += 1
+                fp = os.path.join(root, name)
+                try:
+                    total += os.path.getsize(fp)
+                except OSError:
+                    pass
+    except Exception:
+        return 0
+    return total
+
+
+def backup_manifest_path(name):
+    safe_name = safe_download_name(name, "backup")
+    return assert_safe_internal_path(BACKUP_DIR, os.path.join(BACKUP_DIR, safe_name + ".json"))
+
+
+def list_backups():
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    backups = []
+    for name in sorted(os.listdir(BACKUP_DIR), reverse=True):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(BACKUP_DIR, name)
+        try:
+            safe = verify_internal_path(BACKUP_DIR, path, require_exists=True, allow_missing=False)
+            with safe.open("r", encoding="utf-8") as handle:
+                meta = json.load(handle)
+            archive = os.path.join(BACKUP_DIR, meta.get("archive", ""))
+            size = os.path.getsize(archive) if meta.get("archive") and os.path.exists(archive) else 0
+            meta["size"] = size
+            meta["size_label"] = human_bytes(size)
+            backups.append(meta)
+        except Exception as exc:
+            backups.append({"name": name, "type": "unknown", "created": "-", "status": "Fehler", "error": str(exc), "size_label": "-"})
+    return backups
+
+
+def prune_backups():
+    keep = max(1, BACKUP_KEEP)
+    backups = list_backups()
+    for meta in backups[keep:]:
+        try:
+            for fn in (meta.get("archive"), meta.get("name") + ".json"):
+                if not fn:
+                    continue
+                path = verify_internal_path(BACKUP_DIR, os.path.join(BACKUP_DIR, os.path.basename(fn)), require_exists=False, allow_missing=True)
+                if path.exists():
+                    path.remove()
+        except Exception as exc:
+            log_warning("Backup-Aufbewahrung konnte %s nicht löschen: %s" % (meta.get("name"), exc))
+
+
+def create_framework_backup(kind="complete", reason="manual"):
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    kind = kind if kind in ("world", "config", "complete", "safety") else "complete"
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    level = os.environ.get("LEVEL_NAME", "world") or "world"
+    name = safe_download_name("%s-%s-%s" % (timestamp, kind, level), "winomc-backup")
+    archive_name = name + ".zip"
+    archive_path = assert_safe_internal_path(BACKUP_DIR, os.path.join(BACKUP_DIR, archive_name))
+    include = []
+    if kind in ("world", "complete", "safety"):
+        include.append((world_dir_path(), "worlds/" + level))
+    if kind in ("config", "complete", "safety"):
+        for rel in ("server.properties", "allowlist.json", "permissions.json", ".winomc/web_console_settings.json"):
+            include.append((os.path.join(DATA_DIR, rel), rel))
+    if kind in ("complete", "safety"):
+        include.extend([(RESOURCE_PACKS_DIR, "resource_packs"), (BEHAVIOR_PACKS_DIR, "behavior_packs")])
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        manifest = {"name": name, "created": timestamp, "server_version": os.environ.get("VERSION", "LATEST"), "winomc_version": WINOMC_VERSION, "world": level, "type": kind, "reason": reason, "status": "OK"}
+        zf.writestr("winomc-backup.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        for src, arc in include:
+            try:
+                src = verify_root_path("config", src, require_exists=False, allow_missing=True).path
+                if os.path.isdir(src):
+                    for root, dirs, files in os.walk(src):
+                        dirs[:] = [d for d in dirs if d not in (".git",)]
+                        for fn in files:
+                            fp = os.path.join(root, fn)
+                            if os.path.islink(fp):
+                                continue
+                            zf.write(fp, posixpath.join(arc, os.path.relpath(fp, src).replace(os.sep, "/")))
+                elif os.path.isfile(src):
+                    zf.write(src, arc)
+            except Exception as exc:
+                zf.writestr("warnings/%s.txt" % safe_download_name(arc, "item"), str(exc))
+    meta = {"name": name, "archive": archive_name, "created": timestamp, "server_version": os.environ.get("VERSION", "LATEST"), "winomc_version": WINOMC_VERSION, "world": level, "type": kind, "reason": reason, "status": "OK", "size": os.path.getsize(archive_path), "size_label": human_bytes(os.path.getsize(archive_path))}
+    with open_safe_internal(BACKUP_DIR, backup_manifest_path(name), "w", encoding="utf-8") as handle:
+        json.dump(meta, handle, ensure_ascii=False, indent=2)
+    prune_backups()
+    return meta
+
+
+def diagnostics_payload():
+    env = {k: os.environ.get(k, "") for k in ["SERVER_PORT", "SERVER_PORT_V6", "LEVEL_NAME", "SERVER_NAME", "ONLINE_MODE", "ALLOW_LIST"]}
+    items = []
+    def add(title, ok, message, repair=False):
+        items.append({"title": title, "status": "OK" if ok else ("Reparierbar" if repair else "Warnung"), "severity": "OK" if ok else "warning", "message": message})
+    add("Serverordner", os.path.isdir(DATA_DIR), DATA_DIR)
+    add("Weltordner", os.path.isdir(world_dir_path()), "Welt: %s" % (env.get("LEVEL_NAME") or "world"), True)
+    add("Schreibrechte", os.access(DATA_DIR, os.W_OK), "WinoMC kann /config schreiben." if os.access(DATA_DIR, os.W_OK) else "Keine Schreibrechte auf /config.")
+    add("Speicherplatz", (disk_usage_metrics().get("free") or 0) > 512*1024*1024, disk_usage_metrics().get("label", "Nicht verfügbar"))
+    props = os.path.join(DATA_DIR, "server.properties")
+    add("server.properties", os.path.isfile(props), "Datei vorhanden." if os.path.isfile(props) else "Kann aus Add-on-Optionen neu geschrieben werden.", True)
+    for port_key in ("SERVER_PORT", "SERVER_PORT_V6"):
+        try:
+            port = int(env.get(port_key) or 0); ok = 1 <= port <= 65535
+        except ValueError: ok = False
+        add(port_key, ok, "Port ist plausibel." if ok else "Port muss zwischen 1 und 65535 liegen.")
+    allow, ae = json_file(os.path.join(DATA_DIR, "allowlist.json"), [])
+    perms, pe = json_file(os.path.join(DATA_DIR, "permissions.json"), [])
+    add("allowlist.json", ae is None and isinstance(allow, list), ae or "%s Einträge" % len(allow), True)
+    add("permissions.json", pe is None and isinstance(perms, list), pe or "%s Einträge" % len(perms), True)
+    add("Resource Packs", os.path.isdir(RESOURCE_PACKS_DIR), "Ordner vorhanden." if os.path.isdir(RESOURCE_PACKS_DIR) else "Ordner fehlt.", True)
+    add("Behavior Packs", os.path.isdir(BEHAVIOR_PACKS_DIR), "Ordner vorhanden." if os.path.isdir(BEHAVIOR_PACKS_DIR) else "Ordner fehlt.", True)
+    add("Konsole", runtime_path_exists(runtime_fifo_path()), "FIFO vorhanden." if runtime_path_exists(runtime_fifo_path()) else "Serverprozess/FIFO nicht erreichbar.")
+    add("Logdatei", runtime_path_exists(runtime_log_path()), "Log lesbar." if runtime_path_exists(runtime_log_path()) else "Noch kein Log vorhanden.")
+    add("Backups", bool(list_backups()), "Letztes Backup vorhanden." if list_backups() else "Noch kein WinoMC-Backup vorhanden.", True)
+    overall = "OK" if all(i["severity"] == "OK" for i in items) else "Warnung"
+    return {"ok": True, "overall": overall, "items": items}
+
+
+def scan_packs(base_dir, pack_type):
+    packs=[]; seen={}
+    if not os.path.isdir(base_dir): return packs
+    for name in sorted(os.listdir(base_dir)):
+        pack_path=os.path.join(base_dir,name); manifest=os.path.join(pack_path,"manifest.json")
+        if not os.path.isdir(pack_path): continue
+        data, err=json_file(manifest, {})
+        header=data.get("header",{}) if isinstance(data,dict) else {}
+        uuid=header.get("uuid",""); version=header.get("version",[])
+        status="OK" if not err and uuid and version else "warning"
+        desc=header.get("description","") or (err or "Manifest geprüft")
+        if uuid and uuid in seen: status="warning"; desc="Doppelte UUID mit %s"%seen[uuid]
+        if uuid: seen[uuid]=name
+        packs.append({"name": header.get("name") or name, "path": name, "type": pack_type, "uuid": uuid, "version": ".".join(map(str,version)) if isinstance(version,list) else str(version), "description": desc, "status": status})
+    return packs
+
+
+def players_payload():
+    allow, ae = json_file(os.path.join(DATA_DIR,"allowlist.json"), [])
+    perms, pe = json_file(os.path.join(DATA_DIR,"permissions.json"), [])
+    allow = allow if isinstance(allow, list) else []
+    perms = perms if isinstance(perms, list) else []
+    by = {}
+    for a in allow:
+        key = str(a.get("xuid") or a.get("name") or "")
+        by.setdefault(key, {"name": a.get("name","-"), "xuid": a.get("xuid",""), "allowlisted": True, "role": "member", "issues": []})
+    for p in perms:
+        key = str(p.get("xuid") or p.get("permission") or len(by))
+        row = by.setdefault(key, {"name": p.get("name","-"), "xuid": p.get("xuid",""), "allowlisted": False, "role": "member", "issues": []})
+        row["role"] = p.get("permission", "member")
+        if row["role"] == "operator" and not row["allowlisted"]:
+            row["issues"].append("OP nicht auf Allowlist")
+    warnings=[]
+    if ae: warnings.append("allowlist.json: "+ae)
+    if pe: warnings.append("permissions.json: "+pe)
+    if parse_bool(os.environ.get("ALLOW_LIST"), False) and not allow: warnings.append("Allowlist ist aktiv, aber leer.")
+    if not parse_bool(os.environ.get("ONLINE_MODE"), True): warnings.append("Online Mode ist deaktiviert und sollte nur bewusst genutzt werden.")
+    return {"ok": True, "players": list(by.values()), "warnings": warnings}
+
+
+def profiles_payload():
+    return {"ok": True, "profiles": [
+        {"name":"Familienserver","description":"Sicherer, ruhiger Start für kleine private Gruppen.","defaults":{"ONLINE_MODE":True,"ALLOW_LIST":True,"MAX_PLAYERS":10,"DIFFICULTY":"easy","GAMEMODE":"survival","ALLOW_CHEATS":False,"EMIT_SERVER_TELEMETRY":False}},
+        {"name":"Vanilla Survival","description":"Klassischer Survival-Server ohne Gameplay-Eingriffe.","defaults":{"ONLINE_MODE":True,"ALLOW_LIST":True,"GAMEMODE":"survival","DIFFICULTY":"normal","ALLOW_CHEATS":False}},
+        {"name":"Kreativserver","description":"Bauen im Creative-Modus mit überschaubaren Schutzempfehlungen.","defaults":{"ONLINE_MODE":True,"ALLOW_LIST":True,"GAMEMODE":"creative","DIFFICULTY":"peaceful","ALLOW_CHEATS":True}},
+        {"name":"Privater Freunde-Server","description":"Einfacher privater Server mit Allowlist-Empfehlung.","defaults":{"ONLINE_MODE":True,"ALLOW_LIST":True,"MAX_PLAYERS":10,"DIFFICULTY":"normal"}},
+        {"name":"Experimentell / Test","description":"Zum Ausprobieren, ohne bestehende Installationen automatisch zu verändern.","defaults":{"ONLINE_MODE":True,"ALLOW_LIST":False,"MAX_PLAYERS":5,"ALLOW_CHEATS":True}}
+    ]}
+
+
+def import_export_payload():
+    return {"ok": True, "import_count": len(os.listdir(IMPORT_DIR)) if os.path.isdir(IMPORT_DIR) else 0, "export_count": len(os.listdir(EXPORT_DIR)) if os.path.isdir(EXPORT_DIR) else 0, "zip_slip_protection": True, "overwrite_policy": "abort_or_backup"}
+
+
+def update_guard_payload():
+    checks=[]
+    def add(t, ok, msg): checks.append({"title":t,"status":"OK" if ok else "Warnung","severity":"OK" if ok else "warning","message":msg})
+    add("Backup", bool(list_backups()), "Aktuelles Backup vorhanden." if list_backups() else "Vor Update Backup erstellen.")
+    add("Speicherplatz", (disk_usage_metrics().get("free") or 0)>1024*1024*1024, disk_usage_metrics().get("label","Nicht verfügbar"))
+    add("Zielversion", bool(os.environ.get("VERSION","LATEST")), "VERSION=" + os.environ.get("VERSION","LATEST"))
+    add("Direkte URL", True, "BDS_DIRECT_DOWNLOAD_URL wird akzeptiert, wenn gesetzt; LATEST bleibt unterstützt.")
+    add("Spielerstatus", True, player_metrics_from_log(os.environ.get("MAX_PLAYERS","")).get("label","unbekannt"))
+    add("Schreibrechte", os.access(DATA_DIR, os.W_OK), "/config schreibbar" if os.access(DATA_DIR, os.W_OK) else "/config nicht schreibbar")
+    return {"ok": True, "checks": checks}
+
 def status_payload():
-    env_keys = ["SERVER_NAME", "LEVEL_NAME", "VERSION", "BDS_AUTO_UPDATE", "SERVER_PORT", "SERVER_PORT_V6", "ENABLE_LAN_VISIBILITY", "ENABLE_BDS_V6BIND_FIX", "GAMEMODE", "DIFFICULTY", "ALLOW_CHEATS", "ALLOW_LIST", "MAX_PLAYERS", "TEXTUREPACK_REQUIRED", "PACKAGE_BACKUP_KEEP"]
+    env_keys = ["SERVER_NAME", "LEVEL_NAME", "VERSION", "BDS_AUTO_UPDATE", "SERVER_PORT", "SERVER_PORT_V6", "ENABLE_LAN_VISIBILITY", "ENABLE_BDS_V6BIND_FIX", "GAMEMODE", "DIFFICULTY", "ALLOW_CHEATS", "ALLOW_LIST", "ONLINE_MODE", "MAX_PLAYERS", "TEXTUREPACK_REQUIRED", "PACKAGE_BACKUP_KEEP"]
     env = {key: os.environ.get(key, "") for key in env_keys}
     metrics = {
         "players": player_metrics_from_log(env.get("MAX_PLAYERS", "")),
@@ -9935,7 +10191,7 @@ def status_payload():
         "loadavg": loadavg_metrics(),
         "log_size": human_bytes(runtime_getsize(runtime_log_path())) if runtime_path_exists(runtime_log_path()) else "-",
     }
-    return {"ok": True, "fifo_exists": runtime_path_exists(runtime_fifo_path()), "log_exists": runtime_path_exists(runtime_log_path()), "env": env, "roots": list_file_roots(), "metrics": metrics}
+    backups = list_backups(); return {"ok": True, "winomc_version": WINOMC_VERSION, "fifo_exists": runtime_path_exists(runtime_fifo_path()), "log_exists": runtime_path_exists(runtime_log_path()), "env": env, "roots": list_file_roots(), "metrics": metrics, "backup": {"latest": backups[0] if backups else None, "count": len(backups)}, "health": {"overall": diagnostics_payload().get("overall", "Nicht verfügbar")}}
 
 def safe_header_value(value, fallback="application/octet-stream"):
     value = str(value or fallback)
@@ -9955,7 +10211,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCConsole/1.6.14.22"
+    server_version = "WinoMCConsole/2.0.0"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
@@ -10151,6 +10407,27 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith("/api/files/roots") or path == "/api/files/roots":
             self._send_json(200, {"ok": True, "roots": list_file_roots()})
             return
+        if path.endswith("/api/backups") or path == "/api/backups":
+            self._send_json(200, {"ok": True, "backups": list_backups(), "keep": BACKUP_KEEP})
+            return
+        if path.endswith("/api/diagnostics") or path == "/api/diagnostics":
+            self._send_json(200, diagnostics_payload())
+            return
+        if path.endswith("/api/packs") or path == "/api/packs":
+            self._send_json(200, {"ok": True, "resource_packs": scan_packs(RESOURCE_PACKS_DIR, "resource"), "behavior_packs": scan_packs(BEHAVIOR_PACKS_DIR, "behavior")})
+            return
+        if path.endswith("/api/players") or path == "/api/players":
+            self._send_json(200, players_payload())
+            return
+        if path.endswith("/api/import-export") or path == "/api/import-export":
+            self._send_json(200, import_export_payload())
+            return
+        if path.endswith("/api/update-guard") or path == "/api/update-guard":
+            self._send_json(200, update_guard_payload())
+            return
+        if path.endswith("/api/profiles") or path == "/api/profiles":
+            self._send_json(200, profiles_payload())
+            return
         if path.endswith("/api/files/list") or path == "/api/files/list":
             try:
                 self._send_json(200, list_directory(query.get("root", ["config"])[0], query.get("path", ["/"])[0]))
@@ -10206,6 +10483,14 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
+        if path.endswith("/api/backups/create") or path == "/api/backups/create":
+            try:
+                payload = json.loads(self._read_request_body(max_bytes=65536) or "{}")
+                self._send_json(200, {"ok": True, "backup": create_framework_backup(str(payload.get("type", "complete")), str(payload.get("reason", "manual")))})
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
         if path.endswith("/api/files/upload") or path == "/api/files/upload":
             try:
                 query = parse_qs(parsed.query)

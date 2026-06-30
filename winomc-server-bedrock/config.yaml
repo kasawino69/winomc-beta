@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
-description: "[BETA] Bedrock Minecraft Server auf Home Assistant"
-version: 1.6.14.23b
+description: "[BETA] WinoMC 2.0 Framework für einen sicheren Bedrock Server in Home Assistant"
+version: 2.0.0
 slug: winomc-bedrock
 init: false
 boot: auto
@@ -79,7 +79,8 @@ options:
   PLAYER_MOVEMENT_DURATION_THRESHOLD_IN_MS: 500
   CORRECT_PLAYER_MOVEMENT: false
   TZ: Europe/Berlin
-  PACKAGE_BACKUP_KEEP: 2
+  PACKAGE_BACKUP_KEEP: 5
+  WINOMC_BACKUP_KEEP: 5
   DOWNLOAD_PROGRESS: false
   USE_BOX64: true
   EMIT_SERVER_TELEMETRY: false
@@ -145,6 +146,7 @@ schema:
   CORRECT_PLAYER_MOVEMENT: bool?
   TZ: str
   PACKAGE_BACKUP_KEEP: int?
+  WINOMC_BACKUP_KEEP: int?
   DOWNLOAD_PROGRESS: bool?
   USE_BOX64: bool?
   EMIT_SERVER_TELEMETRY: bool?

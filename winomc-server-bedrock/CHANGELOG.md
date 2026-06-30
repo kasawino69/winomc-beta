@@ -1,4 +1,41 @@
-## Changelog
+# Changelog
+
+### 2.0.0
+
+#### Added
+* Framework-Foundation für einen einzelnen, perfekt verwaltbaren Bedrock Server.
+* Backup & Restore-Struktur mit persistentem `/config/backups`, Backup-Typen und Aufbewahrung.
+* Diagnose-Seite für Dateien, Konfiguration, Allowlist, Permissions, Packs, Prozess, Netzwerk und Backups.
+* Health-Dashboard mit WinoMC-Version, Spieler-, RAM-, Speicher-, Backup- und Schutzstatus.
+* Pack-Prüfung für Resource Packs und Behavior Packs inklusive Manifest-, UUID- und Versionsanzeige.
+* Spielerrechte-Übersicht für Allowlist, XUID und Rollen.
+* Update-Schutz-Prüfung vor BDS-Updates.
+* Import-/Export-Übersicht mit Sicherheitsmodell gegen stilles Überschreiben.
+* Erststart-Profile für Familienserver, Vanilla Survival, Kreativserver, private Freunde und Tests.
+* Validierungsskript `scripts/validate-winomc.sh` als einfacher Release-Check.
+
+#### Changed
+* Version auf `2.0.0` gesetzt.
+* Desktop, klassische Ansicht und Mobile werden in der Weboberfläche stärker getrennt.
+* Explorer bleibt auf den Menüpunkt `Dateien` begrenzt.
+* Dokumentation auf nutzerfreundliches Framework-Erlebnis ausgerichtet.
+
+#### Fixed
+* Weitere UI-Härtung gegen unsichtbare Desktop-Overlays, blockierende Layer und nicht scrollbar nutzbare Explorerbereiche.
+* Fehlende Health-Werte werden als `Nicht verfügbar` behandelt, statt Layout oder JavaScript zu brechen.
+
+#### Security
+* Zentrale Pfadvalidierung bleibt Grundlage für Upload, Download, Import, Export, Backup, Restore, Löschen und ZIP-Entpacken.
+* Backup-/Restore- und Import-/Export-Flows sind auf erlaubte WinoMC-Verzeichnisse begrenzt.
+* Update-Schutz warnt vor fehlendem Backup, knappem Speicherplatz und unklarer Zielversion.
+
+#### Migration
+* Keine Multi-Instanz-Migration. Bestehende Welten, Packs, Allowlist, Permissions und `server.properties` werden nicht automatisch verschoben oder gelöscht.
+* Bestehende Optionen bleiben erhalten; neue 2.0.0-Funktionen lesen vorhandene Dateien defensiv.
+
+#### Notes
+* Multi-Instanzen, Cluster, Proxies, eigene Gameplay-Add-ons und Spielmechanik-Eingriffe sind bewusst nicht Teil von WinoMC 2.0.0.
+
 
 ### next
 
