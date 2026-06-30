@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+from pathlib import Path
+
+TARGET = Path("/usr/local/bin/winomc-console-server")
+VERSION = "2.0.0.5b"
+RIGHTS_MARKER = "v2.0.0.5b direct player rights"
+PROFILE_MARKER = "v2.0.0.5b profile loader"
+MODE_MARKER = "v2.0.0.5b strict mode boundary"
+
+p = TARGET
+t = p.read_text(encoding="utf-8")
+o = t
+
+for old in ("2.0.0.3b", "2.0.0.4b", "2.0.0.2b"):
+    t = t.replace(old, VERSION)
+
+mode_css = r'''
+    /* v2.0.0.5b strict mode boundary */
+    body.winomc-mode-mobile:not(.desktop-mode) .desktop-stage,
+    body.winomc-mode-mobile:not(.desktop-mode) .desktop-window,
+    body.winomc-mode-mobile:not(.desktop-mode) .desktop-icon,
+    body.winomc-mode-pc:not(.desktop-mode) .desktop-stage,
+    body.winomc-mode-pc:not(.desktop-mode) .desktop-window,
+    body.winomc-mode-pc:not(.desktop-mode) .desktop-icon {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+    body.winomc-mode-mobile:not(.desktop-mode) [data-mode-scope="pc"],
+    body.winomc-mode-mobile:not(.desktop-mode) [data-mode-scope="desktop"],
+    body.winomc-mode-pc:not(.desktop-mode) [data-mode-scope="mobile"],
+    body.winomc-mode-pc:not(.desktop-mode) [data-mode-scope="desktop"],
+    body.winomc-mode-desktop [data-mode-scope="mobile"],
+    body.winomc-mode-desktop [data-mode-scope="pc"] {
+      display: none !important;
+      pointer-events: none !important;
+    }
+'''
+if MODE_MARKER not in t:
+    t = t.replace("  </style>", mode_css + "  </style>", 1)
+
+rights_block = r'''
+
+# v2.0.0.5b direct player rights
+def _player_name_key_2005(name):
+    return re.sub(r"\s+", " ", str(name or "").strip()).lower().replace(" ", "")
+
+def _player_key_2005(player):
+    xuid = str(player.get("xuid") or "").strip()
+    if xuid:
+        return "xuid:" + xuid
+    return "name:" + _player_name_key_2005(player.get("name"))
+
+def known_player_xuid_2005(name):
+    wanted = _player_name_key_2005(name)
+    if not wanted:
+        return ""
+    known = {}
+    def add(n, x):
+        n = _player_name_key_2005(n)
+        x = str(x or "").strip()
+        if n and re.match(r"^[0-9]{5,32}$", x):
+            known[n] = x
+    for raw in re.split(r"[,;\n]+", os.environ.get("ALLOW_LIST_USERS", "") or ""):
+        if ":" in raw:
+            n, x = raw.split(":", 1)
+            add(n, x)
+    allow, _ = json_file(os.path.join(DATA_DIR, "allowlist.json"), [])
+    if isinstance(allow, list):
+        for item in allow:
+            if isinstance(item, dict):
+                add(item.get("name"), item.get("xuid"))
+    patterns = (
+        re.compile(r"Player connected:\s*([^,\n]+),\s*xuid:\s*([0-9]{5,32})", re.I),
+        re.compile(r"\bname[:=\s]+([^,\n]+).*?\bxuid[:=\s]+([0-9]{5,32})", re.I),
+    )
+    for log_path in (runtime_log_path(), LOG_PATH):
+        try:
+            if not os.path.exists(log_path):
+                continue
+            with open(log_path, "r", encoding="utf-8", errors="replace") as handle:
+                for line in handle.readlines()[-3000:]:
+                    for pattern in patterns:
+                        match = pattern.search(line)
+                        if match:
+                            add(match.group(1), match.group(2))
+        except Exception:
+            pass
+    return known.get(wanted, "")
+
+def _normalize_player_entry_direct_2005(item):
+    if not isinstance(item, dict):
+        raise ValueError("Spieler-Eintrag ist ungültig.")
+    name = str(item.get("name") or "").strip()
+    xuid = str(item.get("xuid") or "").strip()
+    if name and not xuid:
+        xuid = known_player_xuid_2005(name)
+    if not name and not xuid:
+        raise ValueError("Spieler braucht mindestens Gamertag oder XUID.")
+    if xuid and not re.match(r"^[0-9]{5,32}$", xuid):
+        raise ValueError("XUID sieht ungültig aus: %s" % xuid)
+    role = normalize_role(item.get("role", "member"))
+    if role != "member" and not xuid:
+        raise ValueError("Für Operator oder Visitor braucht Bedrock eine XUID. Lass den Spieler einmal verbinden oder trage Name:XUID in ALLOW_LIST_USERS ein.")
+    return {"name": name, "xuid": xuid, "allowlisted": bool(item.get("allowlisted", True)), "role": role}
+
+def players_payload():
+    allow, ae = json_file(os.path.join(DATA_DIR, "allowlist.json"), [])
+    perms, pe = json_file(os.path.join(DATA_DIR, "permissions.json"), [])
+    allow = allow if isinstance(allow, list) else []
+    perms = perms if isinstance(perms, list) else []
+    by = {}
+    for item in allow:
+        if not isinstance(item, dict):
+            continue
+        row = {"name": item.get("name", "-"), "xuid": item.get("xuid", ""), "allowlisted": True, "role": "member", "issues": []}
+        key = _player_key_2005(row)
+        existing = by.setdefault(key, row)
+        existing["allowlisted"] = True
+        if row.get("xuid"):
+            existing["xuid"] = row["xuid"]
+        if row.get("name") and existing.get("name") in ("", "-"):
+            existing["name"] = row["name"]
+    for perm in perms:
+        if not isinstance(perm, dict):
+            continue
+        row = {"name": perm.get("name", "-"), "xuid": perm.get("xuid", ""), "allowlisted": False, "role": normalize_role(perm.get("permission", "member")), "issues": []}
+        key = _player_key_2005(row)
+        existing = by.setdefault(key, row)
+        existing["role"] = normalize_role(perm.get("permission", "member"))
+        if row.get("xuid"):
+            existing["xuid"] = row["xuid"]
+    for row in by.values():
+        if row.get("name") and not row.get("xuid"):
+            row["xuid"] = known_player_xuid_2005(row.get("name"))
+        if row.get("role") == "operator" and not row.get("allowlisted"):
+            row.setdefault("issues", []).append("OP ist nicht auf der Allowlist.")
+    warnings = []
+    if ae:
+        warnings.append("allowlist.json: " + ae)
+    if pe:
+        warnings.append("permissions.json: " + pe)
+    if parse_bool(os.environ.get("ALLOW_LIST"), False) and not allow:
+        warnings.append("Allowlist ist aktiv, aber leer.")
+    if not parse_bool(os.environ.get("ONLINE_MODE"), True):
+        warnings.append("Online Mode ist deaktiviert und sollte nur bewusst genutzt werden.")
+    return {"ok": True, "players": list(by.values()), "warnings": warnings}
+
+def save_players(players):
+    if not isinstance(players, list):
+        raise ValueError("players muss eine Liste sein.")
+    normalized = [_normalize_player_entry_direct_2005(item) for item in players]
+    seen = set()
+    for player in normalized:
+        key = _player_key_2005(player)
+        if key in seen:
+            raise ValueError("Doppelter Spieler/XUID: %s" % key)
+        seen.add(key)
+    allowlist = []
+    permissions = []
+    for player in normalized:
+        if player["allowlisted"]:
+            entry = {"name": player["name"] or player["xuid"], "ignoresPlayerLimit": False}
+            if player["xuid"]:
+                entry["xuid"] = player["xuid"]
+            allowlist.append(entry)
+        if player["xuid"] and player["role"] != "member":
+            permissions.append({"permission": player["role"], "xuid": player["xuid"]})
+    allow_result = atomic_write_json_root("config", "/allowlist.json", allowlist, backup=True)
+    perm_result = atomic_write_json_root("config", "/permissions.json", permissions, backup=True)
+    payload = players_payload()
+    payload.update({"saved": True, "allowlist_result": allow_result, "permissions_result": perm_result, "message": "Spielerrechte wurden direkt in allowlist.json und permissions.json gespeichert."})
+    return payload
+'''
+if RIGHTS_MARKER not in t:
+    t = t.replace("\n\ndef find_backup_meta(backup_name):", rights_block + "\n\ndef find_backup_meta(backup_name):", 1)
+
+profile_mode_js = r'''
+    /* v2.0.0.5b profile loader + strict mode boundary */
+    (() => {
+      const body = document.body;
+      function currentWinoMode2005() {
+        if (body.classList.contains('desktop-mode')) return 'desktop';
+        if (body.classList.contains('ux-mobile')) return 'mobile';
+        return 'pc';
+      }
+      function syncWinoMode2005() {
+        const mode = currentWinoMode2005();
+        body.dataset.winomcMode = mode;
+        body.classList.toggle('winomc-mode-mobile', mode === 'mobile');
+        body.classList.toggle('winomc-mode-pc', mode === 'pc');
+        body.classList.toggle('winomc-mode-desktop', mode === 'desktop');
+        if (mode !== 'mobile') body.classList.remove('mobile-file-tools-open');
+        if (mode !== 'pc') body.classList.remove('sidebar-rail-active');
+        if (mode !== 'desktop') body.classList.remove('desktop-dragging', 'desktop-resizing');
+      }
+      window.WinoMCMode = {
+        current: () => document.body.dataset.winomcMode || currentWinoMode2005(),
+        isMobile: () => (document.body.dataset.winomcMode || currentWinoMode2005()) === 'mobile',
+        isPC: () => (document.body.dataset.winomcMode || currentWinoMode2005()) === 'pc',
+        isDesktop: () => (document.body.dataset.winomcMode || currentWinoMode2005()) === 'desktop'
+      };
+      const observer = new MutationObserver(syncWinoMode2005);
+      observer.observe(body, { attributes: true, attributeFilter: ['class'] });
+      window.addEventListener('resize', syncWinoMode2005, { passive: true });
+      syncWinoMode2005();
+
+      window.loadProfiles2 = async function loadProfiles2Stable2005() {
+        const target = document.getElementById('profilesGrid');
+        const button = document.getElementById('profilesLoad');
+        try {
+          if (button) { button.disabled = true; button.textContent = 'Lade Profile…'; }
+          if (target) target.innerHTML = '<article class="tile"><div class="tile-title">Profile werden geladen…</div><div class="tile-desc">WinoMC liest die verfügbaren Erststart-Profile.</div></article>';
+          const data = await fetchJson('/api/profiles');
+          const profiles = Array.isArray(data.profiles) ? data.profiles : [];
+          if (!target) return;
+          target.innerHTML = profiles.map(profile =>
+            '<article class="tile"><div class="tile-title">'+escapeHtml(profile.name || 'Profil')+'</div><div class="tile-desc">'+escapeHtml(profile.description || '')+'</div><pre>'+escapeHtml(JSON.stringify(profile.defaults || {}, null, 2))+'</pre><button class="primary" data-profile-apply="'+escapeHtml(profile.name || '')+'">Profil anwenden</button></article>'
+          ).join('') || '<article class="tile"><div class="tile-title">Keine Profile gefunden</div><div class="tile-desc">Der Server hat keine Erststart-Profile geliefert.</div></article>';
+        } catch (err) {
+          if (target) target.innerHTML = '<article class="tile"><div class="tile-title">Profile konnten nicht geladen werden</div><div class="tile-desc">'+escapeHtml(err.message || err)+'</div></article>';
+          appendLine('[Erststart] ' + (err.message || err), 'error');
+        } finally {
+          if (button) { button.disabled = false; button.textContent = 'Profile laden'; }
+        }
+      };
+
+      document.addEventListener('click', async event => {
+        const button = event.target.closest('button');
+        if (!button) return;
+        if (button.id === 'profilesLoad') {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          await window.loadProfiles2();
+        }
+      }, true);
+    })();
+'''
+if PROFILE_MARKER not in t:
+    t = t.replace("</script>", profile_mode_js + "\n</script>", 1)
+
+if t != o:
+    p.write_text(t, encoding="utf-8")
+    print("WinoMC %s PR23 cleanup applied" % VERSION)
+else:
+    print("WinoMC %s PR23 cleanup already present" % VERSION)
