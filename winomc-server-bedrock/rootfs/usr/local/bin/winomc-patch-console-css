@@ -102,8 +102,9 @@ style_block = (
     + mobile_css
     + '\n  </style>\n'
 )
-if 'winomc-pc-ui-161421' not in text:
-    text = text.replace('</head>', style_block + '\n</head>', 1)
+if '</head>' not in text:
+    raise SystemExit('Could not find closing head marker in winomc-console-server')
+text = text.replace('</head>', style_block + '\n</head>', 1)
 
 script_block = (
     '\n    /* BEGIN winomc-pc-ui-161421 */\n'
@@ -117,10 +118,9 @@ script_block = (
     + '\n    /* END winomc-shell-router-161421 */\n'
 )
 closing = '\n</' + 'script>\n</body>\n</html>'
-if 'BEGIN winomc-shell-router-161421' not in text:
-    if closing not in text:
-        raise SystemExit('Could not find closing script/body/html marker in winomc-console-server')
-    text = text.replace(closing, script_block + closing, 1)
+if closing not in text:
+    raise SystemExit('Could not find closing script/body/html marker in winomc-console-server')
+text = text.replace(closing, script_block + closing, 1)
 
 if text != original:
     console_path.write_text(text, encoding='utf-8')
