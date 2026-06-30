@@ -220,30 +220,62 @@
 
   PC.repairClassicFiles = function repairClassicFiles() {
     if (!PC.syncShell() || document.body.classList.contains('desktop-mode')) return;
-    const panel = document.querySelector('.tab-panel[data-panel="files"].active');
-    if (!panel) return;
+    const filesPanel = document.querySelector('.tab-panel[data-panel="files"]');
+    const active = filesPanel?.classList.contains('active');
 
     const grid = byId('fileManagerGrid');
+    const split = byId('filesSplitHandle');
+    const explorer = filesPanel?.querySelector('.file-explorer-panel');
+    const tableWrap = filesPanel?.querySelector('.file-table-wrap');
+
+    if (!active) {
+      if (filesPanel) filesPanel.style.display = 'none';
+      if (grid) {
+        grid.classList.remove('editor-visible');
+        grid.style.display = 'none';
+      }
+      if (explorer) explorer.style.display = 'none';
+      if (tableWrap) tableWrap.style.display = 'none';
+      return;
+    }
+
+    filesPanel.style.display = 'flex';
+    filesPanel.style.flexDirection = 'column';
+    filesPanel.style.height = '100%';
+    filesPanel.style.minHeight = '0';
+    filesPanel.style.overflow = 'hidden';
+
     if (grid) {
       grid.classList.remove('editor-visible');
+      grid.style.display = 'grid';
+      grid.style.flex = '1 1 auto';
       grid.style.gridTemplateColumns = 'minmax(0, 1fr)';
       grid.style.gridTemplateRows = 'minmax(0, 1fr)';
+      grid.style.height = 'auto';
+      grid.style.minHeight = '0';
+      grid.style.maxHeight = 'none';
       grid.style.overflow = 'hidden';
     }
 
-    const split = byId('filesSplitHandle');
     if (split) split.style.display = 'none';
 
-    const explorer = panel.querySelector('.file-explorer-panel');
     if (explorer) {
+      explorer.style.display = 'flex';
+      explorer.style.flexDirection = 'column';
+      explorer.style.height = '100%';
       explorer.style.minHeight = '0';
+      explorer.style.maxHeight = '100%';
       explorer.style.overflow = 'hidden';
     }
 
-    const tableWrap = panel.querySelector('.file-table-wrap');
     if (tableWrap) {
-      tableWrap.style.minHeight = '360px';
+      tableWrap.style.display = '';
+      tableWrap.style.flex = '1 1 auto';
+      tableWrap.style.height = 'auto';
+      tableWrap.style.minHeight = '0';
+      tableWrap.style.maxHeight = 'none';
       tableWrap.style.overflow = 'auto';
+      tableWrap.style.overscrollBehavior = 'contain';
     }
   };
 
