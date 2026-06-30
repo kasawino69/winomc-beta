@@ -7,6 +7,13 @@
 
 ### 1.6.14.22b
 
+* Klassische PC-Ansicht: Dateiexplorer sauber an den Inhaltsbereich oberhalb der Live Console gebunden.
+* Klassische PC-Ansicht: Dateiliste nutzt den verfügbaren Platz im Dateien-Tab und scrollt intern.
+* Klassische PC-Ansicht: Explorer läuft nicht mehr hinter die Live Console und verdeckt keine Dateizeilen.
+* Klassische PC-Ansicht: Dateiexplorer wird ausschließlich im aktiven Menüpunkt `Dateien` dargestellt.
+* Andere PC-Menüpunkte reservieren keine Explorer-Fläche und zeigen keine Explorer-Reste mehr.
+* PC-Workbench/Desktop-Dateifenster bleibt von der klassischen Frame-Korrektur getrennt.
+* Mobile-Ansicht bleibt unverändert und weiterhin von PC-Layoutregeln getrennt.
 * Ursache dokumentiert und behoben: alte UI-Fixes wurden zwar teilweise ausgelagert, aber der Patch-Mechanismus entfernte nur die aktuellen 1.6.14.21b-IDs und konnte beim nächsten Lauf alte oder aktuelle Injektionen parallel stehen lassen.
 * Patch-Mechanismus idempotent erweitert: alte 1.6.14.21b- und neue 1.6.14.22b-Style-/Script-Blöcke werden vor jeder Neu-Injektion entfernt und danach zuverlässig neu eingefügt.
 * Version gesetzt auf `WinoMCConsole/1.6.14.22`.

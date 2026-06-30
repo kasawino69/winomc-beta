@@ -5,6 +5,49 @@
 body.winomc-pc {
   --winomc-pc-editor-gap: 14px;
   --winomc-pc-editor-radius: 16px;
+  --winomc-pc-classic-header-offset: 82px;
+}
+
+
+/* Classic PC frame: the main work area ends above the fixed live console.
+   Keep this scoped to PC and out of desktop/mobile modes. */
+body.winomc-pc:not(.desktop-mode) {
+  overflow: hidden;
+}
+
+body.winomc-pc:not(.desktop-mode) .layout {
+  height: calc(100dvh - var(--console-height) - var(--winomc-pc-classic-header-offset));
+  min-height: 0;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+body.winomc-pc:not(.desktop-mode) nav {
+  height: 100%;
+  min-height: 0;
+}
+
+body.winomc-pc:not(.desktop-mode) main.content {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  align-content: stretch;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel.active {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  align-content: start;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) #fileManagerGrid,
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .file-manager-grid,
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .file-explorer-panel,
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .file-table-wrap {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 body.winomc-pc.winomc-pc-editor-open {
@@ -135,12 +178,28 @@ body.winomc-pc #editorPanel.winomc-pc-editor #fileEditor {
   overflow: auto !important;
 }
 
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active > .card[data-card-id="files-toolbar"] {
+  flex: 0 0 auto !important;
+}
+
 body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active #fileManagerGrid,
 body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active #fileManagerGrid.editor-visible {
+  flex: 1 1 auto !important;
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) !important;
   grid-template-rows: minmax(0, 1fr) !important;
-  min-height: clamp(520px, 72dvh, 900px) !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
   overflow: hidden !important;
 }
 
@@ -150,13 +209,27 @@ body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active #editorP
 }
 
 body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active .file-explorer-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
   min-height: 0 !important;
+  max-height: 100% !important;
   overflow: hidden !important;
 }
 
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active .file-explorer-panel > .card-header,
+body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active .file-explorer-panel > .drop-zone {
+  flex: 0 0 auto !important;
+}
+
 body.winomc-pc:not(.desktop-mode) .tab-panel[data-panel="files"].active .file-table-wrap {
-  min-height: 360px !important;
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
   overflow: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable !important;
 }
 
 body.winomc-pc.desktop-mode .tab-panel[data-panel="files"].desktop-open:not(.desktop-minimized) {
