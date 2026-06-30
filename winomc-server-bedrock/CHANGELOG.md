@@ -3,6 +3,7 @@
 ### 2.0.0
 
 #### Added
+* Safety Planner für Reparatur, URL-Import und Restore: Risikoampel `green`/`yellow`/`red`, Welt-Schutzanalyse, Bestätigungspflicht, Quarantäne, Restore-Vorschau, Speicherplatzhinweise und Duplicate-UUID-Schutz.
 * RC-Nacharbeit: serverseitig persistenter Webschutz mit `/api/web-protection` und Statusdatei unter `/config/.winomc/web_protection.json`.
 * RC-Nacharbeit: Diagnose-Reparaturaktionen über `POST /api/diagnostics/repair` für Ordnerstruktur und sichere JSON-Reparaturen.
 * RC-Nacharbeit: URL-Import für direkte Bedrock-Pack/Add-on-Dateien mit sicherer HTTPS-/Privat-IP-Prüfung, Bedrock-Manifestvalidierung und Java-Mod-Ablehnung.
@@ -30,6 +31,8 @@
 #### Security
 * Neue zentrale Funktion `require_web_write_allowed(action_name)` schützt gefährliche Endpunkte.
 * Restore, Pack-Aktivierung und Player-Speicherung nutzen erlaubte Roots, Pfadvalidierung und Sicherungskopien.
+* URL-Import folgt Redirects nur manuell und begrenzt, prüft jedes Ziel, blockiert HTML/Java-Mods/Symlinks/ZIP-Bomben und installiert erst nach Quarantäne-Plan.
+* Auto-Reparaturen leeren aktive World-Pack-Dateien nicht automatisch und schützen Add-on-/Marketplace-Welten vor blindem Vanilla-Reset.
 * Restore prüft ZIP-Einträge gegen Path Traversal/ZIP Slip und schreibt nur unter `/config`.
 
 #### Migration

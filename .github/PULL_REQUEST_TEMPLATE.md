@@ -75,3 +75,11 @@
 - [ ] URL-Import-Check blockiert localhost/private IPs
 - [ ] Direkter HTTPS-Bedrock-Pack-Download wird geprüft und installiert
 - [ ] Mobile Befehlshilfe ist sichtbar, scrollbar und übernimmt Vorschläge kontrolliert
+
+### Safety Planner checks
+- [ ] Diagnose zeigt Welt-Schutzstatus und Risikoampel
+- [ ] `repair_all_safe` leert aktive World-Pack-Dateien nicht
+- [ ] Rote Reparatur ohne Expertenbestätigung bricht ab
+- [ ] URL-Import lädt zuerst in Quarantäne und liefert einen Plan
+- [ ] Duplicate UUIDs werden nicht automatisch ersetzt
+- [ ] Restore-Plan zeigt Pack-/Add-on-Auswirkungen und verlangt Bestätigung

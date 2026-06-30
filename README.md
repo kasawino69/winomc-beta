@@ -48,9 +48,13 @@ Die Weboberfläche bietet Konsole, Dateimanager, Backups, Diagnose, Packs, Spiel
 
 WinoMC begrenzt Dateioperationen auf erlaubte WinoMC-Verzeichnisse, prüft Pfade, blockiert Path Traversal und schützt ZIP-Entpacken vor ZIP Slip. Webschutz wird serverseitig persistent gespeichert und für gefährliche Aktionen erzwungen, nicht nur über Cookies oder deaktivierte UI-Buttons.
 
+## Safety Planner und Risikoampel
+
+WinoMC nutzt für Reparatur, Import und Restore einen Safety Planner: erst analysieren, Risiko erklären, Backup planen, bestätigen und dann ausführen. Die Risikoampel nutzt `green`, `yellow` und `red`. Auto-Reparaturen erzwingen nicht blind Vanilla und leeren aktive Add-on-/Pack-Dateien nicht automatisch; Add-on-, Marketplace- oder unbekannte Welten werden vorsichtig behandelt.
+
 ## URL-Import
 
-WinoMC kann direkte Bedrock-Datei-URLs prüfen und installieren, wenn sie auf `.mcpack`, `.mcaddon`, `.mcworld`, `.mctemplate` oder eine geeignete `.zip` zeigen. Java-Mods (`.jar`, Forge/Fabric/NeoForge) werden freundlich abgelehnt. Lokale/private Ziele werden blockiert. CurseForge-Projektseiten werden nicht garantiert automatisch installiert; ein direkter Datei-Download ist zuverlässiger.
+WinoMC unterstützt direkte Bedrock-Dateien, nicht bestimmte Webseiten. Direkte HTTPS-Links auf `.mcpack`, `.mcaddon`, `.mcworld`, `.mctemplate` oder geeignete `.zip` können funktionieren; MCPEDL, GitHub Releases oder eigene Webseiten sind möglich, wenn sie echte Dateien liefern. Downloads landen zuerst in Quarantäne, werden auf Manifest, Größe, Symlinks, ZIP Slip, Java-Mod-Marker und Duplicate UUIDs geprüft und erst nach Plan/Bestätigung installiert. Java-Mods (`.jar`, Forge/Fabric/NeoForge) werden freundlich abgelehnt. Lokale/private Ziele werden blockiert. CurseForge-Projektseiten werden nicht garantiert automatisch installiert; ein direkter Datei-Download ist zuverlässiger. Restore nutzt eine Vorschau mit Speicherplatzprüfung und Safety-Backup.
 
 ## Nicht-Ziele
 

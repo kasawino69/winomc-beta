@@ -19,11 +19,15 @@ Die Oberfläche enthält Desktop-, klassische und Mobile-Ansicht. Der Dateiexplo
 
 WinoMC kann Welt-, Config-, Safety- und Komplettbackups unter `/config/backups` erstellen. Jedes Backup erhält Metadaten mit Name, Datum, Welt, Typ, Version, Größe und Status. Die Anzahl behaltener Backups wird über `WINOMC_BACKUP_KEEP` gesteuert.
 
-Restore ist als sicherer Workflow umgesetzt: Backup auswählen, Modus `config`, `world` oder `complete` wählen, Safety-Backup vor Restore erstellen, ZIP-Pfade validieren und nur erlaubte Ziele unter `/config` wiederherstellen. Nach Restore sollte der Serverzustand in **Diagnose** und **Health** geprüft werden.
+Restore ist als sicherer Workflow umgesetzt: Backup auswählen, Modus `config`, `world` oder `complete` wählen, Restore-Vorschau lesen, Safety-Backup vor Restore erstellen, ZIP-Pfade validieren und nur erlaubte Ziele unter `/config` wiederherstellen. Der Safety Planner prüft, ob Pack-Dateien, Resource Packs, Behavior Packs oder Add-on-Spuren betroffen sind; bei gelbem/rotem Risiko ist Bestätigung nötig. Nach Restore sollte der Serverzustand in **Diagnose** und **Health** geprüft werden.
+
+## Safety Planner / Risikoampel
+
+Für Reparatur, Import und Restore gilt: analysieren, Risiko erklären, Backup planen, bestätigen, dann handeln. `green` bedeutet keine vorhandenen Daten betroffen, `yellow` bedeutet Konfigurationsänderung mit Sicherung, `red` kann Welt/Add-ons/Spielverhalten beeinflussen und braucht Expertenbestätigung. WinoMC erkennt `vanilla`, `resource_packs`, `addons`, `marketplace_or_unknown` und `unknown`, damit Auto-Reparatur nicht blind Vanilla erzwingt.
 
 ## Diagnose und Reparatur
 
-Die Diagnose prüft Ordner, Weltpfad, Schreibrechte, Speicherplatz, `server.properties`, Ports, `allowlist.json`, `permissions.json`, Pack-Ordner, Konsole, Logs und Backup-Status. Sichere Diagnose-Reparaturaktionen können Ordner anlegen und fehlende/ungültige JSON-Dateien als valide leere Listen neu erzeugen. Vor dem Ersetzen vorhandener Dateien erstellt WinoMC Sicherungskopien; destruktive Reparaturen ohne Schutz gibt es nicht.
+Die Diagnose prüft Ordner, Weltpfad, Welt-Schutzstatus, Schreibrechte, Speicherplatz, `server.properties`, Ports, `allowlist.json`, `permissions.json`, Pack-Ordner, Konsole, Logs und Backup-Status. Sichere Diagnose-Reparaturaktionen können Ordner anlegen und fehlende JSON-Dateien nur dann automatisch als valide leere Listen erzeugen, wenn keine Add-on-Spuren dagegen sprechen. Gültige aktive `world_resource_packs.json` und `world_behavior_packs.json` werden niemals durch `[]` ersetzt. Ungültige Pack-Dateien sind gelb/rot und brauchen Bestätigung plus Sicherungskopie.
 
 ## Packs
 
@@ -37,7 +41,7 @@ WinoMC kann `allowlist.json` und `permissions.json` über eine UI/API speichern.
 
 Der Dateimanager und die Import-/Export-Seite zeigen `/share/winomc/import` und `/share/winomc/export`. ZIP-Erstellung, ZIP-Entpacken und sicherer Welt-Export respektieren Webschutz und Pfadprüfungen. Bestehende Ziele werden nicht still überschrieben; Nutzer müssen Überschreiben bewusst erlauben oder eine Kopie wählen.
 
-Der URL-Import kann direkte Bedrock-Pack/Add-on-URLs prüfen und installieren. Unterstützt werden `.mcpack`, `.mcaddon`, `.mcworld`, `.mctemplate` und geeignete `.zip`-Dateien mit gültigem Bedrock-Manifest. Java-Mods (`.jar`, Forge/Fabric/NeoForge) werden abgelehnt. Lokale/private Ziele, localhost und nicht-HTTPS-URLs werden blockiert. CurseForge-Projektseiten können nicht garantiert automatisch installiert werden; bitte dort den direkten Bedrock-Dateidownload kopieren. Webschutz blockiert URL-Import, wenn aktiv.
+Der URL-Import unterstützt direkte Bedrock-Dateien, nicht bestimmte Webseiten. Unterstützt werden `.mcpack`, `.mcaddon`, `.mcworld`, `.mctemplate` und geeignete `.zip`-Dateien mit gültigem Bedrock-Manifest. Downloads landen zuerst in Quarantäne, Redirects werden begrenzt und jede Ziel-URL wird erneut gegen HTTPS/private IPs geprüft. Java-Mods (`.jar`, Forge/Fabric/NeoForge), HTML statt Datei, ZIP Slip, Symlinks, zu große Archive, sehr viele Dateien und Duplicate UUIDs werden blockiert oder mit rotem Plan erklärt. Lokale/private Ziele, localhost und nicht-HTTPS-URLs werden blockiert. CurseForge-Projektseiten können nicht garantiert automatisch installiert werden; bitte dort den direkten Bedrock-Dateidownload kopieren. Webschutz blockiert URL-Import, wenn aktiv. Bei Fehlern führt WinoMC Cleanup/Rollback für angelegte Zielordner aus.
 
 ## Update-Schutz
 

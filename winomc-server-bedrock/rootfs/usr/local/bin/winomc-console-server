@@ -17,8 +17,9 @@ import time
 import zipfile
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, quote, unquote, urlparse
-from urllib.request import Request, urlopen
+from urllib.parse import parse_qs, quote, unquote, urlparse, urljoin
+from urllib.error import HTTPError
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("WINOMC_CONSOLE_PORT", "8099"))
@@ -54,6 +55,10 @@ SERVER_PROPERTIES_PATH = os.environ.get("WINOMC_SERVER_PROPERTIES", os.path.join
 WINOMC_STATE_DIR = os.environ.get("WINOMC_STATE_DIR", os.path.join(DATA_DIR, ".winomc"))
 WEB_PROTECTION_FILE = os.environ.get("WINOMC_WEB_PROTECTION_FILE", os.path.join(WINOMC_STATE_DIR, "web_protection.json"))
 IMPORT_STATUS_FILE = os.environ.get("WINOMC_IMPORT_STATUS_FILE", os.path.join(WINOMC_STATE_DIR, "import-status.json"))
+QUARANTINE_DIR = os.environ.get("WINOMC_QUARANTINE_DIR", os.path.join(WINOMC_STATE_DIR, "quarantine"))
+MAX_IMPORT_REDIRECTS = int(os.environ.get("WINOMC_IMPORT_MAX_REDIRECTS", "3"))
+MAX_IMPORT_ARCHIVE_FILES = int(os.environ.get("WINOMC_IMPORT_MAX_ARCHIVE_FILES", "4000"))
+MAX_IMPORT_FILENAME_LENGTH = int(os.environ.get("WINOMC_IMPORT_MAX_FILENAME_LENGTH", "180"))
 
 MAX_TEXT_FILE_BYTES = int(os.environ.get("WINOMC_FILE_EDITOR_MAX_BYTES", str(2 * 1024 * 1024)))
 MAX_UPLOAD_BYTES = int(os.environ.get("WINOMC_FILE_UPLOAD_MAX_BYTES", str(512 * 1024 * 1024)))
@@ -7429,10 +7434,10 @@ body.winomc-mobile .editor-panel.editor-open {
       const t = ev.target;
       try {
         if (t?.id === 'diagnosticsRun') await loadDiagnostics2();
-        if (t?.id === 'repairAllSafe2') { const r=await postJson('/api/diagnostics/repair',{action:'repair_all_safe'}); alert(r.message); await loadDiagnostics2(); }
-        if (t?.dataset?.diagnosticsRepair) { const r=await postJson('/api/diagnostics/repair',{action:t.dataset.diagnosticsRepair}); alert(r.message); await loadDiagnostics2(); }
+        if (t?.id === 'repairAllSafe2') { const r=await postJson('/api/diagnostics/repair',{action:'repair_all_safe',mode:'safe'}); alert((r.plan ? ('Risiko '+r.plan.risk+': ') : '') + r.message); await loadDiagnostics2(); }
+        if (t?.dataset?.diagnosticsRepair) { const expert=confirm('Safety Planner: Diese Reparatur kann Konfiguration oder Add-on-Zustand verändern. Im Expertenmodus mit Backup fortfahren?'); const r=await postJson('/api/diagnostics/repair',{action:t.dataset.diagnosticsRepair,mode: expert ? 'expert':'safe',confirm: expert}); alert((r.plan ? ('Risiko '+r.plan.risk+': ') : '') + r.message); await loadDiagnostics2(); }
         if (t?.id === 'backupCreate2') { const r=await postJson('/api/backups/create',{type:'complete',reason:'manual-ui'}); document.getElementById('backupResult2').textContent='Backup erstellt: '+r.backup.name; await loadBackups2(); }
-        if (t?.dataset?.backupRestore) { if(confirm('Restore überschreibt Daten nach Safety-Backup. Fortfahren?')) { const r=await postJson('/api/backups/restore',{backup:t.dataset.backupRestore,mode:'complete'}); alert(r.message); await loadBackups2(); } }
+        if (t?.dataset?.backupRestore) { const plan=await postJson('/api/backups/restore/plan',{backup:t.dataset.backupRestore,mode:'complete'}); const ok=!plan.requires_confirmation || confirm('Restore-Plan Risiko '+plan.risk+'\n'+(plan.warnings||[]).join('\n')+'\nMit Safety-Backup fortfahren?'); if(ok) { const r=await postJson('/api/backups/restore',{backup:t.dataset.backupRestore,mode:'complete',confirm:true}); alert(r.message); await loadBackups2(); } }
         if (t?.dataset?.backupDelete) { if(confirm('Backup löschen?')) { await postJson('/api/backups/delete',{backup:t.dataset.backupDelete}); await loadBackups2(); } }
         if (t?.dataset?.packActivate) { await postJson('/api/packs/activate',{type:t.dataset.packActivate,path:t.dataset.packPath}); await loadPacks2(); }
         if (t?.dataset?.packDeactivate) { await postJson('/api/packs/deactivate',{type:t.dataset.packDeactivate,uuid:t.dataset.packUuid}); await loadPacks2(); }
@@ -7440,8 +7445,8 @@ body.winomc-mobile .editor-panel.editor-open {
         if (t?.id === 'playersSave2') { await postJson('/api/players/save',{players:collectPlayers2()}); await loadPlayers2(); }
         if (t?.id === 'updatesPrepare2') { const r=await postJson('/api/updates/prepare',{warning:'Serverupdate wird vorbereitet. Bitte gleich neu verbinden.'}); alert(r.message); await loadUpdates2(); }
         if (t?.dataset?.profilePrepare) { const r=await postJson('/api/profiles/prepare',{profile:t.dataset.profilePrepare}); alert(r.message); }
-        if (t?.id === 'urlImportCheck2') { const box=document.getElementById('urlImportStatus2'); box.textContent='URL wird geprüft...'; const r=await postJson('/api/import/url/check',{url:document.getElementById('urlImportInput2').value}); box.textContent=r.message; }
-        if (t?.id === 'urlImportInstall2') { const box=document.getElementById('urlImportStatus2'); box.textContent='Download und Installation laufen...'; const r=await postJson('/api/import/url/install',{url:document.getElementById('urlImportInput2').value, activate:document.getElementById('urlImportActivate2').checked}); box.textContent=r.message + ' ' + (r.installed||[]).map(i=>i.name).join(', '); await loadPacks2(); }
+        if (t?.id === 'urlImportCheck2') { const box=document.getElementById('urlImportStatus2'); box.textContent='URL wird geprüft...'; const r=await postJson('/api/import/url/check',{url:document.getElementById('urlImportInput2').value}); box.textContent=r.message + (r.plan ? (' Risiko: '+r.plan.risk+' — '+(r.plan.changes||[]).join(' | ')) : ''); }
+        if (t?.id === 'urlImportInstall2') { const box=document.getElementById('urlImportStatus2'); const confirmInstall=confirm('Safety Planner: Download erfolgt in Quarantäne, Manifest wird geprüft und gelb/rote Risiken benötigen Bestätigung. Fortfahren?'); if(!confirmInstall) return; box.textContent='Download, Quarantäne-Prüfung und Installation laufen...'; const r=await postJson('/api/import/url/install',{url:document.getElementById('urlImportInput2').value, activate:document.getElementById('urlImportActivate2').checked, confirm:true}); box.textContent=r.message + ' Risiko: ' + (r.plan?.risk || '-') + ' ' + (r.installed||[]).map(i=>i.name).join(', '); await loadPacks2(); }
       } catch (err) { alert(err.message); appendLine('[WinoMC 2.0] '+err.message,'error'); }
     });
 
@@ -9323,7 +9328,7 @@ def open_safe_download(candidate_path, mode="rb"):
 
 
 def ensure_directories():
-    for path in (DATA_DIR, WORLDS_DIR, RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR, WORLD_TEMPLATES_DIR, IMPORT_DIR, EXPORT_DIR, BACKUP_DIR, FILE_BACKUP_DIR, TRASH_DIR, WINOMC_STATE_DIR):
+    for path in (DATA_DIR, WORLDS_DIR, RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR, WORLD_TEMPLATES_DIR, IMPORT_DIR, EXPORT_DIR, BACKUP_DIR, FILE_BACKUP_DIR, TRASH_DIR, WINOMC_STATE_DIR, QUARANTINE_DIR):
         try:
             os.makedirs(canonical_path(path), exist_ok=True)
         except OSError as exc:
@@ -10212,8 +10217,10 @@ def diagnostics_payload():
     add("Konsole", runtime_path_exists(runtime_fifo_path()), "FIFO vorhanden." if runtime_path_exists(runtime_fifo_path()) else "Serverprozess/FIFO nicht erreichbar.")
     add("Logdatei", runtime_path_exists(runtime_log_path()), "Log lesbar." if runtime_path_exists(runtime_log_path()) else "Noch kein Log vorhanden.")
     add("Backups", bool(list_backups()), "Letztes Backup vorhanden." if list_backups() else "Noch kein WinoMC-Backup vorhanden.", True)
+    world_safety = analyze_world_safety()
+    add("Welt-Schutzstatus", world_safety.get("risk") == "green", "%s / Risiko %s" % (world_safety.get("mode"), world_safety.get("risk")), bool(world_safety.get("risk") != "green"))
     overall = "OK" if all(i["severity"] == "OK" for i in items) else "Warnung"
-    return {"ok": True, "overall": overall, "items": items}
+    return {"ok": True, "overall": overall, "items": items, "world_safety": world_safety}
 
 
 def scan_packs(base_dir, pack_type):
@@ -10469,10 +10476,66 @@ def find_backup_meta(backup_name):
     return {"name": safe_name, "archive": safe_name, "type": "unknown"}, candidate.path
 
 
-def restore_backup(backup_name, mode="complete", restart=False):
+
+def backup_contains(archive_path):
+    contains = {"worlds": False, "resource_packs": False, "behavior_packs": False, "world_resource_packs": False, "world_behavior_packs": False, "server_properties": False, "files": 0, "size": 0}
+    with zipfile.ZipFile(archive_path, "r") as archive:
+        for member in archive.infolist():
+            raw = str(member.filename or "").replace("\\", "/")
+            if not raw or raw == "winomc-backup.json" or raw.startswith("warnings/"):
+                continue
+            contains["files"] += 1
+            contains["size"] += int(member.file_size or 0)
+            if raw.startswith("worlds/"):
+                contains["worlds"] = True
+            if raw.startswith("resource_packs/"):
+                contains["resource_packs"] = True
+            if raw.startswith("behavior_packs/"):
+                contains["behavior_packs"] = True
+            if raw.endswith("world_resource_packs.json"):
+                contains["world_resource_packs"] = True
+            if raw.endswith("world_behavior_packs.json"):
+                contains["world_behavior_packs"] = True
+            if raw == "server.properties":
+                contains["server_properties"] = True
+    return contains
+
+
+def build_restore_plan(backup_name, mode="complete"):
     mode = str(mode or "complete").lower()
     if mode not in ("config", "world", "complete"):
         raise ValueError("Restore-Modus muss config, world oder complete sein.")
+    meta, archive_path = find_backup_meta(backup_name)
+    contains = backup_contains(archive_path)
+    world = analyze_world_safety()
+    changes = []
+    warnings = []
+    if mode in ("world", "complete") and contains["worlds"]:
+        changes.append("Weltdaten werden aus dem Backup wiederhergestellt.")
+    if mode in ("config", "complete"):
+        for key, label in (("server_properties", "server.properties"), ("world_resource_packs", "world_resource_packs.json"), ("world_behavior_packs", "world_behavior_packs.json")):
+            if contains.get(key):
+                changes.append("%s wird aus dem Backup wiederhergestellt." % label)
+    if mode == "complete":
+        if contains["resource_packs"]:
+            changes.append("Resource-Pack-Ordner werden wiederhergestellt.")
+        if contains["behavior_packs"]:
+            changes.append("Behavior-Pack-Ordner werden wiederhergestellt.")
+    risk = "yellow" if changes else "green"
+    if world.get("risk") in ("yellow", "red") and (contains["world_resource_packs"] or contains["world_behavior_packs"] or contains["behavior_packs"]):
+        risk = "red"
+        warnings.append("Aktuelle Welt enthält Add-on-/Pack-Hinweise; Restore kann aktive Add-ons verändern.")
+    free = disk_usage_metrics().get("free") or 0
+    needed = int(contains.get("size") or 0) * 2
+    if free and needed and free < needed:
+        risk = risk_level(risk, "red")
+        warnings.append("Wenig freier Speicher für Restore plus Safety-Backup.")
+    return {"ok": True, "kind": "restore", "backup": meta, "mode": mode, "risk": risk, "summary": "Restore-Vorschau für %s" % meta.get("name", backup_name), "changes": changes, "warnings": warnings, "backup_plan": ["Safety-Backup vor Restore"], "will_restore": changes, "will_skip": [], "contains": contains, "world_safety": world, "requires_confirmation": requires_confirmation({"risk": risk})}
+
+
+def restore_backup(backup_name, mode="complete", restart=False, confirm=False):
+    plan = build_restore_plan(backup_name, mode)
+    assert_plan_confirmed(plan, confirm)
     meta, archive_path = find_backup_meta(backup_name)
     safety = create_framework_backup("safety", "pre-restore")
     prefixes = []
@@ -10493,6 +10556,9 @@ def restore_backup(backup_name, mode="complete", restart=False):
             normalized = posixpath.normpath(raw_name)
             if normalized.startswith("../") or normalized.startswith("/") or normalized == "..":
                 raise ValueError("Unsicherer Backup-Pfad blockiert: %s" % raw_name)
+            if member.is_dir() or zip_member_is_symlink(member):
+                if zip_member_is_symlink(member):
+                    raise ValueError("Symlink im Backup blockiert: %s" % raw_name)
             if not any(normalized == prefix or normalized.startswith(prefix) for prefix in prefixes):
                 skipped.append(normalized)
                 continue
@@ -10510,8 +10576,7 @@ def restore_backup(backup_name, mode="complete", restart=False):
             restored.append(normalized)
     if restart:
         append_console_note("Restore abgeschlossen. Bitte Add-on/Server manuell neu starten, falls nötig.")
-    return {"ok": True, "backup": meta, "mode": mode, "safety_backup": safety, "restored": restored, "skipped": skipped, "message": "Restore abgeschlossen. Bitte Serverzustand und Health prüfen."}
-
+    return {"ok": True, "backup": meta, "mode": mode, "plan": plan, "safety_backup": safety, "restored": restored, "skipped": skipped, "message": "Restore abgeschlossen. Bitte Serverzustand und Health prüfen."}
 
 def delete_backup(backup_name):
     meta, archive_path = find_backup_meta(backup_name)
@@ -10619,44 +10684,190 @@ def read_import_status():
         return {"ok": False, "status": "error", "message": str(exc)}
 
 
-def repair_json_list(rel_path, label):
+
+def risk_level(*levels):
+    order = {"green": 0, "yellow": 1, "red": 2}
+    best = "green"
+    for level in levels:
+        if order.get(str(level or "green"), 0) > order[best]:
+            best = str(level)
+    return best
+
+
+def requires_confirmation(plan):
+    return str(plan.get("risk", "green")) in ("yellow", "red") or bool(plan.get("requires_confirmation", False))
+
+
+def assert_plan_confirmed(plan, confirm=False, mode="safe"):
+    if str(plan.get("risk")) == "red" and mode != "expert":
+        raise PermissionError("Diese Aktion ist rot eingestuft und erfordert Expertenmodus mit bewusster Bestätigung.")
+    if requires_confirmation(plan) and not bool(confirm):
+        raise PermissionError("Aktion nicht ausgeführt: %s Bestätigung erforderlich." % plan.get("summary", "Safety Planner verlangt eine Bestätigung."))
+
+
+def pack_manifest_signals(base_dir, label):
+    signals = []
+    if not os.path.isdir(base_dir):
+        return signals
+    for root, dirs, files in os.walk(base_dir):
+        dirs[:] = [d for d in dirs if d not in ("__MACOSX", ".git")]
+        if "manifest.json" not in files:
+            continue
+        data, err = json_file(os.path.join(root, "manifest.json"), {})
+        rel = os.path.relpath(root, base_dir)
+        if err:
+            signals.append({"type": "manifest_invalid", "pack": rel, "message": "%s Manifest ungültig: %s" % (label, err)})
+            continue
+        modules = data.get("modules", []) if isinstance(data, dict) else []
+        header = data.get("header", {}) if isinstance(data, dict) else {}
+        module_types = [str(m.get("type", "")).lower() for m in modules if isinstance(m, dict)]
+        for key in ("dependencies", "capabilities", "metadata"):
+            if data.get(key):
+                signals.append({"type": key, "pack": rel, "message": "%s enthält %s." % (rel, key)})
+        if header.get("min_engine_version") or data.get("min_engine_version"):
+            signals.append({"type": "min_engine_version", "pack": rel, "message": "%s nennt eine minimale Bedrock-Version." % rel})
+        if any(t in ("data", "script", "client_data") or "script" in t for t in module_types):
+            signals.append({"type": "behavior_or_script", "pack": rel, "message": "%s enthält Behavior-/Script-Module." % rel})
+        elif "resources" in module_types:
+            signals.append({"type": "resources", "pack": rel, "message": "%s enthält Resource-Module." % rel})
+    return signals
+
+
+def read_world_pack_file(pack_type):
+    rel = world_pack_rel_path(pack_type)
+    path, _ = resolve_safe_path("config", rel)
+    if not path_exists_root("config", path):
+        return {"exists": False, "valid": True, "entries": [], "error": None, "rel": rel}
+    data, err = json_file(path, [])
+    return {"exists": True, "valid": err is None and isinstance(data, list), "entries": data if isinstance(data, list) else [], "error": err, "rel": rel}
+
+
+def analyze_world_safety():
+    signals = []
+    warnings = []
+    mode = "vanilla"
+    risk = "green"
+    resource_file = read_world_pack_file("resource")
+    behavior_file = read_world_pack_file("behavior")
+    for label, info in (("world_resource_packs.json", resource_file), ("world_behavior_packs.json", behavior_file)):
+        if info["exists"] and not info["valid"]:
+            mode = "unknown"; risk = risk_level(risk, "red"); warnings.append("%s ist ungültig; automatische Reparatur würde Pack-Zustand verändern." % label)
+        elif info["entries"]:
+            signals.append({"type": "active_pack_file", "file": label, "count": len(info["entries"]), "message": "%s enthält aktive Einträge." % label})
+            if label.startswith("world_behavior"):
+                mode = "addons"; risk = risk_level(risk, "red")
+            elif mode == "vanilla":
+                mode = "resource_packs"; risk = risk_level(risk, "yellow")
+    resource_signals = pack_manifest_signals(RESOURCE_PACKS_DIR, "Resource Pack")
+    behavior_signals = pack_manifest_signals(BEHAVIOR_PACKS_DIR, "Behavior Pack")
+    signals.extend(resource_signals + behavior_signals)
+    if behavior_signals:
+        mode = "addons"; risk = risk_level(risk, "red")
+    elif resource_signals and mode == "vanilla":
+        mode = "resource_packs"; risk = risk_level(risk, "yellow")
+    world = world_dir_path()
+    for marker in ("premium_cache", "valid_known_packs.json", "world_resource_pack_history.json"):
+        if os.path.exists(os.path.join(world, marker)):
+            mode = "marketplace_or_unknown"; risk = risk_level(risk, "yellow"); signals.append({"type": "marketplace_or_unknown", "message": "Marketplace/unklare Weltspur: %s" % marker})
+    if mode == "addons":
+        warnings.append("Add-ons erkannt: automatische Reparaturen werden nur nach Bestätigung ausgeführt.")
+    return {"ok": True, "mode": mode, "risk": risk, "signals": signals, "warnings": warnings, "recommendation": "Analyze first. Explain risk. Backup. Confirm. Then act."}
+
+
+def build_repair_plan(action):
+    action = str(action or "").strip()
+    world = analyze_world_safety()
+    changes=[]; warnings=[]; backup_plan=[]; risk="green"
+    if action in ("ensure_directories", "repair_all_safe"):
+        changes.append("Fehlende Standardordner werden erstellt.")
+    targets = []
+    if action in ("repair_allowlist", "repair_all_safe"):
+        targets.append(("/allowlist.json", "allowlist.json", False))
+    if action in ("repair_permissions", "repair_all_safe"):
+        targets.append(("/permissions.json", "permissions.json", False))
+    if action in ("repair_world_resource_packs", "repair_pack_files", "repair_all_safe"):
+        targets.append((world_pack_rel_path("resource"), "world_resource_packs.json", True))
+    if action in ("repair_world_behavior_packs", "repair_pack_files", "repair_all_safe"):
+        targets.append((world_pack_rel_path("behavior"), "world_behavior_packs.json", True))
+    for rel,label,is_pack in targets:
+        path,_ = resolve_safe_path("config", rel)
+        if path_exists_root("config", path):
+            data,err=json_file(path, [])
+            if err is None and isinstance(data, list):
+                changes.append("%s ist gültig und wird nicht ersetzt." % label)
+                if data and is_pack:
+                    warnings.append("%s enthält aktive Pack-Einträge und wird nicht geleert." % label)
+                    risk = risk_level(risk, "red")
+                continue
+            backup_plan.append("Sicherungskopie von %s" % label)
+            changes.append("Ungültige %s könnte als leere Liste neu erzeugt werden." % label)
+            risk = risk_level(risk, "red" if is_pack or world.get("risk") != "green" else "yellow")
+        else:
+            changes.append("Fehlende %s könnte als leere Liste erstellt werden." % label)
+            if is_pack and world.get("risk") != "green":
+                risk = risk_level(risk, "yellow"); warnings.append("Pack-/Add-on-Spuren gefunden; fehlende Pack-Datei wird nicht ohne Bestätigung erstellt.")
+    if action in ("repair_pack_files", "repair_all_safe") and world.get("risk") == "red":
+        risk = risk_level(risk, "red")
+    return {"ok": True, "kind": "repair", "action": action, "risk": risk, "summary": "Reparaturplan für %s" % action, "changes": changes, "warnings": warnings, "backup_plan": backup_plan, "world_safety": world, "requires_confirmation": risk in ("yellow", "red")}
+
+
+def repair_json_list(rel_path, label, confirm=False, mode="safe", plan=None):
     file_path, normalized = resolve_safe_path("config", rel_path)
     parent = os.path.dirname(file_path)
     makedirs_root("config", parent, exist_ok=True)
+    is_pack_file = label in ("world_resource_packs.json", "world_behavior_packs.json")
     if path_exists_root("config", file_path):
         data, err = json_file(file_path, [])
         if err is None and isinstance(data, list):
-            return {"action": label, "status": "skipped", "message": "%s ist bereits gültig." % label}
+            return {"action": label, "status": "skipped", "message": "%s ist bereits gültig und wurde nicht ersetzt." % label}
+        if is_pack_file or (plan and plan.get("risk") == "red"):
+            assert_plan_confirmed(plan or {"risk":"red","summary":label}, confirm, mode)
         backup_path = make_file_backup(file_path, "config", normalized) if path_is_file_root("config", file_path) else None
     else:
+        if is_pack_file and plan and plan.get("risk") in ("yellow", "red"):
+            assert_plan_confirmed(plan, confirm, mode)
         backup_path = None
     result = atomic_write_json_root("config", normalized, [], backup=False)
     return {"action": label, "status": "repaired", "message": "%s wurde als leere valide JSON-Liste geschrieben." % label, "backup_path": backup_path, "result": result}
 
 
-def repair_diagnostics(action):
+def repair_diagnostics(action, confirm=False, mode="safe"):
     action = str(action or "").strip()
+    mode = str(mode or "safe").lower()
+    plan = build_repair_plan(action)
+    if plan["risk"] == "red" or (plan["risk"] == "yellow" and action not in ("ensure_directories",)):
+        assert_plan_confirmed(plan, confirm, mode)
     results = []
     if action in ("ensure_directories", "repair_all_safe"):
-        ensure_directories()
-        state_dir_path()
-        results.append({"action": "ensure_directories", "status": "ok", "message": "Ordnerstruktur wurde geprüft/erstellt."})
+        ensure_directories(); state_dir_path(); results.append({"action": "ensure_directories", "status": "ok", "message": "Ordnerstruktur wurde geprüft/erstellt."})
     if action in ("repair_allowlist", "repair_all_safe"):
-        results.append(repair_json_list("/allowlist.json", "allowlist.json"))
+        results.append(repair_json_list("/allowlist.json", "allowlist.json", confirm, mode, plan))
     if action in ("repair_permissions", "repair_all_safe"):
-        results.append(repair_json_list("/permissions.json", "permissions.json"))
-    if action in ("repair_world_resource_packs", "repair_pack_files", "repair_all_safe"):
-        results.append(repair_json_list(world_pack_rel_path("resource"), "world_resource_packs.json"))
-    if action in ("repair_world_behavior_packs", "repair_pack_files", "repair_all_safe"):
-        results.append(repair_json_list(world_pack_rel_path("behavior"), "world_behavior_packs.json"))
+        results.append(repair_json_list("/permissions.json", "permissions.json", confirm, mode, plan))
+    if action != "repair_all_safe":
+        if action in ("repair_world_resource_packs", "repair_pack_files"):
+            results.append(repair_json_list(world_pack_rel_path("resource"), "world_resource_packs.json", confirm, mode, plan))
+        if action in ("repair_world_behavior_packs", "repair_pack_files"):
+            results.append(repair_json_list(world_pack_rel_path("behavior"), "world_behavior_packs.json", confirm, mode, plan))
     if not results:
         raise ValueError("Unbekannte oder nicht sichere Reparaturaktion: %s" % action)
-    return {"ok": True, "action": action, "results": results, "message": "Reparatur abgeschlossen."}
+    return {"ok": True, "action": action, "plan": plan, "results": results, "message": "Reparatur abgeschlossen."}
+
 
 
 SUPPORTED_IMPORT_EXTENSIONS = {".mcpack", ".mcaddon", ".mcworld", ".mctemplate", ".zip"}
 REJECTED_IMPORT_EXTENSIONS = {".jar", ".fabric", ".forge", ".exe", ".sh", ".bat", ".cmd", ".msi"}
-JAVA_MOD_MARKERS = {"mods.toml", "fabric.mod.json", "quilt.mod.json", "META-INF/mods.toml"}
+JAVA_MOD_MARKERS = {"mods.toml", "fabric.mod.json", "quilt.mod.json", "meta-inf/mods.toml", "neoforge.mods.toml"}
+HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
+
+
+class NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def quarantine_dir_path():
+    return makedirs_internal(QUARANTINE_DIR, QUARANTINE_DIR, exist_ok=True)
 
 
 def validate_external_download_url(url):
@@ -10682,9 +10893,38 @@ def validate_external_download_url(url):
         raise ValueError("Diese Datei sieht nach einem Java-Mod oder ausführbaren Paket aus. WinoMC unterstützt nur Minecraft Bedrock Packs/Add-ons.")
     if ext not in SUPPORTED_IMPORT_EXTENSIONS:
         if "curseforge" in host:
-            raise ValueError("CurseForge-Projektseiten werden nicht automatisch installiert. Bitte direkten Bedrock-Dateidownload (.mcpack/.mcaddon/.mcworld/.mctemplate/.zip) kopieren; Java-Mods (.jar) werden nicht unterstützt.")
+            raise ValueError("CurseForge-Projektseiten werden nicht automatisch installiert. WinoMC unterstützt direkte Bedrock-Dateien, nicht bestimmte Webseiten. Bitte direkten Download kopieren; Java-Mods (.jar) werden nicht unterstützt.")
         raise ValueError("Bitte einen direkten Bedrock-Dateidownload mit .mcpack, .mcaddon, .mcworld, .mctemplate oder geeigneter .zip verwenden.")
     return {"ok": True, "url": parsed.geturl(), "filename": safe_download_name(name, "winomc-import" + ext), "extension": ext, "host": host}
+
+
+def open_external_download(url):
+    info = validate_external_download_url(url)
+    opener = build_opener(NoRedirectHandler)
+    current = info["url"]
+    redirects = []
+    for _ in range(MAX_IMPORT_REDIRECTS + 1):
+        request = Request(current, headers={"User-Agent": "WinoMC/2.0 URL Import", "Accept": "application/octet-stream, application/zip, */*"})
+        try:
+            response = opener.open(request, timeout=20)
+            final_info = validate_external_download_url(current)
+            return response, final_info, redirects
+        except HTTPError as exc:
+            if exc.code in (301, 302, 303, 307, 308):
+                location = exc.headers.get("Location")
+                if not location:
+                    raise ValueError("Redirect ohne Location blockiert.")
+                next_url = urljoin(current, location)
+                validate_external_download_url(next_url)
+                redirects.append(next_url)
+                current = next_url
+                continue
+            raise
+    raise ValueError("Zu viele Redirects beim URL-Import.")
+
+
+def zip_member_is_symlink(member):
+    return stat.S_ISLNK((getattr(member, "external_attr", 0) >> 16) & 0o170000)
 
 
 def safe_zip_members(archive_path):
@@ -10692,15 +10932,23 @@ def safe_zip_members(archive_path):
     java_markers = []
     with zipfile.ZipFile(archive_path, "r") as archive:
         total = 0
+        count = 0
         for member in archive.infolist():
+            count += 1
+            if count > MAX_IMPORT_ARCHIVE_FILES:
+                raise ValueError("Archiv enthält zu viele Dateien.")
             raw = str(member.filename or "").replace("\\", "/")
-            if not raw or raw.startswith("/") or raw.startswith("../") or "/../" in raw:
+            if not raw or raw.startswith("/") or raw.startswith("../") or "/../" in raw or len(raw) > MAX_IMPORT_FILENAME_LENGTH:
                 raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
+            if zip_member_is_symlink(member):
+                raise ValueError("Symlink im Archiv blockiert: %s" % raw)
             total += int(member.file_size or 0)
             if total > MAX_ZIP_UNPACK_BYTES:
-                raise ValueError("Archiv ist zu groß.")
+                raise ValueError("Archiv ist zu groß oder wirkt wie eine ZIP-Bombe.")
             name = posixpath.basename(raw)
             lower = raw.lower()
+            if lower.startswith("__macosx/"):
+                continue
             if name == "manifest.json":
                 try:
                     with archive.open(member) as handle:
@@ -10710,7 +10958,7 @@ def safe_zip_members(archive_path):
                     raise ValueError("manifest.json ist ungültig: %s" % exc)
             if lower.endswith(".jar") or lower in JAVA_MOD_MARKERS or lower.endswith("mods.toml"):
                 java_markers.append(raw)
-    if java_markers and not manifests:
+    if java_markers:
         raise ValueError("Diese Datei sieht nach einem Java-Mod aus. WinoMC unterstützt nur Minecraft Bedrock Packs/Add-ons.")
     return manifests
 
@@ -10718,8 +10966,10 @@ def safe_zip_members(archive_path):
 def classify_bedrock_archive(archive_path, ext):
     manifests = safe_zip_members(archive_path)
     if ext in (".mcworld", ".mctemplate"):
-        return {"supported": True, "kind": "world" if ext == ".mcworld" else "template", "manifests": manifests, "message": "Bedrock-Welt/Template erkannt."}
+        return {"supported": True, "kind": "world" if ext == ".mcworld" else "template", "manifests": manifests, "packs": [], "risk": "yellow", "warnings": ["Welt/Template wird nur als neues Ziel importiert, niemals still überschrieben."], "message": "Bedrock-Welt/Template erkannt."}
     packs = []
+    all_uuids = set()
+    warnings = []
     for manifest in manifests:
         data = manifest.get("data") or {}
         header = data.get("header", {}) if isinstance(data, dict) else {}
@@ -10728,33 +10978,80 @@ def classify_bedrock_archive(archive_path, ext):
             continue
         module_types = {str(m.get("type", "")).lower() for m in modules if isinstance(m, dict)}
         pack_type = "behavior" if any("data" in t or "script" in t for t in module_types) else "resource"
-        packs.append({"manifest_path": manifest["path"], "name": header.get("name") or "Bedrock Pack", "uuid": header.get("uuid"), "version": header.get("version"), "type": pack_type})
+        deps = data.get("dependencies", []) if isinstance(data.get("dependencies", []), list) else []
+        caps = data.get("capabilities", []) if isinstance(data.get("capabilities", []), list) else []
+        min_engine = header.get("min_engine_version") or data.get("min_engine_version")
+        pack = {"manifest_path": manifest["path"], "name": header.get("name") or "Bedrock Pack", "uuid": header.get("uuid"), "version": header.get("version"), "type": pack_type, "module_types": sorted(module_types), "dependencies": deps, "capabilities": caps, "min_engine_version": min_engine, "metadata": data.get("metadata", {})}
+        packs.append(pack); all_uuids.add(str(pack["uuid"]))
+        if deps:
+            missing = [d for d in deps if isinstance(d, dict) and str(d.get("uuid", "")) and str(d.get("uuid")) not in all_uuids]
+            if missing:
+                warnings.append("Pack %s nennt Abhängigkeiten; bitte zusammengehörige Packs prüfen." % pack["name"])
+        if caps or min_engine:
+            warnings.append("Pack %s nennt capabilities/min_engine_version; bitte Bedrock-Kompatibilität testen." % pack["name"])
+        if pack.get("metadata", {}).get("product_type") or "marketplace" in json.dumps(pack.get("metadata", {}), ensure_ascii=False).lower():
+            warnings.append("Marketplace-Inhalte können konto-/plattformabhängig sein.")
     if not packs:
         raise ValueError("Kein gültiges Bedrock manifest.json mit format_version, header.uuid, header.version und modules gefunden.")
     kind = "mcaddon" if len(packs) > 1 or ext == ".mcaddon" else packs[0]["type"]
-    return {"supported": True, "kind": kind, "packs": packs, "message": "Bedrock-Manifest gefunden."}
+    risk = "red" if any(p["type"] == "behavior" for p in packs) else ("yellow" if warnings or len(packs) > 1 else "green")
+    return {"supported": True, "kind": kind, "packs": packs, "risk": risk, "warnings": warnings, "message": "Bedrock-Manifest gefunden."}
+
+
+def existing_pack_uuid_index():
+    index = {}
+    for pack in scan_packs(RESOURCE_PACKS_DIR, "resource") + scan_packs(BEHAVIOR_PACKS_DIR, "behavior"):
+        if pack.get("uuid"):
+            index.setdefault(pack["uuid"], []).append(pack)
+    return index
+
+
+def build_import_plan(source):
+    archive_path = source["path"]
+    classification = classify_bedrock_archive(archive_path, source["extension"])
+    warnings = list(classification.get("warnings", []))
+    changes = []
+    backup_plan = []
+    risk = classification.get("risk", "green")
+    duplicate_uuids = []
+    existing = existing_pack_uuid_index()
+    for pack in classification.get("packs", []):
+        changes.append("%s Pack '%s' installieren." % (pack["type"], pack["name"]))
+        if pack.get("uuid") in existing:
+            duplicate_uuids.append({"uuid": pack.get("uuid"), "existing": existing[pack.get("uuid")], "incoming": pack})
+            warnings.append("Doppelte UUID erkannt: %s. Möglicherweise Update desselben Packs; bitte bewusst ersetzen." % pack.get("uuid"))
+            risk = risk_level(risk, "red")
+        if pack.get("dependencies"):
+            risk = risk_level(risk, "yellow")
+        if pack.get("type") == "behavior":
+            risk = risk_level(risk, "red")
+    if classification["kind"] in ("world", "template"):
+        changes.append("%s als neues Ziel importieren; bestehende Ziele werden nicht überschrieben." % classification["kind"])
+        risk = risk_level(risk, "yellow")
+    free = disk_usage_metrics().get("free") or 0
+    size = os.path.getsize(archive_path)
+    if free and free < size * 2:
+        warnings.append("Wenig freier Speicher: Import benötigt grob mindestens die doppelte Downloadgröße.")
+        risk = risk_level(risk, "red")
+    return {"ok": True, "kind": "import", "risk": risk, "summary": "Importplan für %s" % source.get("filename"), "changes": changes, "warnings": warnings, "backup_plan": backup_plan or ["Rollback/Cleanup bei Fehler", "Sicherung vor Aktivierung von World-Pack-Dateien"], "requires_confirmation": risk in ("yellow", "red"), "classification": classification, "duplicate_uuids": duplicate_uuids, "source": {"filename": source.get("filename"), "size": size}}
 
 
 def download_external_pack(url):
     info = validate_external_download_url(url)
-    write_import_status("downloading", "Download startet.", {"filename": info["filename"]})
-    request = Request(info["url"], headers={"User-Agent": "WinoMC/2.0 URL Import"})
-    with urlopen(request, timeout=20) as response:
-        final_url = response.geturl()
-        if final_url != info["url"]:
-            info = validate_external_download_url(final_url)
+    write_import_status("downloading", "Download startet in Quarantäne.", {"filename": info["filename"]})
+    response, info, redirects = open_external_download(info["url"])
+    try:
+        content_type = (response.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        if content_type in HTML_CONTENT_TYPES:
+            raise ValueError("Download liefert HTML statt einer Bedrock-Datei.")
         content_length = response.headers.get("Content-Length")
         if content_length and int(content_length) > MAX_UPLOAD_BYTES:
             raise ValueError("Download ist zu groß.")
-        import_dir, _ = resolve_safe_path("import", "/")
-        makedirs_root("import", import_dir, exist_ok=True)
-        filename = info["filename"]
-        target = assert_safe_path("import", os.path.join(import_dir, filename))
-        if path_exists_root("import", target):
-            filename = safe_download_name("%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), filename), "winomc-import")
-            target = assert_safe_path("import", os.path.join(import_dir, filename))
+        quarantine = quarantine_dir_path()
+        filename = safe_download_name("%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), info["filename"]), "winomc-import")
+        target = assert_safe_internal_path(quarantine, os.path.join(quarantine, filename))
         total = 0
-        with open_safe("import", target, "wb") as handle:
+        with open_safe_internal(quarantine, target, "wb") as handle:
             while True:
                 chunk = response.read(1024 * 1024)
                 if not chunk:
@@ -10763,72 +11060,95 @@ def download_external_pack(url):
                 if total > MAX_UPLOAD_BYTES:
                     raise ValueError("Download ist zu groß.")
                 handle.write(chunk)
-    return {"path": target, "root": "import", "rel_path": normalize_rel_path("/" + filename), "filename": filename, "extension": file_extension(filename), "size": total}
+    finally:
+        try: response.close()
+        except Exception: pass
+    return {"path": target, "root": "quarantine", "rel_path": normalize_rel_path("/" + filename), "filename": filename, "extension": file_extension(filename), "size": total, "redirects": redirects, "content_type": content_type}
 
 
 def check_import_url(url):
     info = validate_external_download_url(url)
-    kind = info["extension"].lstrip(".")
-    return {"ok": True, "supported": True, "kind": kind, "message": "Sieht nach einem direkten Bedrock-Dateidownload aus. Beim Installieren wird zusätzlich manifest.json geprüft.", "filename": info["filename"]}
+    plan = {"ok": True, "kind": "import", "risk": "yellow", "summary": "URL sieht wie ein direkter Bedrock-Dateidownload aus.", "changes": ["Download erfolgt zuerst in Quarantäne.", "Manifest und Typ werden vor Installation geprüft."], "warnings": ["Noch kein Download ausgeführt; endgültiger Plan entsteht nach Quarantäne-Prüfung."], "backup_plan": ["Keine Änderung vor Installation."], "requires_confirmation": True}
+    return {"ok": True, "supported": True, "kind": info["extension"].lstrip("."), "risk": plan["risk"], "plan": plan, "message": "Direkter Bedrock-Dateidownload erkannt. WinoMC lädt erst in Quarantäne und installiert nur nach Plan/Bestätigung.", "filename": info["filename"]}
 
 
-def install_import_url(url, activate=False):
-    downloaded = download_external_pack(url)
-    write_import_status("validating", "Datei wird geprüft.", {"filename": downloaded["filename"]})
-    classification = classify_bedrock_archive(downloaded["path"], downloaded["extension"])
-    installed = []
-    if classification["kind"] in ("world", "template"):
-        target_root = "world_templates" if classification["kind"] == "template" else "worlds"
-        base_name = safe_download_name(os.path.splitext(downloaded["filename"])[0], classification["kind"])
-        dest_base, _ = resolve_safe_path(target_root, "/")
-        dest = assert_safe_path(target_root, os.path.join(dest_base, base_name))
-        if path_exists_root(target_root, dest):
-            raise FileExistsError("Ziel existiert bereits. WinoMC überschreibt Welten/Templates nicht still.")
-        makedirs_root(target_root, dest, exist_ok=False)
-        with zipfile.ZipFile(downloaded["path"], "r") as archive:
-            for member in archive.infolist():
-                raw = str(member.filename or "").replace("\\", "/")
-                if not raw or raw.startswith("/") or raw.startswith("../") or "/../" in raw:
-                    raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
-                rel = posixpath.normpath(raw)
-                target = assert_safe_path(target_root, os.path.join(dest, rel))
-                if member.is_dir():
-                    makedirs_root(target_root, target, exist_ok=True); continue
-                makedirs_root(target_root, os.path.dirname(target), exist_ok=True)
-                with archive.open(member, "r") as source, open_safe(target_root, target, "wb") as out:
-                    shutil.copyfileobj(source, out, length=1024 * 1024)
-        installed.append({"type": classification["kind"], "name": base_name, "active": False})
-    else:
-        with zipfile.ZipFile(downloaded["path"], "r") as archive:
-            for pack in classification["packs"]:
-                pack_type = pack["type"]
-                root_key, base_dir = pack_base_dir(pack_type)
-                pack_name = safe_download_name(pack.get("name"), pack_type + "-pack")
-                dest = assert_safe_path(root_key, os.path.join(base_dir, pack_name))
-                if path_exists_root(root_key, dest):
-                    raise FileExistsError("Pack-Ziel existiert bereits: %s" % pack_name)
-                prefix = posixpath.dirname(pack["manifest_path"])
-                makedirs_root(root_key, dest, exist_ok=False)
+def install_import_url(url, activate=False, confirm=False):
+    downloaded = None
+    created = []
+    try:
+        downloaded = download_external_pack(url)
+        write_import_status("validating", "Datei wird in Quarantäne geprüft.", {"filename": downloaded["filename"]})
+        plan = build_import_plan(downloaded)
+        if activate:
+            plan["risk"] = risk_level(plan["risk"], "yellow")
+            plan["requires_confirmation"] = True
+            plan["changes"].append("Aktivierung schreibt world_*_packs.json nach Backup.")
+        assert_plan_confirmed(plan, confirm, "expert" if plan.get("risk") == "red" else "safe")
+        installed = []
+        classification = plan["classification"]
+        if plan.get("duplicate_uuids"):
+            raise FileExistsError("Doppelte Pack-UUID erkannt. Automatisches Ersetzen ist blockiert; bitte vorhandenes Pack bewusst sichern/ersetzen.")
+        if classification["kind"] in ("world", "template"):
+            target_root = "world_templates" if classification["kind"] == "template" else "worlds"
+            base_name = safe_download_name(os.path.splitext(downloaded["filename"])[0], classification["kind"])
+            dest_base, _ = resolve_safe_path(target_root, "/")
+            dest = assert_safe_path(target_root, os.path.join(dest_base, base_name))
+            if path_exists_root(target_root, dest):
+                raise FileExistsError("Ziel existiert bereits. WinoMC überschreibt Welten/Templates nicht still.")
+            makedirs_root(target_root, dest, exist_ok=False); created.append((target_root, dest))
+            with zipfile.ZipFile(downloaded["path"], "r") as archive:
                 for member in archive.infolist():
                     raw = str(member.filename or "").replace("\\", "/")
-                    if prefix and not (raw == prefix or raw.startswith(prefix + "/")):
-                        continue
-                    rel = posixpath.relpath(raw, prefix) if prefix else raw
-                    if rel in (".", ""):
-                        continue
-                    target = assert_safe_path(root_key, os.path.join(dest, rel))
+                    if not raw or raw.startswith("/") or raw.startswith("../") or "/../" in raw or zip_member_is_symlink(member):
+                        raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
+                    rel = posixpath.normpath(raw)
+                    target = assert_safe_path(target_root, os.path.join(dest, rel))
                     if member.is_dir():
-                        makedirs_root(root_key, target, exist_ok=True); continue
-                    makedirs_root(root_key, os.path.dirname(target), exist_ok=True)
-                    with archive.open(member, "r") as source, open_safe(root_key, target, "wb") as out:
+                        makedirs_root(target_root, target, exist_ok=True); continue
+                    makedirs_root(target_root, os.path.dirname(target), exist_ok=True)
+                    with archive.open(member, "r") as source, open_safe(target_root, target, "wb") as out:
                         shutil.copyfileobj(source, out, length=1024 * 1024)
-                active = False
-                if activate:
-                    activate_pack(pack_type, "/" + pack_name)
-                    active = True
-                installed.append({"type": pack_type, "name": pack_name, "active": active})
-    write_import_status("done", "URL-Import abgeschlossen.", {"installed": installed})
-    return {"ok": True, "installed": installed, "classification": classification, "message": "Import abgeschlossen."}
+            installed.append({"type": classification["kind"], "name": base_name, "active": False})
+        else:
+            with zipfile.ZipFile(downloaded["path"], "r") as archive:
+                for pack in classification["packs"]:
+                    pack_type = pack["type"]
+                    root_key, base_dir = pack_base_dir(pack_type)
+                    pack_name = safe_download_name(pack.get("name"), pack_type + "-pack")
+                    dest = assert_safe_path(root_key, os.path.join(base_dir, pack_name))
+                    if path_exists_root(root_key, dest):
+                        raise FileExistsError("Pack-Ziel existiert bereits: %s" % pack_name)
+                    prefix = posixpath.dirname(pack["manifest_path"])
+                    makedirs_root(root_key, dest, exist_ok=False); created.append((root_key, dest))
+                    for member in archive.infolist():
+                        raw = str(member.filename or "").replace("\\", "/")
+                        if prefix and not (raw == prefix or raw.startswith(prefix + "/")):
+                            continue
+                        rel = posixpath.relpath(raw, prefix) if prefix else raw
+                        if rel in (".", "") or raw.lower().startswith("__macosx/"):
+                            continue
+                        if zip_member_is_symlink(member) or rel.startswith("../") or rel.startswith("/") or "/../" in rel:
+                            raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
+                        target = assert_safe_path(root_key, os.path.join(dest, rel))
+                        if member.is_dir():
+                            makedirs_root(root_key, target, exist_ok=True); continue
+                        makedirs_root(root_key, os.path.dirname(target), exist_ok=True)
+                        with archive.open(member, "r") as source, open_safe(root_key, target, "wb") as out:
+                            shutil.copyfileobj(source, out, length=1024 * 1024)
+                    active = False
+                    if activate:
+                        activate_pack(pack_type, "/" + pack_name); active = True
+                    installed.append({"type": pack_type, "name": pack_name, "active": active})
+        write_import_status("done", "URL-Import abgeschlossen.", {"installed": installed, "plan": plan})
+        return {"ok": True, "installed": installed, "plan": plan, "classification": classification, "message": "Import abgeschlossen."}
+    except Exception as exc:
+        for root_key, path in reversed(created):
+            try:
+                if path_is_dir_root(root_key, path): shutil.rmtree(path)
+            except Exception as cleanup_exc:
+                log_warning("Import-Cleanup fehlgeschlagen: %s" % cleanup_exc)
+        write_import_status("error", str(exc))
+        raise
 
 def status_payload():
     env_keys = ["SERVER_NAME", "LEVEL_NAME", "VERSION", "BDS_AUTO_UPDATE", "SERVER_PORT", "SERVER_PORT_V6", "ENABLE_LAN_VISIBILITY", "ENABLE_BDS_V6BIND_FIX", "GAMEMODE", "DIFFICULTY", "ALLOW_CHEATS", "ALLOW_LIST", "ONLINE_MODE", "MAX_PLAYERS", "TEXTUREPACK_REQUIRED", "PACKAGE_BACKUP_KEEP"]
@@ -10840,7 +11160,7 @@ def status_payload():
         "loadavg": loadavg_metrics(),
         "log_size": human_bytes(runtime_getsize(runtime_log_path())) if runtime_path_exists(runtime_log_path()) else "-",
     }
-    backups = list_backups(); return {"ok": True, "winomc_version": WINOMC_VERSION, "fifo_exists": runtime_path_exists(runtime_fifo_path()), "log_exists": runtime_path_exists(runtime_log_path()), "env": env, "roots": list_file_roots(), "metrics": metrics, "backup": {"latest": backups[0] if backups else None, "count": len(backups)}, "web_protection": read_web_protection_state(), "health": {"overall": diagnostics_payload().get("overall", "Nicht verfügbar")}}
+    backups = list_backups(); return {"ok": True, "winomc_version": WINOMC_VERSION, "fifo_exists": runtime_path_exists(runtime_fifo_path()), "log_exists": runtime_path_exists(runtime_log_path()), "env": env, "roots": list_file_roots(), "metrics": metrics, "backup": {"latest": backups[0] if backups else None, "count": len(backups)}, "web_protection": read_web_protection_state(), "health": {"overall": diagnostics_payload().get("overall", "Nicht verfügbar")}, "world_safety": analyze_world_safety()}
 
 def safe_header_value(value, fallback="application/octet-stream"):
     value = str(value or fallback)
@@ -11152,7 +11472,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 self.require_web_write_allowed("Diagnose-Reparatur")
                 payload = self._read_json_payload()
-                self._send_json(200, repair_diagnostics(str(payload.get("action", ""))))
+                self._send_json(200, repair_diagnostics(str(payload.get("action", "")), bool(payload.get("confirm", False)), str(payload.get("mode", "safe"))))
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
@@ -11168,7 +11488,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 self.require_web_write_allowed("URL-Import installieren")
                 payload = self._read_json_payload()
-                self._send_json(200, install_import_url(str(payload.get("url", "")), bool(payload.get("activate", False))))
+                self._send_json(200, install_import_url(str(payload.get("url", "")), bool(payload.get("activate", False)), bool(payload.get("confirm", False))))
             except Exception as exc:
                 write_import_status("error", str(exc))
                 self._send_json(400, {"ok": False, "error": str(exc)})
@@ -11183,11 +11503,19 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
 
+        if path.endswith("/api/backups/restore/plan") or path == "/api/backups/restore/plan":
+            try:
+                self.require_web_write_allowed("Restore planen")
+                payload = self._read_json_payload()
+                self._send_json(200, build_restore_plan(str(payload.get("backup", "")), str(payload.get("mode", "complete"))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
         if path.endswith("/api/backups/restore") or path == "/api/backups/restore":
             try:
                 self.require_web_write_allowed("Backup wiederherstellen")
                 payload = self._read_json_payload()
-                self._send_json(200, restore_backup(str(payload.get("backup", "")), str(payload.get("mode", "complete")), bool(payload.get("restart", False))))
+                self._send_json(200, restore_backup(str(payload.get("backup", "")), str(payload.get("mode", "complete")), bool(payload.get("restart", False)), bool(payload.get("confirm", False))))
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
