@@ -1,5 +1,5 @@
 
-### WinoMC 2.0 Beta Hotfix: Add-on Manager UX
+### 2.0.0.1b
 
 * **Packs & Add-ons** ist die zentrale Stelle für lokale Imports, Uploads, Importordner `/share/winomc/import`, Installation, Aktivierung, lokale Updates und Probleme.
 * Bedrock-Default-/Systempacks wie `chemistry`, `vanilla`, `vanilla_*`, `education`, `experimental_*`, `default` und `minecraft` werden in normalen Nutzerlisten ausgeblendet, nicht gelöscht und nicht als JSON-Fehler oder lokale Updates gemeldet.
