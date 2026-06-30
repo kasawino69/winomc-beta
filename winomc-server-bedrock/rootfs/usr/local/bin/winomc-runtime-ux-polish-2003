@@ -26,7 +26,9 @@ def known_player_xuid_2003(name):
         n = str(n or "").strip()
         x = str(x or "").strip()
         if n and re.match(r"^[0-9]{5,32}$", x):
-            known[re.sub(r"\s+", " ", n).lower()] = x
+            key = re.sub(r"\s+", " ", n).lower()
+            known[key] = x
+            known[key.replace(" ", "")] = x
     for raw in re.split(r"[,;\n]+", os.environ.get("ALLOW_LIST_USERS", "") or ""):
         if ":" in raw:
             n, x = raw.split(":", 1)
@@ -36,7 +38,10 @@ def known_player_xuid_2003(name):
         for item in allow:
             if isinstance(item, dict):
                 add(item.get("name"), item.get("xuid"))
-    patterns = (re.compile(r"Player connected:\s*([^,\n]+),\s*xuid:\s*([0-9]{5,32})", re.I), re.compile(r"\bname[:=\s]+([^,\n]+).*?\bxuid[:=\s]+([0-9]{5,32})", re.I))
+    patterns = (
+        re.compile(r"Player connected:\s*([^,\n]+),\s*xuid:\s*([0-9]{5,32})", re.I),
+        re.compile(r"\bname[:=\s]+([^,\n]+).*?\bxuid[:=\s]+([0-9]{5,32})", re.I),
+    )
     for log_path in (runtime_log_path(), LOG_PATH):
         try:
             if not os.path.exists(log_path):
@@ -56,9 +61,140 @@ if 'known_player_xuid_2003' not in t:
 
 t = t.replace('    xuid = str(item.get("xuid") or "").strip()\n    if not name and not xuid:', '    xuid = str(item.get("xuid") or "").strip()\n    if name and not xuid:\n        xuid = known_player_xuid_2003(name)\n    if not name and not xuid:', 1)
 
-old_perm = '''        if player["xuid"]:\n            permissions.append({"permission": player["role"], "xuid": player["xuid"]})\n'''
-new_perm = '''        if player["xuid"] and player["role"] != "member":\n            permissions.append({"permission": player["role"], "xuid": player["xuid"]})\n        elif player["role"] != "member":\n            raise ValueError("Operator/Visitor requires XUID. Let the player join once or add Name:XUID in ALLOW_LIST_USERS.")\n'''
-t = t.replace(old_perm, new_perm)
+persistent_block = r'''
+
+# v2.0.0.3b persistent player-rights overlay
+def _player_name_key_2003(name):
+    return re.sub(r"\s+", " ", str(name or "").strip()).lower().replace(" ", "")
+
+def _player_key_2003(player):
+    xuid = str(player.get("xuid") or "").strip()
+    if xuid:
+        return "xuid:" + xuid
+    return "name:" + _player_name_key_2003(player.get("name"))
+
+def player_rights_store_path_2003():
+    base = os.path.join(DATA_DIR, ".winomc")
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, "player-rights.json")
+
+def load_desired_player_rights_2003():
+    data, err = json_file(player_rights_store_path_2003(), [])
+    if err or not isinstance(data, list):
+        return []
+    clean = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        try:
+            name = str(item.get("name") or "").strip()
+            xuid = str(item.get("xuid") or "").strip()
+            if not name and not xuid:
+                continue
+            if xuid and not re.match(r"^[0-9]{5,32}$", xuid):
+                xuid = ""
+            clean.append({"name": name, "xuid": xuid, "allowlisted": bool(item.get("allowlisted", True)), "role": normalize_role(item.get("role", "member")), "source": "WinoMC"})
+        except Exception:
+            continue
+    return clean
+
+def write_desired_player_rights_2003(players):
+    path = player_rights_store_path_2003()
+    rows = []
+    seen = set()
+    for player in players:
+        key = _player_key_2003(player)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        rows.append({"name": player.get("name", ""), "xuid": player.get("xuid", ""), "allowlisted": bool(player.get("allowlisted", True)), "role": normalize_role(player.get("role", "member")), "updated_at": time.strftime("%Y-%m-%d_%H-%M-%S")})
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump(rows, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    os.replace(tmp, path)
+    return {"path": "/.winomc/player-rights.json", "count": len(rows)}
+
+def players_payload():
+    allow, ae = json_file(os.path.join(DATA_DIR, "allowlist.json"), [])
+    perms, pe = json_file(os.path.join(DATA_DIR, "permissions.json"), [])
+    allow = allow if isinstance(allow, list) else []
+    perms = perms if isinstance(perms, list) else []
+    by = {}
+    for desired in load_desired_player_rights_2003():
+        key = _player_key_2003(desired)
+        by[key] = {"name": desired.get("name") or "-", "xuid": desired.get("xuid", ""), "allowlisted": bool(desired.get("allowlisted", True)), "role": normalize_role(desired.get("role", "member")), "issues": []}
+    for item in allow:
+        if not isinstance(item, dict):
+            continue
+        row = {"name": item.get("name", "-"), "xuid": item.get("xuid", ""), "allowlisted": True, "role": "member", "issues": []}
+        key = _player_key_2003(row)
+        existing = by.setdefault(key, row)
+        existing["allowlisted"] = True
+        if item.get("xuid"):
+            existing["xuid"] = item.get("xuid")
+        if item.get("name") and existing.get("name") in ("", "-"):
+            existing["name"] = item.get("name")
+    for perm in perms:
+        if not isinstance(perm, dict):
+            continue
+        row = {"name": perm.get("name", "-"), "xuid": perm.get("xuid", ""), "allowlisted": False, "role": normalize_role(perm.get("permission", "member")), "issues": []}
+        key = _player_key_2003(row)
+        existing = by.setdefault(key, row)
+        existing["role"] = normalize_role(perm.get("permission", "member"))
+        if perm.get("xuid"):
+            existing["xuid"] = perm.get("xuid")
+    for row in by.values():
+        if row.get("name") and not row.get("xuid"):
+            row["xuid"] = known_player_xuid_2003(row.get("name"))
+        if row.get("role") != "member" and not row.get("xuid"):
+            row.setdefault("issues", []).append("Role is saved in WinoMC; Bedrock permissions.json needs XUID before it can take effect.")
+        if row.get("role") == "operator" and not row.get("allowlisted"):
+            row.setdefault("issues", []).append("OP is not on allowlist")
+    warnings = []
+    if ae: warnings.append("allowlist.json: " + ae)
+    if pe: warnings.append("permissions.json: " + pe)
+    if parse_bool(os.environ.get("ALLOW_LIST"), False) and not allow:
+        warnings.append("Allowlist is enabled but empty.")
+    if not parse_bool(os.environ.get("ONLINE_MODE"), True):
+        warnings.append("Online mode is disabled and should only be used deliberately.")
+    return {"ok": True, "players": list(by.values()), "warnings": warnings}
+
+def save_players(players):
+    if not isinstance(players, list):
+        raise ValueError("players must be a list.")
+    normalized = [normalize_player_entry(item) for item in players]
+    seen = set()
+    for player in normalized:
+        key = _player_key_2003(player)
+        if key in seen:
+            raise ValueError("Duplicate player/XUID: %s" % key)
+        seen.add(key)
+    desired_result = write_desired_player_rights_2003(normalized)
+    allowlist = []
+    permissions = []
+    staged = []
+    for player in normalized:
+        if player["allowlisted"]:
+            entry = {"name": player["name"] or player["xuid"], "ignoresPlayerLimit": False}
+            if player["xuid"]:
+                entry["xuid"] = player["xuid"]
+            allowlist.append(entry)
+        if player["xuid"]:
+            permissions.append({"permission": player["role"], "xuid": player["xuid"]})
+        elif player["role"] != "member":
+            staged.append(player["name"] or player["xuid"])
+    allow_result = atomic_write_json_root("config", "/allowlist.json", allowlist, backup=True)
+    perm_result = atomic_write_json_root("config", "/permissions.json", permissions, backup=True)
+    payload = players_payload()
+    message = "Player rights saved persistently."
+    if staged:
+        message += " Some non-member roles are staged until XUID is known: " + ", ".join(staged)
+    payload.update({"saved": True, "desired_result": desired_result, "allowlist_result": allow_result, "permissions_result": perm_result, "message": message})
+    return payload
+'''
+if 'persistent player-rights overlay' not in t:
+    t = t.replace('\n\ndef find_backup_meta(backup_name):', persistent_block + '\n\ndef find_backup_meta(backup_name):', 1)
 
 js = r'''
     /* v2.0.0.3b feedback polish */

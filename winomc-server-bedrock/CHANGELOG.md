@@ -1,6 +1,11 @@
 # Changelog
 
-# 2.0.0.3b
+### 2.0.0.4b
+
+- Player rights are now kept as persistent WinoMC state.
+- The Bedrock files are written from that state when player id data is available.
+- 
+### 2.0.0.3b
 
 - Diagnose repairs start directly after confirmation.
 - Added visible feedback for diagnose, updates, and profile loading.
