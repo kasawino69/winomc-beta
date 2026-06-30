@@ -14,40 +14,140 @@ original = text
 
 text = re.sub(
     r'<title>WinoMC Adaptive Workbench [^<]+</title>',
-    '<title>WinoMC Adaptive Workbench 1.6.14.17</title>',
+    '<title>WinoMC Adaptive Workbench 1.6.14.18</title>',
     text,
     count=1,
 )
 text = re.sub(
     r'server_version = "WinoMCConsole/[^"]+"',
-    'server_version = "WinoMCConsole/1.6.14.17"',
+    'server_version = "WinoMCConsole/1.6.14.18"',
     text,
     count=1,
 )
 
-# Remove only the risky runtime overlays from earlier beta repairs when present.
-# They could keep stale handlers alive in a freshly patched console file.
+# Runtime-Guards aus vorherigen Beta-Fixes entfernen. Diese wurden am Ende des
+# Skripts eingefügt und konnten Klicks/Editor-Zustände doppelt behandeln.
 for fn in (
     'hardenClassicPcDashboardEditor161414',
     'hardenPcDashboardFilesEditor161415',
     'separatePcEditorFilesDashboard161416',
+    'repairUiAfter161416',
 ):
     text = re.sub(
-        r'\n\s*/\*[^*]*v1\.6\.14\.(?:14|15|16)b[\s\S]*?\*/\s*\n\s*\(function ' + fn + r'\(\) \{[\s\S]*?\n\s*\}\)\(\);\s*\n',
+        r'\n\s*/\*[^*]*v1\.6\.14\.(?:14|15|16|17)b[\s\S]*?\*/\s*\n\s*\(function ' + fn + r'\(\) \{[\s\S]*?\n\s*\}\)\(\);\s*\n',
         '\n',
         text,
         count=1,
     )
 
-css_fix = r'''
+# Core-Funktionen hart trennen: Mobile nutzt sein Modal; PC nutzt ein eigenes
+# großes Editor-Overlay ohne Card-Maximize/Blur-Backdrop. Die Funktionen werden
+# im eigentlichen Webconsole-Code ersetzt, nicht als weiterer Button-Flicker.
+old_open = """    function openEditorOverlay() {
+      if (!editorPanel) return;
+      editorPanel.classList.add('editor-open');
+      editorPanel.classList.remove('editor-fullscreen');
+      if (editorFullscreen) editorFullscreen.textContent = 'Vollbild';
+      if (fileCloseEditor) fileCloseEditor.textContent = 'Schließen';
+      if (document.body.classList.contains('ux-mobile') && !document.body.classList.contains('console-collapsed')) setConsoleMode('collapsed');
+      window.setTimeout(() => fileEditor?.focus({ preventScroll: true }), 80);
+    }
+"""
+new_open = """    function isPcShell() {
+      return (document.body.classList.contains('ux-desktop') || document.body.classList.contains('desktop-mode')) && !document.body.classList.contains('ux-mobile');
+    }
 
-    /* v1.6.14.17b PC editor + desktop file explorer repair
-       Minimaler Reparatur-Override nach 1.6.14.16b:
-       - Mobile: nur der aktive Tab darf sichtbar sein.
-       - PC: Editor ist ein eigenes großes Overlay, nicht Teil des Explorer-Grids.
-       - Desktop-Dateifenster: Explorer belegt die Fensterhöhe, Liste scrollt intern. */
-    body.ux-mobile:not(.desktop-mode) .content > .tab-panel,
-    body.ux-mobile:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) {
+    function isMobileShell() {
+      return document.body.classList.contains('ux-mobile') && !document.body.classList.contains('desktop-mode');
+    }
+
+    function clearPcEditorBlockers() {
+      document.body.classList.remove('has-maximized-card');
+      document.querySelectorAll('.card.maximized').forEach(card => card.classList.remove('maximized'));
+      document.querySelectorAll('.editor-modal-backdrop, .modal-backdrop').forEach(backdrop => {
+        backdrop.setAttribute('aria-hidden', 'true');
+        backdrop.style.display = 'none';
+        backdrop.style.visibility = 'hidden';
+        backdrop.style.pointerEvents = 'none';
+        backdrop.style.opacity = '0';
+      });
+    }
+
+    function openEditorOverlay() {
+      if (!editorPanel) return;
+      editorPanel.classList.add('editor-open');
+      editorPanel.classList.remove('editor-fullscreen');
+      if (fileManagerGrid) fileManagerGrid.classList.remove('editor-visible');
+      if (editorFullscreen) editorFullscreen.textContent = 'Vollbild';
+      if (fileCloseEditor) fileCloseEditor.textContent = 'Schließen';
+      if (isPcShell()) {
+        document.body.classList.remove('editor-modal-open');
+        document.body.classList.add('pc-editor-open');
+        document.body.classList.remove('pc-editor-fullscreen');
+        clearPcEditorBlockers();
+      } else if (isMobileShell()) {
+        document.body.classList.add('editor-modal-open');
+        document.body.classList.remove('pc-editor-open', 'pc-editor-fullscreen');
+        if (!document.body.classList.contains('console-collapsed')) setConsoleMode('collapsed');
+      }
+      window.setTimeout(() => fileEditor?.focus({ preventScroll: true }), 80);
+    }
+"""
+if old_open in text:
+    text = text.replace(old_open, new_open, 1)
+
+old_close = """    function closeEditorOverlay() {
+      if (!editorPanel) return;
+      editorPanel.classList.remove('editor-open', 'editor-fullscreen');
+      if (editorFullscreen) editorFullscreen.textContent = 'Vollbild';
+    }
+"""
+new_close = """    function closeEditorOverlay() {
+      if (!editorPanel) return;
+      editorPanel.classList.remove('editor-open', 'editor-fullscreen');
+      document.body.classList.remove('editor-modal-open', 'pc-editor-open', 'pc-editor-fullscreen');
+      if (fileManagerGrid) fileManagerGrid.classList.remove('editor-visible');
+      if (editorFullscreen) editorFullscreen.textContent = 'Vollbild';
+      if (isPcShell()) clearPcEditorBlockers();
+    }
+"""
+if old_close in text:
+    text = text.replace(old_close, new_close, 1)
+
+old_toggle = """    function toggleEditorFullscreen() {
+      editorPanel.classList.add('editor-open');
+      editorPanel.classList.toggle('editor-fullscreen');
+      if (editorFullscreen) editorFullscreen.textContent = editorPanel.classList.contains('editor-fullscreen') ? 'Normal' : 'Vollbild';
+    }
+"""
+new_toggle = """    function toggleEditorFullscreen(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (!editorPanel) return;
+      editorPanel.classList.add('editor-open');
+      const nextFullscreen = !editorPanel.classList.contains('editor-fullscreen');
+      editorPanel.classList.toggle('editor-fullscreen', nextFullscreen);
+      if (isPcShell()) {
+        document.body.classList.remove('editor-modal-open');
+        document.body.classList.add('pc-editor-open');
+        document.body.classList.toggle('pc-editor-fullscreen', nextFullscreen);
+        clearPcEditorBlockers();
+      }
+      if (editorFullscreen) editorFullscreen.textContent = nextFullscreen ? 'Normal' : 'Vollbild';
+      window.requestAnimationFrame(() => fileEditor?.focus({ preventScroll: true }));
+    }
+"""
+if old_toggle in text:
+    text = text.replace(old_toggle, new_toggle, 1)
+
+mobile_css = r'''
+
+    /* v1.6.14.18b MOBILE SCOPE ONLY
+       Mobile ist getrennt: nur der aktive Menüpunkt wird angezeigt. Keine PC-
+       Workbench-/Desktop-Fensterregeln greifen hier. */
+    body.ux-mobile:not(.desktop-mode) .content > .tab-panel:not(.active) {
       display: none !important;
       visibility: hidden !important;
       pointer-events: none !important;
@@ -66,12 +166,41 @@ css_fix = r'''
       visibility: hidden !important;
       pointer-events: none !important;
     }
+'''
 
+pc_css = r'''
+
+    /* v1.6.14.18b PC SCOPE ONLY
+       PC wird neu abgegrenzt: Dateiexplorer nutzt ein einspaltiges, hohes Fenster.
+       Der Editor ist ein eigenes Vordergrundfenster und nicht mehr Teil des
+       Explorer-Grids. Dadurch beeinflusst Mobile diese Regeln nicht mehr. */
     @media (min-width: 1051px) {
-      body.ux-desktop.editor-fullscreen-active::after,
-      body.ux-desktop.has-maximized-card.editor-fullscreen-active::after,
-      body.desktop-mode.has-maximized-card.editor-fullscreen-active::after,
-      body.desktop-mode.editor-fullscreen-active::after {
+      body.ux-desktop:not(.ux-mobile) .editor-modal-backdrop,
+      body.ux-desktop:not(.ux-mobile).editor-modal-open .editor-modal-backdrop,
+      body.desktop-mode:not(.ux-mobile) .editor-modal-backdrop,
+      body.desktop-mode:not(.ux-mobile).editor-modal-open .editor-modal-backdrop,
+      body.ux-desktop:not(.ux-mobile) .modal-backdrop:not(.open),
+      body.desktop-mode:not(.ux-mobile) .modal-backdrop:not(.open) {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        backdrop-filter: none !important;
+      }
+
+      body.ux-desktop:not(.ux-mobile).pc-editor-open,
+      body.ux-desktop:not(.ux-mobile).pc-editor-fullscreen,
+      body.desktop-mode:not(.ux-mobile).pc-editor-open,
+      body.desktop-mode:not(.ux-mobile).pc-editor-fullscreen {
+        overflow: hidden !important;
+      }
+
+      body.ux-desktop:not(.ux-mobile).pc-editor-open::after,
+      body.ux-desktop:not(.ux-mobile).pc-editor-fullscreen::after,
+      body.desktop-mode:not(.ux-mobile).pc-editor-open::after,
+      body.desktop-mode:not(.ux-mobile).pc-editor-fullscreen::after,
+      body.ux-desktop:not(.ux-mobile).has-maximized-card.pc-editor-open::after,
+      body.desktop-mode:not(.ux-mobile).has-maximized-card.pc-editor-open::after {
         content: none !important;
         display: none !important;
         visibility: hidden !important;
@@ -81,12 +210,13 @@ css_fix = r'''
         background: transparent !important;
       }
 
-      body.ux-desktop .editor-panel.editor-open,
-      body.ux-desktop .editor-panel.editor-fullscreen,
-      body.desktop-mode .editor-panel.editor-open,
-      body.desktop-mode .editor-panel.editor-fullscreen {
+      body.ux-desktop:not(.ux-mobile) .editor-panel.editor-open,
+      body.ux-desktop:not(.ux-mobile) .editor-panel.editor-fullscreen,
+      body.desktop-mode:not(.ux-mobile) .editor-panel.editor-open,
+      body.desktop-mode:not(.ux-mobile) .editor-panel.editor-fullscreen {
         position: fixed !important;
-        z-index: 220 !important;
+        z-index: 260 !important;
+        inset: 20px !important;
         width: auto !important;
         height: auto !important;
         min-width: 0 !important;
@@ -99,37 +229,31 @@ css_fix = r'''
         visibility: visible !important;
         opacity: 1 !important;
         pointer-events: auto !important;
-        background: rgba(15, 23, 42, .99) !important;
-        border: 1px solid rgba(96, 165, 250, .38) !important;
-        box-shadow: 0 28px 90px rgba(0, 0, 0, .72) !important;
+        background: rgba(15, 23, 42, .995) !important;
+        border: 1px solid rgba(96, 165, 250, .40) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 34px 110px rgba(0, 0, 0, .76) !important;
         backdrop-filter: none !important;
       }
 
-      body.ux-desktop:not(.desktop-mode):not(.console-maximized) .editor-panel.editor-open,
-      body.ux-desktop:not(.desktop-mode):not(.console-maximized) .editor-panel.editor-fullscreen {
+      body.ux-desktop:not(.ux-mobile):not(.desktop-mode):not(.console-maximized) .editor-panel.editor-open,
+      body.ux-desktop:not(.ux-mobile):not(.desktop-mode):not(.console-maximized) .editor-panel.editor-fullscreen {
         inset: 18px 18px calc(var(--console-height) + 18px) 18px !important;
       }
 
-      body.ux-desktop.console-maximized .editor-panel.editor-open,
-      body.ux-desktop.console-maximized .editor-panel.editor-fullscreen,
-      body.desktop-mode .editor-panel.editor-open,
-      body.desktop-mode .editor-panel.editor-fullscreen {
-        inset: 18px !important;
-      }
-
-      body.ux-desktop .editor-panel.editor-open::before,
-      body.ux-desktop .editor-panel.editor-fullscreen::before,
-      body.desktop-mode .editor-panel.editor-open::before,
-      body.desktop-mode .editor-panel.editor-fullscreen::before {
+      body.ux-desktop:not(.ux-mobile) .editor-panel.editor-open::before,
+      body.ux-desktop:not(.ux-mobile) .editor-panel.editor-fullscreen::before,
+      body.desktop-mode:not(.ux-mobile) .editor-panel.editor-open::before,
+      body.desktop-mode:not(.ux-mobile) .editor-panel.editor-fullscreen::before {
         content: none !important;
         display: none !important;
         pointer-events: none !important;
       }
 
-      body.ux-desktop .editor-panel.editor-open .editor-box,
-      body.ux-desktop .editor-panel.editor-fullscreen .editor-box,
-      body.desktop-mode .editor-panel.editor-open .editor-box,
-      body.desktop-mode .editor-panel.editor-fullscreen .editor-box {
+      body.ux-desktop:not(.ux-mobile) .editor-panel.editor-open .editor-box,
+      body.ux-desktop:not(.ux-mobile) .editor-panel.editor-fullscreen .editor-box,
+      body.desktop-mode:not(.ux-mobile) .editor-panel.editor-open .editor-box,
+      body.desktop-mode:not(.ux-mobile) .editor-panel.editor-fullscreen .editor-box {
         flex: 1 1 auto !important;
         height: auto !important;
         min-height: 0 !important;
@@ -138,23 +262,29 @@ css_fix = r'''
         overflow: auto !important;
       }
 
-      body.desktop-mode .tab-panel[data-panel="files"].desktop-open:not(.desktop-minimized) {
+      body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"].desktop-open:not(.desktop-minimized) {
         display: grid !important;
         grid-template-rows: auto minmax(0, 1fr) !important;
         align-content: stretch !important;
         overflow: hidden !important;
-        min-width: min(1120px, calc(100dvw - 32px)) !important;
-        min-height: min(760px, calc(100dvh - 72px)) !important;
+        width: min(1280px, calc(100dvw - 32px)) !important;
+        height: min(820px, calc(100dvh - 72px)) !important;
+        min-width: min(960px, calc(100dvw - 32px)) !important;
+        min-height: min(680px, calc(100dvh - 72px)) !important;
       }
 
-      body.desktop-mode .tab-panel[data-panel="files"].desktop-maximized {
+      body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"].desktop-maximized {
+        left: 8px !important;
+        top: 8px !important;
+        width: calc(100dvw - 16px) !important;
+        height: calc(100dvh - 64px) !important;
         min-width: 0 !important;
         min-height: 0 !important;
       }
 
-      body.desktop-mode .tab-panel[data-panel="files"] .file-manager-grid,
-      body.desktop-mode .tab-panel[data-panel="files"] .file-manager-grid.editor-visible,
-      body.desktop-mode .tab-panel[data-panel="files"] .file-manager-grid:not(.editor-visible) {
+      body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-manager-grid,
+      body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-manager-grid.editor-visible,
+      body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-manager-grid:not(.editor-visible) {
         display: grid !important;
         grid-template-columns: minmax(0, 1fr) !important;
         grid-template-rows: minmax(0, 1fr) !important;
@@ -166,19 +296,14 @@ css_fix = r'''
         align-items: stretch !important;
       }
 
-      body.desktop-mode .tab-panel[data-panel="files"] .split-resizer {
+      body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .split-resizer,
+      body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .editor-panel:not(.editor-open):not(.editor-fullscreen) {
         display: none !important;
         visibility: hidden !important;
         pointer-events: none !important;
       }
 
-      body.desktop-mode .tab-panel[data-panel="files"] .editor-panel:not(.editor-open):not(.editor-fullscreen) {
-        display: none !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
-      }
-
-      body.desktop-mode .tab-panel[data-panel="files"] .file-explorer-panel {
+      body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-explorer-panel {
         display: flex !important;
         flex-direction: column !important;
         height: 100% !important;
@@ -187,24 +312,24 @@ css_fix = r'''
         overflow: hidden !important;
       }
 
-      body.desktop-mode .tab-panel[data-panel="files"] .file-explorer-panel > .card-header,
-      body.desktop-mode .tab-panel[data-panel="files"] .file-explorer-panel > .drop-zone {
+      body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-explorer-panel > .card-header,
+      body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-explorer-panel > .drop-zone {
         flex: 0 0 auto !important;
       }
 
-      body.desktop-mode .tab-panel[data-panel="files"] .file-table-wrap {
+      body.desktop-mode:not(.ux-mobile) .tab-panel[data-panel="files"] .file-table-wrap {
         flex: 1 1 auto !important;
-        min-height: 320px !important;
+        min-height: 360px !important;
         height: auto !important;
         max-height: none !important;
         overflow: auto !important;
-        padding-bottom: 18px !important;
-        scroll-padding-bottom: 18px !important;
+        padding-bottom: 24px !important;
+        scroll-padding-bottom: 24px !important;
         scrollbar-gutter: stable !important;
         overscroll-behavior: contain !important;
       }
 
-      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"].active {
+      body.ux-desktop:not(.ux-mobile):not(.desktop-mode) .tab-panel[data-panel="dashboard"].active {
         display: flex !important;
         flex-direction: column !important;
         height: 100% !important;
@@ -213,13 +338,13 @@ css_fix = r'''
         overflow: hidden !important;
       }
 
-      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-layout,
-      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-add-card {
+      body.ux-desktop:not(.ux-mobile):not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-layout,
+      body.ux-desktop:not(.ux-mobile):not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-add-card {
         flex: 0 0 auto !important;
         min-height: 0 !important;
       }
 
-      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-active-card {
+      body.ux-desktop:not(.ux-mobile):not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-active-card {
         flex: 1 1 auto !important;
         min-height: 0 !important;
         overflow-y: auto !important;
@@ -231,120 +356,106 @@ css_fix = r'''
     }
 '''
 
-if 'v1.6.14.17b PC editor + desktop file explorer repair' not in text:
-    text = text.replace('  </style>', css_fix + '  </style>', 1)
+if 'v1.6.14.18b MOBILE SCOPE ONLY' not in text:
+    text = text.replace('  </style>', mobile_css + '  </style>', 1)
+if 'v1.6.14.18b PC SCOPE ONLY' not in text:
+    text = text.replace('  </style>', pc_css + '  </style>', 1)
 
-runtime_fix = r'''
+runtime = r'''
 
-    /* v1.6.14.17b runtime repair: mobile tab isolation + PC editor overlay */
-    (function repairUiAfter161416() {
-      function clearEditorCardState161417() {
-        document.body.classList.remove('has-maximized-card');
-        document.querySelectorAll('.card.maximized').forEach(card => card.classList.remove('maximized'));
-      }
-
-      function isMobileShell161417() {
+    /* v1.6.14.18b split runtime: Mobile stays mobile, PC gets its own editor/window logic. */
+    (function splitMobileAndPcRuntime161418() {
+      function mobileShell161418() {
         return document.body.classList.contains('ux-mobile') && !document.body.classList.contains('desktop-mode');
       }
-
-      function isolateMobileTabs161417() {
-        if (!isMobileShell161417()) return;
-        document.body.classList.remove('desktop-mode', 'has-maximized-card', 'editor-fullscreen-active');
+      function pcShell161418() {
+        return !document.body.classList.contains('ux-mobile') && (document.body.classList.contains('ux-desktop') || document.body.classList.contains('desktop-mode'));
+      }
+      function clearPcBlockers161418() {
+        if (!pcShell161418()) return;
+        document.body.classList.remove('editor-modal-open', 'has-maximized-card');
+        document.querySelectorAll('.card.maximized').forEach(card => card.classList.remove('maximized'));
+        document.querySelectorAll('.editor-modal-backdrop, .modal-backdrop').forEach(backdrop => {
+          backdrop.setAttribute('aria-hidden', 'true');
+          backdrop.style.display = 'none';
+          backdrop.style.visibility = 'hidden';
+          backdrop.style.pointerEvents = 'none';
+          backdrop.style.opacity = '0';
+        });
+      }
+      function isolateMobileTabs161418() {
+        if (!mobileShell161418()) return;
+        document.body.classList.remove('desktop-mode', 'pc-editor-open', 'pc-editor-fullscreen', 'has-maximized-card');
         document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('desktop-open', 'desktop-minimized', 'desktop-maximized'));
         const activePanel = document.querySelector('.tab-panel.active') || document.querySelector('.tab-panel[data-panel="overview"]');
         const active = activePanel?.dataset?.panel || 'overview';
         document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === active));
         document.querySelectorAll('[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === active));
       }
-
-      function setEditorOverlay161417(fullscreen) {
-        if (!editorPanel) return;
-        clearEditorCardState161417();
-        editorPanel.classList.add('editor-open');
-        editorPanel.classList.toggle('editor-fullscreen', Boolean(fullscreen));
-        document.body.classList.toggle('editor-fullscreen-active', Boolean(fullscreen));
-        if (fileManagerGrid) fileManagerGrid.classList.remove('editor-visible');
-        if (editorFullscreen) editorFullscreen.textContent = fullscreen ? 'Normal' : 'Vollbild';
-        window.requestAnimationFrame(() => fileEditor?.focus({ preventScroll: true }));
-      }
-
-      function closeEditorOverlay161417() {
-        if (!editorPanel) return;
-        editorPanel.classList.remove('editor-open', 'editor-fullscreen');
-        document.body.classList.remove('editor-fullscreen-active');
-        if (fileManagerGrid) fileManagerGrid.classList.remove('editor-visible');
-        if (editorFullscreen) editorFullscreen.textContent = 'Vollbild';
-      }
-
-      const previousOpenEditorOverlay161417 = openEditorOverlay;
-      openEditorOverlay = function() {
-        const result = previousOpenEditorOverlay161417.apply(this, arguments);
-        if (document.body.classList.contains('ux-desktop') || document.body.classList.contains('desktop-mode')) {
-          setEditorOverlay161417(false);
-        }
-        isolateMobileTabs161417();
-        return result;
-      };
-
-      closeEditorOverlay = function() {
-        closeEditorOverlay161417();
-      };
-
-      if (editorFullscreen) {
-        editorFullscreen.addEventListener('click', event => {
-          if (!(document.body.classList.contains('ux-desktop') || document.body.classList.contains('desktop-mode'))) return;
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          setEditorOverlay161417(!editorPanel.classList.contains('editor-fullscreen'));
-        }, true);
-      }
-
-      function repairDesktopFilesWindow161417() {
-        if (!document.body.classList.contains('desktop-mode')) return;
+      function repairPcFilesWindow161418() {
+        if (!document.body.classList.contains('desktop-mode') || document.body.classList.contains('ux-mobile')) return;
         const panel = document.querySelector('.tab-panel[data-panel="files"]');
         if (!panel || !panel.classList.contains('desktop-open') || panel.classList.contains('desktop-minimized') || panel.classList.contains('desktop-maximized')) return;
         if (fileManagerGrid) fileManagerGrid.classList.remove('editor-visible');
-        const rect = panel.getBoundingClientRect();
         const minWidth = Math.min(window.innerWidth - 32, 1120);
-        const minHeight = Math.min(window.innerHeight - 72, 760);
+        const minHeight = Math.min(window.innerHeight - 72, 720);
+        const rect = panel.getBoundingClientRect();
         let changed = false;
-        if (rect.width < minWidth) { panel.style.width = Math.max(760, minWidth) + 'px'; changed = true; }
-        if (rect.height < minHeight) { panel.style.height = Math.max(560, minHeight) + 'px'; changed = true; }
+        if (rect.width < minWidth) { panel.style.width = Math.max(860, minWidth) + 'px'; changed = true; }
+        if (rect.height < minHeight) { panel.style.height = Math.max(620, minHeight) + 'px'; changed = true; }
         if (changed && typeof saveDesktopPosition === 'function') saveDesktopPosition('files', panel);
       }
 
-      const previousOpenDesktopWindow161417 = openDesktopWindow;
-      openDesktopWindow = function(id) {
-        const result = previousOpenDesktopWindow161417.apply(this, arguments);
+      const originalActivateTab161418 = activateTab;
+      activateTab = function(tab) {
+        const result = originalActivateTab161418.apply(this, arguments);
         window.requestAnimationFrame(() => {
-          if (id === 'files') repairDesktopFilesWindow161417();
-          isolateMobileTabs161417();
+          isolateMobileTabs161418();
+          clearPcBlockers161418();
+          repairPcFilesWindow161418();
         });
         return result;
       };
 
-      document.querySelectorAll('[data-tab]').forEach(button => {
-        button.addEventListener('click', () => window.requestAnimationFrame(isolateMobileTabs161417), true);
-      });
+      const originalOpenDesktopWindow161418 = openDesktopWindow;
+      openDesktopWindow = function(id) {
+        const result = originalOpenDesktopWindow161418.apply(this, arguments);
+        window.requestAnimationFrame(() => {
+          clearPcBlockers161418();
+          if (id === 'files') repairPcFilesWindow161418();
+        });
+        return result;
+      };
+
+      document.addEventListener('click', event => {
+        if (event.target.closest('#editorFullscreen') && pcShell161418()) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          toggleEditorFullscreen(event);
+        }
+      }, true);
 
       window.addEventListener('resize', () => window.requestAnimationFrame(() => {
-        isolateMobileTabs161417();
-        repairDesktopFilesWindow161417();
+        isolateMobileTabs161418();
+        clearPcBlockers161418();
+        repairPcFilesWindow161418();
       }), { passive: true });
 
       window.requestAnimationFrame(() => {
-        isolateMobileTabs161417();
-        repairDesktopFilesWindow161417();
+        isolateMobileTabs161418();
+        clearPcBlockers161418();
+        repairPcFilesWindow161418();
       });
       window.setTimeout(() => {
-        isolateMobileTabs161417();
-        repairDesktopFilesWindow161417();
+        isolateMobileTabs161418();
+        clearPcBlockers161418();
+        repairPcFilesWindow161418();
       }, 300);
     })();
 '''
 
-if 'v1.6.14.17b runtime repair: mobile tab isolation + PC editor overlay' not in text:
-    text = text.replace('\n</script>\n</body>\n</html>', runtime_fix + '\n</script>\n</body>\n</html>', 1)
+if 'v1.6.14.18b split runtime' not in text:
+    text = text.replace('\n</script>\n</body>\n</html>', runtime + '\n</script>\n</body>\n</html>', 1)
 
 if text != original:
     path.write_text(text, encoding='utf-8')
