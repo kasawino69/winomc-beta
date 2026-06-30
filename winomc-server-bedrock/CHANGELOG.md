@@ -5,6 +5,15 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.14.23b
+* Klassische PC-Ansicht: Dateiexplorer sauber an den Inhaltsbereich oberhalb der Live Console gebunden.
+* Klassische PC-Ansicht: Dateiliste nutzt den verfügbaren Platz im Dateien-Tab und scrollt intern.
+* Klassische PC-Ansicht: Explorer läuft nicht mehr hinter die Live Console und verdeckt keine Dateizeilen.
+* Klassische PC-Ansicht: Dateiexplorer wird ausschließlich im aktiven Menüpunkt `Dateien` dargestellt.
+* Andere PC-Menüpunkte reservieren keine Explorer-Fläche und zeigen keine Explorer-Reste mehr.
+* PC-Workbench/Desktop-Dateifenster bleibt von der klassischen Frame-Korrektur getrennt.
+* Mobile-Ansicht bleibt unverändert und weiterhin von PC-Layoutregeln getrennt.
+
 ### 1.6.14.22b
 
 * Klassische PC-Ansicht: Dateiexplorer sauber an den Inhaltsbereich oberhalb der Live Console gebunden.
