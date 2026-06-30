@@ -12,115 +12,66 @@ if not path.exists():
 text = path.read_text(encoding='utf-8')
 original = text
 
-# 1.6.14.16b: nicht weiter Symptome stapeln, sondern Zustände trennen.
-# - Card-Maximize-Overlay bleibt Card-Maximize.
-# - Editor-Vollbild bekommt eigenen Zustand.
-# - Desktop-Dateifenster bekommt eigene Explorer-Höhenlogik.
 text = re.sub(
     r'<title>WinoMC Adaptive Workbench [^<]+</title>',
-    '<title>WinoMC Adaptive Workbench 1.6.14.16</title>',
+    '<title>WinoMC Adaptive Workbench 1.6.14.17</title>',
     text,
     count=1,
 )
 text = re.sub(
     r'server_version = "WinoMCConsole/[^"]+"',
-    'server_version = "WinoMCConsole/1.6.14.16"',
+    'server_version = "WinoMCConsole/1.6.14.17"',
     text,
     count=1,
 )
 
-# Alte Runtime-Guards entfernen, falls ein Container bereits von 1.6.14.14b/15b
-# zur Laufzeit gepatcht wurde. Diese Guards konnten den Editor-Vollbild-Klick
-# im Capture-Pfad verbrauchen und dadurch Blur-/Seiteneffekte erhalten.
+# Remove only the risky runtime overlays from earlier beta repairs when present.
+# They could keep stale handlers alive in a freshly patched console file.
 for fn in (
     'hardenClassicPcDashboardEditor161414',
     'hardenPcDashboardFilesEditor161415',
+    'separatePcEditorFilesDashboard161416',
 ):
     text = re.sub(
-        r'\n\s*/\*[^*]*v1\.6\.14\.(?:14|15)b[\s\S]*?\*/\s*\n\s*\(function ' + fn + r'\(\) \{[\s\S]*?\n\s*\}\)\(\);\s*\n',
+        r'\n\s*/\*[^*]*v1\.6\.14\.(?:14|15|16)b[\s\S]*?\*/\s*\n\s*\(function ' + fn + r'\(\) \{[\s\S]*?\n\s*\}\)\(\);\s*\n',
         '\n',
         text,
         count=1,
     )
 
-# Core-Funktion ersetzen: Editor-Fullscreen wird ausdrücklich von Card-Maximize
-# getrennt. Dadurch darf has-maximized-card beim Editor-Vollbild nie ein Blur-
-# Overlay erzeugen.
-old_toggle = """    function toggleEditorFullscreen() {
-      editorPanel.classList.add('editor-open');
-      editorPanel.classList.toggle('editor-fullscreen');
-      if (editorFullscreen) editorFullscreen.textContent = editorPanel.classList.contains('editor-fullscreen') ? 'Normal' : 'Vollbild';
-    }
-"""
-new_toggle = """    function clearCardMaximizeForEditor() {
-      document.body.classList.remove('has-maximized-card');
-      document.querySelectorAll('.card.maximized').forEach(card => card.classList.remove('maximized'));
-    }
-
-    function syncEditorFullscreenState(active) {
-      if (!editorPanel) return;
-      editorPanel.classList.add('editor-open');
-      editorPanel.classList.toggle('editor-fullscreen', Boolean(active));
-      document.body.classList.toggle('editor-fullscreen-active', Boolean(active));
-      clearCardMaximizeForEditor();
-      if (fileManagerGrid) fileManagerGrid.classList.toggle('editor-visible', true);
-      if (editorFullscreen) editorFullscreen.textContent = active ? 'Normal' : 'Vollbild';
-      if (active) window.requestAnimationFrame(() => fileEditor?.focus({ preventScroll: true }));
-    }
-
-    function toggleEditorFullscreen() {
-      syncEditorFullscreenState(!editorPanel.classList.contains('editor-fullscreen'));
-    }
-"""
-if old_toggle in text:
-    text = text.replace(old_toggle, new_toggle, 1)
-
-# Beim Schließen auch den separaten Editor-Fullscreen-Zustand entfernen.
-old_close = """    function closeEditorOverlay() {
-      if (!editorPanel) return;
-      editorPanel.classList.remove('editor-open', 'editor-fullscreen');
-      if (editorFullscreen) editorFullscreen.textContent = 'Vollbild';
-    }
-"""
-new_close = """    function closeEditorOverlay() {
-      if (!editorPanel) return;
-      editorPanel.classList.remove('editor-open', 'editor-fullscreen');
-      document.body.classList.remove('editor-fullscreen-active');
-      if (fileManagerGrid) fileManagerGrid.classList.remove('editor-visible');
-      if (editorFullscreen) editorFullscreen.textContent = 'Vollbild';
-    }
-"""
-if old_close in text:
-    text = text.replace(old_close, new_close, 1)
-
-# Desktop-Dateifenster standardmäßig größer öffnen. Bestehende gespeicherte kleine
-# Fenster werden zusätzlich per Runtime-Guard korrigiert.
-old_default = """      const heightCap = id === 'files' ? 540 : 660;
-      const heightOffset = id === 'files' ? 330 : 160;
-      const height = Math.min(heightCap, Math.max(360, window.innerHeight - heightOffset));
-"""
-new_default = """      const heightCap = id === 'files' ? 760 : 660;
-      const heightOffset = id === 'files' ? 110 : 160;
-      const minHeight = id === 'files' ? 540 : 360;
-      const height = Math.min(heightCap, Math.max(minHeight, window.innerHeight - heightOffset));
-"""
-if old_default in text:
-    text = text.replace(old_default, new_default, 1)
-
 css_fix = r'''
 
-    /* v1.6.14.16b separated PC editor/files/dashboard layout
-       Trennung statt Flickenteppich:
-       - Card-Maximize-Overlay darf Editor-Vollbild nicht beeinflussen.
-       - Editor normal = Datei-Editor im Explorer-Layout.
-       - Editor Vollbild = eigener Vordergrundzustand ohne Blur-Backdrop.
-       - Desktop-Dateifenster: Toolbar + Explorerliste nutzen die Fensterhöhe.
-       - Klassisches Dashboard: aktive Kacheln haben eigene Scrollregion. */
+    /* v1.6.14.17b PC editor + desktop file explorer repair
+       Minimaler Reparatur-Override nach 1.6.14.16b:
+       - Mobile: nur der aktive Tab darf sichtbar sein.
+       - PC: Editor ist ein eigenes großes Overlay, nicht Teil des Explorer-Grids.
+       - Desktop-Dateifenster: Explorer belegt die Fensterhöhe, Liste scrollt intern. */
+    body.ux-mobile:not(.desktop-mode) .content > .tab-panel,
+    body.ux-mobile:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+
+    body.ux-mobile:not(.desktop-mode) .content > .tab-panel.active {
+      display: grid !important;
+      visibility: visible !important;
+      pointer-events: auto !important;
+    }
+
+    body.ux-mobile:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .file-manager-grid,
+    body.ux-mobile:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .file-explorer-panel,
+    body.ux-mobile:not(.desktop-mode) .tab-panel[data-panel="files"]:not(.active) .editor-panel {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+
     @media (min-width: 1051px) {
-      body.editor-fullscreen-active::after,
-      body.has-maximized-card.editor-fullscreen-active::after,
+      body.ux-desktop.editor-fullscreen-active::after,
+      body.ux-desktop.has-maximized-card.editor-fullscreen-active::after,
       body.desktop-mode.has-maximized-card.editor-fullscreen-active::after,
-      body.ux-desktop.has-maximized-card.editor-fullscreen-active::after {
+      body.desktop-mode.editor-fullscreen-active::after {
         content: none !important;
         display: none !important;
         visibility: hidden !important;
@@ -130,37 +81,12 @@ css_fix = r'''
         background: transparent !important;
       }
 
-      body.ux-desktop .editor-panel.editor-open:not(.editor-fullscreen) {
-        position: static !important;
-        inset: auto !important;
-        z-index: auto !important;
-        width: auto !important;
-        height: 100% !important;
-        min-width: 0 !important;
-        min-height: 0 !important;
-        max-width: none !important;
-        max-height: 100% !important;
-        display: flex !important;
-        flex-direction: column !important;
-        overflow: hidden !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-        background: var(--panel) !important;
-        border: 1px solid var(--border-soft) !important;
-        box-shadow: none !important;
-        backdrop-filter: none !important;
-      }
-
-      body.ux-desktop .editor-panel.editor-open:not(.editor-fullscreen)::before {
-        content: none !important;
-        display: none !important;
-      }
-
-      body.ux-desktop .editor-panel.editor-fullscreen {
+      body.ux-desktop .editor-panel.editor-open,
+      body.ux-desktop .editor-panel.editor-fullscreen,
+      body.desktop-mode .editor-panel.editor-open,
+      body.desktop-mode .editor-panel.editor-fullscreen {
         position: fixed !important;
-        z-index: 170 !important;
-        inset: 16px !important;
+        z-index: 220 !important;
         width: auto !important;
         height: auto !important;
         min-width: 0 !important;
@@ -174,22 +100,36 @@ css_fix = r'''
         opacity: 1 !important;
         pointer-events: auto !important;
         background: rgba(15, 23, 42, .99) !important;
-        border: 1px solid rgba(96, 165, 250, .36) !important;
-        box-shadow: 0 28px 90px rgba(0,0,0,.72) !important;
+        border: 1px solid rgba(96, 165, 250, .38) !important;
+        box-shadow: 0 28px 90px rgba(0, 0, 0, .72) !important;
         backdrop-filter: none !important;
       }
 
+      body.ux-desktop:not(.desktop-mode):not(.console-maximized) .editor-panel.editor-open,
       body.ux-desktop:not(.desktop-mode):not(.console-maximized) .editor-panel.editor-fullscreen {
-        inset: 16px 16px calc(var(--console-height) + 16px) 16px !important;
+        inset: 18px 18px calc(var(--console-height) + 18px) 18px !important;
       }
 
-      body.ux-desktop .editor-panel.editor-fullscreen::before {
+      body.ux-desktop.console-maximized .editor-panel.editor-open,
+      body.ux-desktop.console-maximized .editor-panel.editor-fullscreen,
+      body.desktop-mode .editor-panel.editor-open,
+      body.desktop-mode .editor-panel.editor-fullscreen {
+        inset: 18px !important;
+      }
+
+      body.ux-desktop .editor-panel.editor-open::before,
+      body.ux-desktop .editor-panel.editor-fullscreen::before,
+      body.desktop-mode .editor-panel.editor-open::before,
+      body.desktop-mode .editor-panel.editor-fullscreen::before {
         content: none !important;
         display: none !important;
+        pointer-events: none !important;
       }
 
       body.ux-desktop .editor-panel.editor-open .editor-box,
-      body.ux-desktop .editor-panel.editor-fullscreen .editor-box {
+      body.ux-desktop .editor-panel.editor-fullscreen .editor-box,
+      body.desktop-mode .editor-panel.editor-open .editor-box,
+      body.desktop-mode .editor-panel.editor-fullscreen .editor-box {
         flex: 1 1 auto !important;
         height: auto !important;
         min-height: 0 !important;
@@ -203,14 +143,22 @@ css_fix = r'''
         grid-template-rows: auto minmax(0, 1fr) !important;
         align-content: stretch !important;
         overflow: hidden !important;
-        min-height: min(760px, calc(100dvh - 70px)) !important;
+        min-width: min(1120px, calc(100dvw - 32px)) !important;
+        min-height: min(760px, calc(100dvh - 72px)) !important;
       }
 
       body.desktop-mode .tab-panel[data-panel="files"].desktop-maximized {
+        min-width: 0 !important;
         min-height: 0 !important;
       }
 
-      body.desktop-mode .tab-panel[data-panel="files"] .file-manager-grid {
+      body.desktop-mode .tab-panel[data-panel="files"] .file-manager-grid,
+      body.desktop-mode .tab-panel[data-panel="files"] .file-manager-grid.editor-visible,
+      body.desktop-mode .tab-panel[data-panel="files"] .file-manager-grid:not(.editor-visible) {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        grid-template-rows: minmax(0, 1fr) !important;
+        gap: 0 !important;
         height: 100% !important;
         min-height: 0 !important;
         max-height: 100% !important;
@@ -218,25 +166,16 @@ css_fix = r'''
         align-items: stretch !important;
       }
 
-      body.desktop-mode .tab-panel[data-panel="files"] .file-manager-grid:not(.editor-visible) {
-        display: grid !important;
-        grid-template-columns: minmax(0, 1fr) !important;
-        grid-template-rows: minmax(0, 1fr) !important;
-        gap: 0 !important;
-      }
-
-      body.desktop-mode .tab-panel[data-panel="files"] .file-manager-grid:not(.editor-visible) .split-resizer,
-      body.desktop-mode .tab-panel[data-panel="files"] .file-manager-grid:not(.editor-visible) .editor-panel:not(.editor-open):not(.editor-fullscreen) {
+      body.desktop-mode .tab-panel[data-panel="files"] .split-resizer {
         display: none !important;
         visibility: hidden !important;
         pointer-events: none !important;
       }
 
-      body.desktop-mode .tab-panel[data-panel="files"] .file-manager-grid.editor-visible {
-        display: grid !important;
-        grid-template-columns: minmax(360px, var(--files-left-width)) 10px minmax(360px, 1fr) !important;
-        grid-template-rows: minmax(0, 1fr) !important;
-        gap: 12px !important;
+      body.desktop-mode .tab-panel[data-panel="files"] .editor-panel:not(.editor-open):not(.editor-fullscreen) {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
       }
 
       body.desktop-mode .tab-panel[data-panel="files"] .file-explorer-panel {
@@ -255,7 +194,7 @@ css_fix = r'''
 
       body.desktop-mode .tab-panel[data-panel="files"] .file-table-wrap {
         flex: 1 1 auto !important;
-        min-height: 0 !important;
+        min-height: 320px !important;
         height: auto !important;
         max-height: none !important;
         overflow: auto !important;
@@ -289,123 +228,122 @@ css_fix = r'''
         overscroll-behavior: contain !important;
         padding-bottom: 22px !important;
       }
-
-      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-grid {
-        align-content: start !important;
-        min-height: 0 !important;
-      }
     }
 '''
 
-if 'v1.6.14.16b separated PC editor/files/dashboard layout' not in text:
+if 'v1.6.14.17b PC editor + desktop file explorer repair' not in text:
     text = text.replace('  </style>', css_fix + '  </style>', 1)
 
 runtime_fix = r'''
 
-    /* v1.6.14.16b runtime separation: editor/fullscreen/files/dashboard */
-    (function separatePcEditorFilesDashboard161416() {
-      function isPcShell161416() {
-        return document.body.classList.contains('ux-desktop') || document.body.classList.contains('desktop-mode');
+    /* v1.6.14.17b runtime repair: mobile tab isolation + PC editor overlay */
+    (function repairUiAfter161416() {
+      function clearEditorCardState161417() {
+        document.body.classList.remove('has-maximized-card');
+        document.querySelectorAll('.card.maximized').forEach(card => card.classList.remove('maximized'));
       }
 
-      function isClassicPc161416() {
-        return document.body.classList.contains('ux-desktop') && !document.body.classList.contains('desktop-mode');
+      function isMobileShell161417() {
+        return document.body.classList.contains('ux-mobile') && !document.body.classList.contains('desktop-mode');
       }
 
-      function editorVisible161416() {
-        return !!(editorPanel && (editorPanel.classList.contains('editor-open') || editorPanel.classList.contains('editor-fullscreen')));
+      function isolateMobileTabs161417() {
+        if (!isMobileShell161417()) return;
+        document.body.classList.remove('desktop-mode', 'has-maximized-card', 'editor-fullscreen-active');
+        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('desktop-open', 'desktop-minimized', 'desktop-maximized'));
+        const activePanel = document.querySelector('.tab-panel.active') || document.querySelector('.tab-panel[data-panel="overview"]');
+        const active = activePanel?.dataset?.panel || 'overview';
+        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === active));
+        document.querySelectorAll('[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === active));
       }
 
-      function syncFileGrid161416() {
-        if (!fileManagerGrid) return;
-        fileManagerGrid.classList.toggle('editor-visible', editorVisible161416());
+      function setEditorOverlay161417(fullscreen) {
+        if (!editorPanel) return;
+        clearEditorCardState161417();
+        editorPanel.classList.add('editor-open');
+        editorPanel.classList.toggle('editor-fullscreen', Boolean(fullscreen));
+        document.body.classList.toggle('editor-fullscreen-active', Boolean(fullscreen));
+        if (fileManagerGrid) fileManagerGrid.classList.remove('editor-visible');
+        if (editorFullscreen) editorFullscreen.textContent = fullscreen ? 'Normal' : 'Vollbild';
+        window.requestAnimationFrame(() => fileEditor?.focus({ preventScroll: true }));
       }
 
-      function syncDashboard161416() {
-        const panel = document.querySelector('.tab-panel[data-panel="dashboard"]');
-        const active = panel?.querySelector('.dashboard-active-card');
-        if (!panel || !active || !isClassicPc161416()) return;
-        panel.style.display = 'flex';
-        panel.style.flexDirection = 'column';
-        panel.style.overflow = 'hidden';
-        active.style.flex = '1 1 auto';
-        active.style.minHeight = '0';
-        active.style.overflowY = 'auto';
-        active.style.overflowX = 'hidden';
+      function closeEditorOverlay161417() {
+        if (!editorPanel) return;
+        editorPanel.classList.remove('editor-open', 'editor-fullscreen');
+        document.body.classList.remove('editor-fullscreen-active');
+        if (fileManagerGrid) fileManagerGrid.classList.remove('editor-visible');
+        if (editorFullscreen) editorFullscreen.textContent = 'Vollbild';
       }
 
-      function repairFilesDesktopWindow161416() {
+      const previousOpenEditorOverlay161417 = openEditorOverlay;
+      openEditorOverlay = function() {
+        const result = previousOpenEditorOverlay161417.apply(this, arguments);
+        if (document.body.classList.contains('ux-desktop') || document.body.classList.contains('desktop-mode')) {
+          setEditorOverlay161417(false);
+        }
+        isolateMobileTabs161417();
+        return result;
+      };
+
+      closeEditorOverlay = function() {
+        closeEditorOverlay161417();
+      };
+
+      if (editorFullscreen) {
+        editorFullscreen.addEventListener('click', event => {
+          if (!(document.body.classList.contains('ux-desktop') || document.body.classList.contains('desktop-mode'))) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          setEditorOverlay161417(!editorPanel.classList.contains('editor-fullscreen'));
+        }, true);
+      }
+
+      function repairDesktopFilesWindow161417() {
         if (!document.body.classList.contains('desktop-mode')) return;
         const panel = document.querySelector('.tab-panel[data-panel="files"]');
         if (!panel || !panel.classList.contains('desktop-open') || panel.classList.contains('desktop-minimized') || panel.classList.contains('desktop-maximized')) return;
+        if (fileManagerGrid) fileManagerGrid.classList.remove('editor-visible');
         const rect = panel.getBoundingClientRect();
-        const minWidth = Math.min(window.innerWidth - 24, 920);
-        const minHeight = Math.min(window.innerHeight - 70, 620);
+        const minWidth = Math.min(window.innerWidth - 32, 1120);
+        const minHeight = Math.min(window.innerHeight - 72, 760);
         let changed = false;
-        if (rect.width < minWidth) { panel.style.width = Math.max(560, minWidth) + 'px'; changed = true; }
-        if (rect.height < minHeight) { panel.style.height = Math.max(520, minHeight) + 'px'; changed = true; }
+        if (rect.width < minWidth) { panel.style.width = Math.max(760, minWidth) + 'px'; changed = true; }
+        if (rect.height < minHeight) { panel.style.height = Math.max(560, minHeight) + 'px'; changed = true; }
         if (changed && typeof saveDesktopPosition === 'function') saveDesktopPosition('files', panel);
       }
 
-      const previousOpenDesktopWindow161416 = openDesktopWindow;
+      const previousOpenDesktopWindow161417 = openDesktopWindow;
       openDesktopWindow = function(id) {
-        const result = previousOpenDesktopWindow161416.apply(this, arguments);
+        const result = previousOpenDesktopWindow161417.apply(this, arguments);
         window.requestAnimationFrame(() => {
-          syncFileGrid161416();
-          if (id === 'files') repairFilesDesktopWindow161416();
+          if (id === 'files') repairDesktopFilesWindow161417();
+          isolateMobileTabs161417();
         });
         return result;
       };
 
-      const previousOpenEditorOverlay161416 = openEditorOverlay;
-      openEditorOverlay = function() {
-        const result = previousOpenEditorOverlay161416.apply(this, arguments);
-        document.body.classList.remove('editor-fullscreen-active');
-        clearCardMaximizeForEditor?.();
-        if (editorPanel) editorPanel.classList.add('editor-open');
-        syncFileGrid161416();
-        window.requestAnimationFrame(() => {
-          syncFileGrid161416();
-          repairFilesDesktopWindow161416();
-        });
-        return result;
-      };
-
-      const previousCloseEditorOverlay161416 = closeEditorOverlay;
-      closeEditorOverlay = function() {
-        const result = previousCloseEditorOverlay161416.apply(this, arguments);
-        document.body.classList.remove('editor-fullscreen-active');
-        syncFileGrid161416();
-        return result;
-      };
+      document.querySelectorAll('[data-tab]').forEach(button => {
+        button.addEventListener('click', () => window.requestAnimationFrame(isolateMobileTabs161417), true);
+      });
 
       window.addEventListener('resize', () => window.requestAnimationFrame(() => {
-        syncDashboard161416();
-        syncFileGrid161416();
-        repairFilesDesktopWindow161416();
+        isolateMobileTabs161417();
+        repairDesktopFilesWindow161417();
       }), { passive: true });
 
-      document.addEventListener('click', () => window.requestAnimationFrame(() => {
-        syncDashboard161416();
-        syncFileGrid161416();
-        repairFilesDesktopWindow161416();
-      }), true);
-
       window.requestAnimationFrame(() => {
-        document.body.classList.remove('editor-fullscreen-active');
-        syncDashboard161416();
-        syncFileGrid161416();
-        repairFilesDesktopWindow161416();
+        isolateMobileTabs161417();
+        repairDesktopFilesWindow161417();
       });
       window.setTimeout(() => {
-        syncDashboard161416();
-        syncFileGrid161416();
-        repairFilesDesktopWindow161416();
+        isolateMobileTabs161417();
+        repairDesktopFilesWindow161417();
       }, 300);
     })();
 '''
 
-if 'v1.6.14.16b runtime separation: editor/fullscreen/files/dashboard' not in text:
+if 'v1.6.14.17b runtime repair: mobile tab isolation + PC editor overlay' not in text:
     text = text.replace('\n</script>\n</body>\n</html>', runtime_fix + '\n</script>\n</body>\n</html>', 1)
 
 if text != original:
