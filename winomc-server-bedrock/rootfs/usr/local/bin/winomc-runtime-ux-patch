@@ -1,0 +1,535 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+TARGET = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/usr/local/bin/winomc-console-server")
+VERSION = "2.0.0.2b"
+CSS_MARKER = "v2.0.0.2b PC Workbench cleanup CSS"
+JS_MARKER = "v2.0.0.2b PC Workbench cleanup JS"
+BACKEND_MARKER = "v2.0.0.2b profile apply backend"
+
+
+def replace_once(text, old, new):
+    if old in text:
+        return text.replace(old, new, 1)
+    return text
+
+
+def main():
+    if not TARGET.exists():
+        print("WinoMC UX patch skipped: %s not found" % TARGET)
+        return 0
+
+    text = TARGET.read_text(encoding="utf-8")
+    original = text
+
+    for old, new in (
+        ('WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.0.0")',
+         'WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.0.0.2b")'),
+        ("<title>WinoMC 2.0.0 Framework Workbench</title>",
+         "<title>WinoMC 2.0.0.2b Framework Workbench</title>"),
+        ('<div class="card metric-card"><div class="stat-label">WinoMC</div><div class="stat-value" id="statWinoVersion">2.0.0</div>',
+         '<div class="card metric-card"><div class="stat-label">WinoMC</div><div class="stat-value" id="statWinoVersion">2.0.0.2b</div>'),
+        ("WinoMC 2.0.0 Framework Workbench", "WinoMC 2.0.0.2b Framework Workbench"),
+    ):
+        text = text.replace(old, new)
+
+    old_builtin = '''BUILTIN_BEDROCK_PACK_NAMES = {"chemistry", "vanilla", "education", "default", "minecraft"}
+BUILTIN_BEDROCK_PACK_PREFIXES = ("vanilla_", "experimental_")
+
+def is_system_pack_path(path):
+    parts = [str(part or "").strip().lower() for part in re.split(r"[\\\\/]+", str(path or "")) if str(part or "").strip()]
+    for part in parts:
+        if part in BUILTIN_BEDROCK_PACK_NAMES or any(part.startswith(prefix) for prefix in BUILTIN_BEDROCK_PACK_PREFIXES):
+            return True
+    return False
+
+def is_builtin_bedrock_pack(pack):
+    pack = pack or {}
+    values = [pack.get("name"), pack.get("path"), pack.get("filename"), pack.get("manifest_path"), pack.get("uuid")]
+    header = pack.get("header") if isinstance(pack.get("header"), dict) else {}
+    values += [header.get("name"), header.get("description")]
+    metadata = pack.get("metadata") if isinstance(pack.get("metadata"), dict) else {}
+    values += [metadata.get("product_type"), metadata.get("pack_scope")]
+    for value in values:
+        text = str(value or "").strip().lower()
+        if not text:
+            continue
+        base = os.path.basename(text.replace("\\\\", "/"))
+        if base in BUILTIN_BEDROCK_PACK_NAMES or any(base.startswith(prefix) for prefix in BUILTIN_BEDROCK_PACK_PREFIXES):
+            return True
+        if is_system_pack_path(text):
+            return True
+    return False
+'''
+    new_builtin = '''BUILTIN_BEDROCK_PACK_NAMES = {
+    "chemistry", "vanilla", "education", "default", "minecraft",
+    "resourcepack.editor.client.name", "resourcepack.editor.server.name",
+    "server editor library", "@minecraft/server ts library", "@minecraft/server-ui ts library",
+}
+BUILTIN_BEDROCK_PACK_PREFIXES = ("vanilla_", "experimental_", "chemistry_", "resourcepack.editor.", "@minecraft/")
+BUILTIN_BEDROCK_PACK_CONTAINS = (
+    "resourcepack.editor.",
+    "server editor library",
+    "@minecraft/server",
+    "@minecraft/server-ui",
+)
+
+def _is_builtin_pack_text(value):
+    text = str(value or "").strip().lower()
+    if not text:
+        return False
+    base = os.path.basename(text.replace("\\\\", "/"))
+    candidates = {text, base}
+    for candidate in candidates:
+        if not candidate:
+            continue
+        if candidate in BUILTIN_BEDROCK_PACK_NAMES:
+            return True
+        if any(candidate.startswith(prefix) for prefix in BUILTIN_BEDROCK_PACK_PREFIXES):
+            return True
+        if any(marker in candidate for marker in BUILTIN_BEDROCK_PACK_CONTAINS):
+            return True
+    return False
+
+def is_system_pack_path(path):
+    parts = [str(part or "").strip().lower() for part in re.split(r"[\\\\/]+", str(path or "")) if str(part or "").strip()]
+    for part in parts:
+        if _is_builtin_pack_text(part):
+            return True
+    return False
+
+def is_builtin_bedrock_pack(pack):
+    pack = pack or {}
+    values = [pack.get("name"), pack.get("path"), pack.get("filename"), pack.get("manifest_path"), pack.get("uuid")]
+    header = pack.get("header") if isinstance(pack.get("header"), dict) else {}
+    values += [header.get("name"), header.get("description")]
+    metadata = pack.get("metadata") if isinstance(pack.get("metadata"), dict) else {}
+    values += [metadata.get("product_type"), metadata.get("pack_scope")]
+    for value in values:
+        if _is_builtin_pack_text(value) or is_system_pack_path(value):
+            return True
+    return False
+'''
+    if old_builtin in text:
+        text = text.replace(old_builtin, new_builtin, 1)
+
+    css_patch = '''
+    /* v2.0.0.2b PC Workbench cleanup CSS */
+    button[data-tab="transfer"],
+    .desktop-icon[data-open-window="transfer"] {
+      display: none !important;
+    }
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-add-row {
+      grid-template-columns: minmax(320px, 1.2fr) minmax(340px, 1fr) minmax(120px, auto) !important;
+      align-items: stretch !important;
+      gap: 12px !important;
+    }
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-action-preview {
+      min-height: 58px !important;
+      grid-template-columns: minmax(0, 1fr) auto auto !important;
+      align-items: center !important;
+      overflow: visible !important;
+    }
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="players"] .file-table-wrap {
+      max-height: calc(100dvh - var(--console-height) - 260px);
+      min-height: 260px;
+      overflow: auto;
+    }
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="players"] .file-table input,
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="players"] .file-table select {
+      width: 100%;
+      min-width: 130px;
+      max-width: 230px;
+    }
+    body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="diagnostics"] .tile {
+      min-height: 0;
+      overflow: visible;
+    }
+    @media (max-width: 1180px) {
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-add-row {
+        grid-template-columns: 1fr !important;
+      }
+      body.ux-desktop:not(.desktop-mode) .tab-panel[data-panel="dashboard"] .dashboard-action-preview {
+        grid-template-columns: 1fr !important;
+      }
+    }
+'''
+    if CSS_MARKER not in text:
+        text = text.replace("  </style>", css_patch + "  </style>", 1)
+
+    text = text.replace('      <button class="tab-button" data-tab="transfer" aria-label="Import Export"><span class="icon">🔁</span> Import / Export (Hinweis)</button>\n', '')
+    text = text.replace('          <button type="button" class="desktop-icon" data-open-window="transfer"><span class="desktop-icon-symbol">🔁</span><span class="desktop-icon-label">Import-Hinweis</span></button>\n', '')
+
+    old_resource = '<div class="card"><div class="card-header"><div><h3>Resource Packs</h3><p>Dateien und Manifest prüfen, Packs in den passenden Ordner legen.</p></div></div><div class="pill-group"><button data-open-root="resource_packs">Resource Packs öffnen</button><button data-open-root="import">Import öffnen</button></div><div class="info warning-box" style="margin-top:12px">Hinweis: Gekaufte Marketplace-Packs müssen vorher aus Minecraft exportiert bzw. als lokale Pack-Datei bereitgestellt werden. WinoMC verwaltet lokale Dateien wie .mcpack, .mcaddon, .mcworld, .mctemplate und .zip.</div></div>'
+    new_resource = '<div class="card"><div class="card-header"><div><h3>Resource Packs</h3><p>Dateien und Manifest prüfen, Packs in den passenden Ordner legen.</p></div></div><div class="pill-group"><button data-open-root="resource_packs">Resource Packs öffnen</button><button data-open-root="import">Importordner anzeigen</button><button data-open-root="export">Exportordner anzeigen</button></div></div>'
+    text = replace_once(text, old_resource, new_resource)
+
+    old_behavior = '<div class="card"><div class="card-header"><div><h3>Behavior Packs & Add-ons</h3><p>Behavior Packs verändern Welt-Metadaten und sollten kontrolliert importiert werden.</p></div></div><div class="pill-group"><button data-open-root="behavior_packs">Behavior Packs öffnen</button><button data-open-root="worlds">Weltdateien öffnen</button></div></div>'
+    new_behavior = '<div class="card"><div class="card-header"><div><h3>Behavior Packs & Add-ons</h3><p>Behavior Packs verändern Welt-Metadaten und sollten kontrolliert importiert werden.</p></div></div><div class="pill-group"><button data-open-root="behavior_packs">Behavior Packs öffnen</button><button data-open-root="worlds">Weltdateien öffnen</button><button data-open-root="import">Importordner anzeigen</button><button data-open-root="export">Exportordner anzeigen</button></div></div>'
+    text = replace_once(text, old_behavior, new_behavior)
+
+    text = text.replace('<tr><td colspan="5">Noch nicht geladen.</td></tr>', '<tr><td colspan="6">Noch nicht geladen.</td></tr>')
+    text = text.replace('<tr><td colspan="5">Noch keine Spieler. Nutze „Spieler hinzufügen“.</td></tr>', '<tr><td colspan="6">Noch keine Spieler. Nutze „Spieler hinzufügen“.</td></tr>')
+
+    profile_backend = r'''
+
+
+# v2.0.0.2b profile apply backend
+PROFILE_PROPERTY_MAP = {
+    "SERVER_NAME": "server-name",
+    "GAMEMODE": "gamemode",
+    "FORCE_GAMEMODE": "force-gamemode",
+    "DIFFICULTY": "difficulty",
+    "ALLOW_CHEATS": "allow-cheats",
+    "MAX_PLAYERS": "max-players",
+    "ONLINE_MODE": "online-mode",
+    "ALLOW_LIST": "allow-list",
+    "SERVER_PORT": "server-port",
+    "SERVER_PORT_V6": "server-portv6",
+    "ENABLE_LAN_VISIBILITY": "enable-lan-visibility",
+    "VIEW_DISTANCE": "view-distance",
+    "TICK_DISTANCE": "tick-distance",
+    "PLAYER_IDLE_TIMEOUT": "player-idle-timeout",
+    "MAX_THREADS": "max-threads",
+    "LEVEL_NAME": "level-name",
+    "LEVEL_SEED": "level-seed",
+    "DEFAULT_PLAYER_PERMISSION_LEVEL": "default-player-permission-level",
+    "TEXTUREPACK_REQUIRED": "texturepack-required",
+    "CONTENT_LOG_FILE_ENABLED": "content-log-file-enabled",
+    "CONTENT_LOG_LEVEL": "content-log-level",
+    "CONTENT_LOG_CONSOLE_OUTPUT_ENABLED": "content-log-console-output-enabled",
+    "SERVER_AUTHORITATIVE_MOVEMENT": "server-authoritative-movement",
+    "SERVER_AUTHORITATIVE_BLOCK_BREAKING": "server-authoritative-block-breaking",
+    "PLAYER_MOVEMENT_SCORE_THRESHOLD": "player-movement-score-threshold",
+    "PLAYER_MOVEMENT_DISTANCE_THRESHOLD": "player-movement-distance-threshold",
+    "PLAYER_MOVEMENT_DURATION_THRESHOLD_IN_MS": "player-movement-duration-threshold-in-ms",
+    "CORRECT_PLAYER_MOVEMENT": "correct-player-movement",
+    "CHAT_RESTRICTION": "chat-restriction",
+    "DISABLE_PLAYER_INTERACTION": "disable-player-interaction",
+    "DISABLE_PERSONA": "disable-persona",
+    "DISABLE_CUSTOM_SKINS": "disable-custom-skins",
+    "EMIT_SERVER_TELEMETRY": "emit-server-telemetry",
+}
+
+PROFILE_PROPERTY_ORDER = [
+    "server-name", "gamemode", "force-gamemode", "difficulty", "allow-cheats",
+    "max-players", "online-mode", "allow-list", "server-port", "server-portv6",
+    "enable-lan-visibility", "view-distance", "tick-distance", "player-idle-timeout",
+    "max-threads", "level-name", "level-seed", "default-player-permission-level",
+    "texturepack-required", "content-log-file-enabled", "content-log-level",
+    "content-log-console-output-enabled", "server-authoritative-movement",
+    "server-authoritative-block-breaking", "player-movement-score-threshold",
+    "player-movement-distance-threshold", "player-movement-duration-threshold-in-ms",
+    "correct-player-movement", "chat-restriction", "disable-player-interaction",
+    "disable-persona", "disable-custom-skins", "emit-server-telemetry",
+]
+
+def _profile_value_to_property(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return ""
+    return str(value)
+
+def _find_profile(profile_id):
+    profiles = profiles_payload().get("profiles", [])
+    slug = str(profile_id or "").lower().replace(" ", "-")
+    for profile in profiles:
+        name_slug = profile["name"].lower().replace(" ", "-")
+        if slug in (name_slug, safe_download_name(profile["name"].lower(), "")):
+            return profile
+    raise FileNotFoundError("Profil wurde nicht gefunden.")
+
+def _read_server_properties_for_profile():
+    props = {}
+    passthrough = []
+    try:
+        with open_safe_internal(DATA_DIR, SERVER_PROPERTIES_PATH, "r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.rstrip("\n")
+                if not line or line.lstrip().startswith("#") or "=" not in line:
+                    passthrough.append(line)
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                if key:
+                    props[key] = value.strip()
+                else:
+                    passthrough.append(line)
+    except FileNotFoundError:
+        pass
+    return props, passthrough
+
+def apply_profile(profile_id):
+    selected = _find_profile(profile_id)
+    defaults = selected.get("defaults", {}) if isinstance(selected.get("defaults"), dict) else {}
+    backup = create_framework_backup("config", "pre-profile-apply")
+    props, passthrough = _read_server_properties_for_profile()
+    changed = {}
+    for option_key, property_key in PROFILE_PROPERTY_MAP.items():
+        if option_key not in defaults:
+            continue
+        value = _profile_value_to_property(defaults.get(option_key))
+        props[property_key] = value
+        changed[property_key] = value
+        os.environ[str(option_key)] = str(defaults.get(option_key))
+    if not changed:
+        raise ValueError("Profil enthält keine anwendbaren Servereigenschaften.")
+    if defaults.get("ALLOW_LIST") is True and not os.path.exists(os.path.join(DATA_DIR, "allowlist.json")):
+        atomic_write_json_root("config", "/allowlist.json", [], backup=False)
+    lines = ["# WinoMC server.properties - durch Erststart-Profil aktualisiert"]
+    emitted = set()
+    for key in PROFILE_PROPERTY_ORDER:
+        if key in props:
+            lines.append("%s=%s" % (key, props[key]))
+            emitted.add(key)
+    for key in sorted(props):
+        if key not in emitted:
+            lines.append("%s=%s" % (key, props[key]))
+            emitted.add(key)
+    for line in passthrough:
+        if line and line not in lines:
+            lines.append(line)
+    with open_safe_internal(DATA_DIR, SERVER_PROPERTIES_PATH, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write("\n".join(lines).rstrip() + "\n")
+    state_dir = makedirs_internal(os.path.join(DATA_DIR, ".winomc"), os.path.join(DATA_DIR, ".winomc"), exist_ok=True)
+    state_path = assert_safe_internal_path(state_dir, os.path.join(state_dir, "applied-profile.json"))
+    state = {
+        "applied_at": time.strftime("%Y-%m-%d_%H-%M-%S"),
+        "profile": selected,
+        "changed": changed,
+        "backup": backup,
+        "message": "Profil angewendet. Servereigenschaften wurden aktualisiert.",
+    }
+    with open_safe_internal(state_dir, state_path, "w", encoding="utf-8") as handle:
+        json.dump(state, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    return {"ok": True, "profile": selected, "changed": changed, "backup": backup, "state": state, "message": state["message"]}
+'''
+    if BACKEND_MARKER not in text:
+        text = text.replace("\n\ndef state_dir_path():", profile_backend + "\n\ndef state_dir_path():", 1)
+
+    if "/api/profiles/apply" not in text:
+        route_anchor = '        if path.endswith("/api/files/upload") or path == "/api/files/upload":'
+        route_block = '''        if path.endswith("/api/profiles/apply") or path == "/api/profiles/apply":
+            try:
+                self.require_web_write_allowed("Profil anwenden")
+                payload = self._read_json_payload()
+                self._send_json(200, apply_profile(str(payload.get("profile", ""))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
+'''
+        text = text.replace(route_anchor, route_block + route_anchor, 1)
+
+    js_patch = r'''
+    /* v2.0.0.2b PC Workbench cleanup JS */
+    (() => {
+      const cleanupTransferEntrypoints = () => {
+        document.querySelectorAll('button[data-tab="transfer"], .desktop-icon[data-open-window="transfer"]').forEach(node => node.remove());
+        document.querySelectorAll('[data-panel="transfer"]').forEach(panel => panel.remove());
+      };
+
+      const ensurePlayerActions = () => {
+        const header = document.querySelector('[data-panel="players"] .card-header');
+        if (!header || document.getElementById('playersSave2')) return;
+        header.insertAdjacentHTML('beforeend', '<div class="actions"><button id="playersAdd2" type="button">Spieler hinzufügen</button><button class="primary" id="playersSave2" type="button">Speichern</button></div>');
+      };
+
+      const renderPlayers2002 = () => {
+        const table = document.getElementById('playersTable');
+        if (!table) return;
+        const players = Array.isArray(window.winomcPlayers2) ? window.winomcPlayers2 : [];
+        if (!players.length) {
+          table.innerHTML = '<tr><td colspan="6">Noch keine Spieler. Nutze „Spieler hinzufügen”.</td></tr>';
+          ensurePlayerActions();
+          return;
+        }
+        table.innerHTML = players.map((p, i) => {
+          const role = p.role || 'member';
+          const allowlisted = Boolean(p.allowlisted);
+          return '<tr>'
+            + '<td><input data-player-field="name" data-player-index="'+i+'" value="'+escapeHtml(p.name || '')+'" placeholder="Gamertag"></td>'
+            + '<td><input data-player-field="xuid" data-player-index="'+i+'" value="'+escapeHtml(p.xuid || '')+'" placeholder="XUID"></td>'
+            + '<td><select data-player-field="allowlisted" data-player-index="'+i+'"><option value="true" '+(allowlisted ? 'selected' : '')+'>Ja</option><option value="false" '+(!allowlisted ? 'selected' : '')+'>Nein</option></select></td>'
+            + '<td><select data-player-field="role" data-player-index="'+i+'"><option value="member" '+(role === 'member' ? 'selected' : '')+'>Member</option><option value="operator" '+(role === 'operator' ? 'selected' : '')+'>Operator</option><option value="visitor" '+(role === 'visitor' ? 'selected' : '')+'>Visitor</option></select></td>'
+            + '<td>'+escapeHtml((p.issues || []).join(', ') || 'OK')+'</td>'
+            + '<td><button data-player-remove="'+i+'" type="button">Entfernen</button></td>'
+            + '</tr>';
+        }).join('');
+        ensurePlayerActions();
+      };
+
+      window.collectPlayers2 = function collectPlayers2Clean() {
+        document.querySelectorAll('[data-player-field]').forEach(el => {
+          const i = Number(el.dataset.playerIndex);
+          const f = el.dataset.playerField;
+          if (!Array.isArray(window.winomcPlayers2) || !window.winomcPlayers2[i]) return;
+          window.winomcPlayers2[i][f] = f === 'allowlisted' ? el.value === 'true' : el.value;
+        });
+        return Array.isArray(window.winomcPlayers2) ? window.winomcPlayers2 : [];
+      };
+
+      window.loadPlayers2 = async function loadPlayers2Clean() {
+        try {
+          const data = await fetchJson('/api/players');
+          window.winomcPlayers2 = Array.isArray(data.players) ? data.players : [];
+          const warnings = document.getElementById('playersWarnings');
+          if (warnings) warnings.textContent = (data.warnings || []).join(' · ') || 'Keine akuten Warnungen.';
+          renderPlayers2002();
+        } catch (err) {
+          appendLine('[Spielerrechte] ' + err.message, 'error');
+        }
+      };
+
+      window.loadDiagnostics2 = async function loadDiagnostics2Clean() {
+        try {
+          const data = await fetchJson('/api/diagnostics');
+          const summary = document.getElementById('diagnosticsSummary');
+          if (summary) {
+            summary.innerHTML = 'Gesamtstatus: ' + escapeHtml(data.overall) + ' · ' + (data.items || []).length + ' Prüfungen <button id="repairAllSafe2" type="button" class="primary">Sichere Reparaturen ausführen</button><div class="info">Diagnose zeigt den aktuellen Zustand. Reparaturen laufen erst nach einer klaren Fortfahren/Abbrechen-Bestätigung.</div>';
+          }
+          const repairMap = {
+            'allowlist.json': 'repair_allowlist',
+            'permissions.json': 'repair_permissions',
+            'Resource Packs': 'ensure_directories',
+            'Behavior Packs': 'ensure_directories',
+            'Backups': 'ensure_directories'
+          };
+          const list = document.getElementById('diagnosticsList');
+          if (list) {
+            list.innerHTML = (data.items || []).map(item => {
+              const action = repairMap[item.title];
+              const badgeClass = item.severity === 'OK' ? '' : 'warn';
+              return '<article class="tile"><div class="tile-title">'+escapeHtml(item.title)+'</div><div class="stat-value">'+escapeHtml(item.status)+'</div><span class="badge '+badgeClass+'">Risiko '+(item.severity === 'OK' ? 'green' : 'yellow')+'</span><div class="tile-desc">'+escapeHtml(item.message)+'</div>' + (action ? '<div class="tile-actions"><button data-diagnostics-repair="'+action+'" data-diagnostics-title="'+escapeHtml(item.title)+'">Reparatur ausführen</button></div>' : '') + '</article>';
+            }).join('');
+          }
+        } catch (err) {
+          appendLine('[Diagnose] ' + err.message, 'error');
+        }
+      };
+
+      window.loadTransfer2 = async function loadTransfer2Clean() {
+        try {
+          const data = await fetchJson('/api/addons/catalog');
+          const target = document.getElementById('transferSummary');
+          if (!target) return;
+          const counts = data.counts || {};
+          const cards = frameworkCard('Import-Eingang', counts.inbox || 0, '/share/winomc/import', 'OK')
+            + frameworkCard('Installiert', counts.installed || 0, 'Lokale Nutzer-Packs', 'OK')
+            + frameworkCard('Aktiv', counts.active || 0, 'Für aktuelle Welt aktiv', 'OK')
+            + frameworkCard('Lokale Updates', counts.updates || 0, 'Keine Internetprüfung', counts.updates ? 'Warnung' : 'OK')
+            + frameworkCard('Probleme', counts.issues || 0, 'Details ansehen', counts.issues ? 'Warnung' : 'OK');
+          const folderTile = '<article class="tile"><div class="tile-title">Ordner</div><div class="tile-desc">Import und Export sind direkt in Packs & Add-ons erreichbar.</div><div class="tile-actions"><button data-open-root="import">Importordner anzeigen</button><button data-open-root="export">Exportordner anzeigen</button><button id="addonsScan2">Importordner scannen</button></div></article>';
+          const items = (data.items || []).map(i =>
+            '<article class="tile"><div class="tile-title">'+escapeHtml(i.name || i.filename || i.item_id)+'</div>'
+            + '<div class="tile-desc">'+escapeHtml((i.type || '-') + ' · ' + (i.version || 'keine Version') + ' · ' + (i.source || ''))+'</div>'
+            + '<span class="badge '+(i.risk === 'red' ? 'danger' : (i.risk === 'yellow' ? 'warn' : ''))+'">Risiko '+escapeHtml(i.risk || '-')+'</span>'
+            + '<div class="tile-desc">'+escapeHtml((i.update_status || '') + ' ' + ((i.issues || []).join(' · ')))+'</div>'
+            + '<div class="tile-actions"><button data-addon-plan="'+escapeHtml(i.item_id)+'">Details</button>'
+            + (i.source === 'Importordner' ? '<button class="primary" data-addon-install="'+escapeHtml(i.item_id)+'">Installieren</button><button data-addon-install-activate="'+escapeHtml(i.item_id)+'">Installieren & aktivieren</button><button data-addon-remove="'+escapeHtml(i.item_id)+'">Aus Import entfernen</button>' : '')
+            + '</div></article>'
+          ).join('') || '<article class="tile"><div class="tile-title">Noch keine Dateien im Import-Eingang.</div><div class="tile-desc">Lege lokale Bedrock-Pack-Dateien in /share/winomc/import ab oder nutze den Upload im Dateimanager.</div></article>';
+          target.innerHTML = cards + folderTile + items;
+        } catch (err) {
+          appendLine('[Add-on Manager] ' + err.message, 'error');
+        }
+      };
+
+      window.loadProfiles2 = async function loadProfiles2Clean() {
+        try {
+          const data = await fetchJson('/api/profiles');
+          const target = document.getElementById('profilesGrid');
+          if (!target) return;
+          target.innerHTML = (data.profiles || []).map(profile =>
+            '<article class="tile"><div class="tile-title">'+escapeHtml(profile.name)+'</div><div class="tile-desc">'+escapeHtml(profile.description)+'</div><pre>'+escapeHtml(JSON.stringify(profile.defaults, null, 2))+'</pre><button class="primary" data-profile-apply="'+escapeHtml(profile.name)+'">Profil anwenden</button></article>'
+          ).join('');
+        } catch (err) {
+          appendLine('[Erststart] ' + err.message, 'error');
+        }
+      };
+
+      document.addEventListener('click', async event => {
+        const t = event.target.closest('button,[data-diagnostics-repair],[data-profile-apply],[data-player-remove]');
+        if (!t) return;
+        try {
+          if (t.id === 'repairAllSafe2') {
+            event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
+            if (!confirm('Sichere Reparaturen ausführen?\n\nWinoMC erstellt fehlende Standardordner und korrigiert nur sichere Basisdateien.\n\nFortfahren?')) return;
+            const result = await postJson('/api/diagnostics/repair', { action: 'repair_all_safe', mode: 'safe', confirm: true });
+            alert(result.message || 'Reparatur abgeschlossen.');
+            await window.loadDiagnostics2();
+            return;
+          }
+          if (t.dataset.diagnosticsRepair) {
+            event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
+            const title = t.dataset.diagnosticsTitle || t.dataset.diagnosticsRepair;
+            if (!confirm('Reparatur ausführen: ' + title + '\n\nDiese Aktion kann Dateien anlegen oder korrigieren. WinoMC nutzt die vorhandene Safety-/Backup-Logik und bricht ab, wenn der Web-Schutz Änderungen blockiert.\n\nFortfahren?')) return;
+            const result = await postJson('/api/diagnostics/repair', { action: t.dataset.diagnosticsRepair, mode: 'safe', confirm: true });
+            alert(result.message || 'Reparatur abgeschlossen.');
+            await window.loadDiagnostics2();
+            return;
+          }
+          if (t.id === 'playersAdd2') {
+            event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
+            window.collectPlayers2();
+            window.winomcPlayers2 = Array.isArray(window.winomcPlayers2) ? window.winomcPlayers2 : [];
+            window.winomcPlayers2.push({ name: '', xuid: '', allowlisted: true, role: 'member', issues: [] });
+            const warnings = document.getElementById('playersWarnings');
+            if (warnings) warnings.textContent = 'Neuer Spieler hinzugefügt. Bitte Gamertag/XUID eintragen und Speichern klicken.';
+            renderPlayers2002();
+            return;
+          }
+          if (t.dataset.playerRemove) {
+            event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
+            window.collectPlayers2();
+            window.winomcPlayers2.splice(Number(t.dataset.playerRemove), 1);
+            const warnings = document.getElementById('playersWarnings');
+            if (warnings) warnings.textContent = 'Spieler entfernt. Bitte Speichern klicken.';
+            renderPlayers2002();
+            return;
+          }
+          if (t.id === 'playersSave2') {
+            event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
+            const result = await postJson('/api/players/save', { players: window.collectPlayers2() });
+            const warnings = document.getElementById('playersWarnings');
+            if (warnings) warnings.textContent = result.message || 'Spielerrechte wurden gespeichert.';
+            await window.loadPlayers2();
+            return;
+          }
+          if (t.dataset.profileApply) {
+            event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
+            const result = await postJson('/api/profiles/apply', { profile: t.dataset.profileApply });
+            alert(result.message || 'Profil angewendet.');
+            await window.loadProfiles2();
+            return;
+          }
+        } catch (err) {
+          alert(err.message);
+          appendLine('[WinoMC 2.0.0.2b] ' + err.message, 'error');
+        }
+      }, true);
+
+      cleanupTransferEntrypoints();
+      window.addEventListener('load', cleanupTransferEntrypoints, { once: true });
+      requestAnimationFrame(() => {
+        cleanupTransferEntrypoints();
+        ensurePlayerActions();
+      });
+    })();
+'''
+    if JS_MARKER not in text:
+        text = text.replace("</script>", js_patch + "\n</script>", 1)
+
+    if text != original:
+        TARGET.write_text(text, encoding="utf-8")
+        print("WinoMC 2.0.0.2b UI cleanup patch applied")
+    else:
+        print("WinoMC 2.0.0.2b UI cleanup patch already present")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

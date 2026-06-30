@@ -1,3 +1,25 @@
+# Changelog
+
+### 2.0.0.2b
+
+#### PC Workbench / UX Cleanup
+
+* Bedrock-Default-/Systempacks werden im Add-on Manager weiter ausgeblendet. Zusätzlich werden Editor-/Chemistry-/Minecraft-Script-Library-Packs wie `resourcePack.editor.client.name`, `resourcePack.editor.server.name`, `chemistry_*`, `Server Editor Library`, `@minecraft/server TS Library` und `@minecraft/server-ui TS Library` als eingebaute Packs erkannt.
+* Der Menüpunkt `Import / Export (Hinweis)` wurde entfernt. Import- und Exportordner sind jetzt direkt unter `Packs & Add-ons` erreichbar.
+* Marketplace-Hinweis in `Packs & Add-ons` entfernt, damit die UI keine missverständlichen Aussagen zu verschlüsselten oder plattformgebundenen Marketplace-Inhalten macht.
+* Add-on-Kacheln verwenden statt `Prüfen` nun `Details`, damit klarer ist, dass die Aktion nur Informationen/Planung öffnet.
+* `Spieler hinzufügen` in `Spielerrechte` korrigiert: neue Zeilen bleiben sichtbar, können ausgefüllt und gespeichert werden.
+* Spielerrechte-Layout auf PC stabilisiert, inklusive korrekter Tabellenbreite und Scrollbereich.
+* Diagnose & Reparatur bereinigt: Expertenmodus-Schaltflächen und Checkbox-Abfragen entfernt. Reparaturen laufen erst nach einer einfachen `Fortfahren / Abbrechen`-Bestätigung.
+* Diagnose-Layout auf PC stabilisiert.
+* Erststart/Profile vereinfacht: Profile können direkt angewendet werden; WinoMC schreibt die passenden `server.properties`-Werte und erstellt vorher ein Backup.
+* Dashboard-Aktion hinzufügen auf PC verbreitert und stabilisiert, damit Suchfeld, Auswahl und Vorschau lesbar bleiben.
+
+#### Maintenance
+
+* Version auf `2.0.0.2b` angehoben.
+* Build-Patch `winomc-runtime-ux-patch` ergänzt und im Dockerfile verankert, damit die Weboberfläche reproduzierbar beim Image-Build bereinigt wird.
+* Mobile-Ansicht bleibt von den PC-Workbench-Korrekturen getrennt.
 
 ### 2.0.0.1b
 
@@ -6,8 +28,6 @@
 * Freier URL-Download bleibt deaktiviert: WinoMC lädt keine Provider-URLs serverseitig herunter. Nutzer laden Packs selbst und legen sie in `/share/winomc/import` oder nutzen den lokalen Upload.
 * Der Add-on Manager erkennt lokale Updates nur für Nutzer-Packs.
 * Spielerrechte, Erststart/Profile, Diagnose-Expertenmodus, Desktopnavigation und Papierkorb-Erreichbarkeit wurden für die Beta verständlicher und bedienbarer gemacht.
-
-# Changelog
 
 ### 2.0.0
 
