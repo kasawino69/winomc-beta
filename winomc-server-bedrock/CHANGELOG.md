@@ -5,6 +5,15 @@
 * Geplante weitere Verbesserungen
 * Weitere Optimierungen für Bedienbarkeit, Dokumentation und Add-on-Kompatibilität
 
+### 1.6.14.17b
+
+* Mobile: Dateiexplorer wird nur noch im aktiven Dateien-Menü angezeigt und nicht mehr auf allen Menüpunkten eingeblendet.
+* PC: Editor öffnet wieder als großes Overlay statt als zu kleiner Bereich im Explorer-Grid.
+* PC: Editor-Vollbild entfernt alte Card-/Blur-Zustände und nutzt die verfügbare Vordergrundfläche.
+* PC-Workbench/Desktop-Modus: Dateiexplorer bekommt eine brauchbare Mindestgröße und eine intern scrollbare Dateiliste.
+* Desktop-Dateifenster reserviert keinen unnötigen Platz mehr für einen versteckten Editor/Splitter.
+* Version gesetzt auf WinoMCConsole/1.6.14.17.
+
 ### 1.6.14.16b
 
 * PC-UI-Zustände getrennt: Card-Maximize, Editor-Vollbild und Desktop-Fenster-Maximize verwenden nicht mehr dieselbe Overlay-/Blur-Logik.
