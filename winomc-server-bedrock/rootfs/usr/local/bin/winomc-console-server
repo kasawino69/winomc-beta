@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import base64
 import hashlib
+import ipaddress
 import json
 import mimetypes
 import os
@@ -11,6 +12,7 @@ import signal
 import stat
 import sys
 import tempfile
+import socket
 import time
 import zipfile
 from collections import deque
@@ -43,6 +45,19 @@ FILE_BACKUP_DIR = os.environ.get("WINOMC_FILE_BACKUP_DIR", os.path.join(DATA_DIR
 TRASH_DIR = os.environ.get("WINOMC_TRASH_DIR", os.path.join(DATA_DIR, ".winomc", "trash"))
 TRASH_RETENTION_DAYS = int(os.environ.get("WINOMC_TRASH_RETENTION_DAYS", "7"))
 CONSOLE_SETTINGS_FILE = os.environ.get("WINOMC_CONSOLE_SETTINGS_FILE", os.path.join(DATA_DIR, ".winomc", "web_console_settings.json"))
+WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.0.0")
+BACKUP_DIR = os.environ.get("WINOMC_BACKUP_DIR", os.path.join(DATA_DIR, "backups"))
+BACKUP_KEEP = int(os.environ.get("WINOMC_BACKUP_KEEP", os.environ.get("PACKAGE_BACKUP_KEEP", "5")))
+SERVER_DIR = os.environ.get("WINOMC_SERVER_DIR", DATA_DIR)
+SERVER_PROPERTIES_PATH = os.environ.get("WINOMC_SERVER_PROPERTIES", os.path.join(DATA_DIR, "server.properties"))
+WINOMC_STATE_DIR = os.environ.get("WINOMC_STATE_DIR", os.path.join(DATA_DIR, ".winomc"))
+WEB_PROTECTION_FILE = os.environ.get("WINOMC_WEB_PROTECTION_FILE", os.path.join(WINOMC_STATE_DIR, "web_protection.json"))
+IMPORT_STATUS_FILE = os.environ.get("WINOMC_IMPORT_STATUS_FILE", os.path.join(WINOMC_STATE_DIR, "import-status.json"))
+ADDON_HISTORY_FILE = os.environ.get("WINOMC_ADDON_HISTORY_FILE", os.path.join(WINOMC_STATE_DIR, "addons", "install-history.json"))
+QUARANTINE_DIR = os.environ.get("WINOMC_QUARANTINE_DIR", os.path.join(WINOMC_STATE_DIR, "quarantine"))
+MAX_IMPORT_REDIRECTS = int(os.environ.get("WINOMC_IMPORT_MAX_REDIRECTS", "3"))
+MAX_IMPORT_ARCHIVE_FILES = int(os.environ.get("WINOMC_IMPORT_MAX_ARCHIVE_FILES", "4000"))
+MAX_IMPORT_FILENAME_LENGTH = int(os.environ.get("WINOMC_IMPORT_MAX_FILENAME_LENGTH", "180"))
 
 MAX_TEXT_FILE_BYTES = int(os.environ.get("WINOMC_FILE_EDITOR_MAX_BYTES", str(2 * 1024 * 1024)))
 MAX_UPLOAD_BYTES = int(os.environ.get("WINOMC_FILE_UPLOAD_MAX_BYTES", str(512 * 1024 * 1024)))
@@ -57,6 +72,7 @@ FILE_ROOTS = {
     "world_templates": {"label": "World Templates", "path": WORLD_TEMPLATES_DIR, "description": "Weltvorlagen"},
     "import": {"label": "Import", "path": IMPORT_DIR, "description": "Importordner unter /share/winomc/import"},
     "export": {"label": "Export", "path": EXPORT_DIR, "description": "Exportordner unter /share/winomc/export"},
+    "backups": {"label": "Backups", "path": BACKUP_DIR, "description": "Persistente WinoMC-Backups unter /config/backups"},
     "trash": {"label": "Papierkorb", "path": TRASH_DIR, "description": "Gelöschte Dateien, automatische Bereinigung nach einigen Tagen"},
 }
 
@@ -71,7 +87,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Adaptive Workbench 1.6.14.22</title>
+  <title>WinoMC 2.0.0 Framework Workbench</title>
   <style>
     :root {
       color-scheme: dark;
@@ -275,7 +291,7 @@ INDEX_HTML = r"""<!doctype html>
     .console-inner { padding-top: 16px; }
     .mobile-quickbar { display: none; }
 
-    /* WinoMC Desktop Workbench */
+    /* WinoMC 2.0 Framework Workbench */
     body.desktop-mode {
       padding-bottom: 0;
       overflow: hidden;
@@ -2792,6 +2808,38 @@ INDEX_HTML = r"""<!doctype html>
     .console-assistant.open { display: grid; }
     .console-assistant-title { color: var(--muted-2); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
     .command-suggestion-list { display: grid; gap: 6px; }
+    body.ux-mobile:not(.desktop-mode) #commandAssistant.winomc-mobile-assistant {
+      position: fixed !important;
+      left: 10px !important;
+      right: 10px !important;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 12px) !important;
+      max-height: min(46dvh, 360px) !important;
+      overflow: hidden !important;
+      z-index: 260 !important;
+      border-radius: 16px !important;
+      box-shadow: 0 18px 46px rgba(0,0,0,.45) !important;
+    }
+    body.ux-mobile:not(.desktop-mode) #commandAssistant.winomc-mobile-assistant .command-suggestion-list {
+      max-height: min(36dvh, 280px) !important;
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch !important;
+      overscroll-behavior: contain !important;
+      touch-action: pan-y !important;
+    }
+    body.ux-mobile:not(.desktop-mode) #commandAssistant .command-suggestion {
+      width: 100% !important;
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) auto !important;
+      gap: 8px !important;
+      text-align: left !important;
+    }
+    body.ux-mobile:not(.desktop-mode) #commandAssistant .command-suggestion code,
+    body.ux-mobile:not(.desktop-mode) #commandAssistant .command-suggestion small {
+      white-space: normal !important;
+      word-break: break-word !important;
+    }
+    .command-insert-button { min-height: 36px; align-self: center; }
+
     .command-suggestion {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -4767,7 +4815,7 @@ body.winomc-mobile .editor-panel.editor-open {
 </head>
 <body>
   <header>
-    <h1 id="appTitle">WinoMC Desktop Workbench</h1>
+    <h1 id="appTitle">WinoMC 2.0 Framework Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
   </header>
 
@@ -4781,6 +4829,11 @@ body.winomc-mobile .editor-panel.editor-open {
       <button class="tab-button" data-tab="server" aria-label="Server"><span class="icon">🌍</span> Server</button>
       <button class="tab-button" data-tab="packs" aria-label="Packs & Add-ons"><span class="icon">📦</span> Packs & Add-ons</button>
       <button class="tab-button" data-tab="backups" aria-label="Backups"><span class="icon">💾</span> Backups</button>
+      <button class="tab-button" data-tab="diagnostics" aria-label="Diagnose"><span class="icon">🩺</span> Diagnose</button>
+      <button class="tab-button" data-tab="players" aria-label="Spielerrechte"><span class="icon">🛡️</span> Spielerrechte</button>
+      <button class="tab-button" data-tab="transfer" aria-label="Import Export"><span class="icon">🔁</span> Import / Export</button>
+      <button class="tab-button" data-tab="updates" aria-label="Updates"><span class="icon">⬆️</span> Updates</button>
+      <button class="tab-button" data-tab="firststart" aria-label="Erststart"><span class="icon">✨</span> Erststart</button>
       <button class="tab-button" data-tab="network" aria-label="Netzwerk"><span class="icon">🛜</span> Netzwerk</button>
       <button class="tab-button" data-tab="files" aria-label="Dateien"><span class="icon">📁</span> Dateien</button>
       <button class="tab-button" data-tab="expert" aria-label="Experten"><span class="icon">🧰</span> Experten</button>
@@ -4799,6 +4852,8 @@ body.winomc-mobile .editor-panel.editor-open {
           <button type="button" class="desktop-icon" data-open-window="server"><span class="desktop-icon-symbol">🌍</span><span class="desktop-icon-label">Server</span></button>
           <button type="button" class="desktop-icon" data-open-window="packs"><span class="desktop-icon-symbol">📦</span><span class="desktop-icon-label">Packs</span></button>
           <button type="button" class="desktop-icon" data-open-window="network"><span class="desktop-icon-symbol">🛜</span><span class="desktop-icon-label">Netzwerk</span></button>
+          <button type="button" class="desktop-icon" data-open-window="diagnostics"><span class="desktop-icon-symbol">🩺</span><span class="desktop-icon-label">Diagnose</span></button>
+          <button type="button" class="desktop-icon" data-open-window="players"><span class="desktop-icon-symbol">🛡️</span><span class="desktop-icon-label">Rechte</span></button>
           <button type="button" class="desktop-icon" data-open-window="dashboard"><span class="desktop-icon-symbol">🧩</span><span class="desktop-icon-label">Dashboard</span></button>
           <button type="button" class="desktop-icon" data-open-window="expert"><span class="desktop-icon-symbol">🧰</span><span class="desktop-icon-label">Experten</span></button>
         </div>
@@ -4827,6 +4882,9 @@ body.winomc-mobile .editor-panel.editor-open {
           <div class="card metric-card"><div class="stat-label">Spieler</div><div class="stat-value" id="statPlayers">-</div><p id="statPlayersHint">Aktuelle Spielerzahl aus dem letzten <code>list</code>-Output.</p></div>
           <div class="card metric-card"><div class="stat-label">Arbeitsspeicher</div><div class="stat-value" id="statMemory">-</div><p id="statMemoryHint">Host-/Container-RAM laut System.</p></div>
           <div class="card metric-card"><div class="stat-label">Speicherplatz</div><div class="stat-value" id="statDisk">-</div><p id="statDiskHint">Datenordner /config.</p></div>
+          <div class="card metric-card"><div class="stat-label">WinoMC</div><div class="stat-value" id="statWinoVersion">2.0.0</div><p id="statHealth">Health: Nicht verfügbar</p></div>
+          <div class="card metric-card"><div class="stat-label">Letztes Backup</div><div class="stat-value" id="statLastBackup">-</div><p id="statBackupHint">/config/backups</p></div>
+          <div class="card metric-card"><div class="stat-label">Schutz</div><div class="stat-value" id="statProtection">-</div><p id="statProtectionHint">Online Mode · Allowlist · Webschutz</p></div>
         </div>
         <div class="grid">
           <div class="card">
@@ -4905,6 +4963,27 @@ body.winomc-mobile .editor-panel.editor-open {
           <div class="card"><div class="card-header"><div><h3>Sicherer Welt-Export</h3><p>Erstellt ein ZIP mit save hold, save query und save resume.</p></div><span class="badge warn">Empfohlen</span></div><div class="pill-group"><button class="primary" id="backupSafeWorldExport" data-write-action="true">Sicheren Welt-Export starten</button><button data-open-root="export">Exportordner öffnen</button></div><div class="info warning-box" style="margin-top:12px">Während des Exports kann der Server kurz verzögert reagieren. save resume wird automatisch im finally-Block ausgeführt.</div></div>
           <div class="card"><div class="card-header"><div><h3>Export & Retention</h3><p>Exporte liegen unter /share/winomc/export. Alte BDS-Pakete werden über PACKAGE_BACKUP_KEEP begrenzt.</p></div></div><div class="pill-group"><button data-open-root="export">Exporte anzeigen</button><button data-jump-tab="files">Dateimanager</button></div></div>
         </div>
+      </section>
+
+
+      <section class="tab-panel" data-panel="diagnostics">
+        <div class="card"><div class="card-header"><div><h2>Diagnose & Reparatur</h2><p>Verständliche Prüfungen für Dateien, Konfiguration, Packs, Rechte, Prozess, Netzwerk und Backups.</p></div><button class="primary" id="diagnosticsRun" type="button">Diagnose starten</button></div><div id="diagnosticsSummary" class="info">Noch nicht geprüft.</div><div id="diagnosticsList" class="dashboard-grid auto"></div></div>
+      </section>
+
+      <section class="tab-panel" data-panel="players">
+        <div class="card"><div class="card-header"><div><h2>Spielerrechte verwalten</h2><p>Allowlist und Rollen ohne JSON-Wissen prüfen. Änderungen an Dateien erfolgen weiterhin über sichere Dateioperationen.</p></div><button id="playersRefresh" type="button">Aktualisieren</button></div><div id="playersWarnings" class="info warning-box">Lade Status…</div><div class="file-table-wrap"><table class="file-table"><thead><tr><th>Spieler</th><th>XUID</th><th>Allowlist</th><th>Rolle</th><th>Hinweis</th></tr></thead><tbody id="playersTable"><tr><td colspan="5">Noch nicht geladen.</td></tr></tbody></table></div></div>
+      </section>
+
+      <section class="tab-panel" data-panel="transfer">
+        <div class="card"><div class="card-header"><div><h2>Import / Export</h2><p>Sichere Übergabe von Welten, Packs und Konfiguration. Vor Überschreiben immer Backup erstellen.</p></div><button id="transferRefresh" type="button">Aktualisieren</button></div><div id="transferSummary" class="dashboard-grid auto"></div><div class="info warning-box">ZIP-Dateien werden gegen Pfad-Ausbruch geprüft. Bestehende Ziele werden nicht still überschrieben.</div></div>
+      </section>
+
+      <section class="tab-panel" data-panel="updates">
+        <div class="card"><div class="card-header"><div><h2>Update-Schutz</h2><p>Prüft Backup, Speicherplatz, Spielerstatus, Zielversion und Schreibrechte vor Bedrock-Updates.</p></div><button id="updatesCheck" type="button">Update-Check</button></div><div id="updatesSummary" class="dashboard-grid auto"></div><div class="info">Updates bleiben ein Ein-Server-Prozess. Multi-Instanzen sind bewusst nicht Teil von WinoMC 2.0.0.</div></div>
+      </section>
+
+      <section class="tab-panel" data-panel="firststart">
+        <div class="card"><div class="card-header"><div><h2>Erststart-Assistent</h2><p>Wähle ein verständliches Profil. Bestehende Installationen werden nicht automatisch überschrieben.</p></div><button id="profilesLoad" type="button">Profile laden</button></div><div id="profilesGrid" class="dashboard-grid auto"></div></div>
       </section>
 
       <section class="tab-panel" data-panel="network">
@@ -5342,6 +5421,24 @@ body.winomc-mobile .editor-panel.editor-open {
       if (currentEditorFile && currentEditorFile.root !== 'trash') setEditorPreviewMode(webWriteLocked, webWriteLocked ? 'Web-Schutz aktiv: Vorschau. Zum Speichern oben entsperren.' : '');
     }
 
+    async function syncWebProtectionFromServer() {
+      try {
+        const data = await fetchJson('/api/web-protection');
+        webWriteLocked = Boolean(data.enabled);
+        applyWebWriteLock();
+      } catch (err) {
+        appendLine('[Webschutz] Serverstatus konnte nicht geladen werden: ' + err.message, 'error');
+        applyWebWriteLock();
+      }
+    }
+
+    async function setWebProtectionOnServer(enabled) {
+      const data = await postJson('/api/web-protection', { enabled: Boolean(enabled) });
+      webWriteLocked = Boolean(data.enabled);
+      applyWebWriteLock();
+      return data;
+    }
+
     function ensureWriteAllowed(actionLabel = 'Diese Aktion') {
       if (!webWriteLocked) return true;
       alert(actionLabel + ' ist durch den Web-Schutz gesperrt.\n\nDas betrifft nur diese Weboberfläche. Der Minecraft Server selbst kann seine Dateien weiterhin schreiben.');
@@ -5406,12 +5503,12 @@ body.winomc-mobile .editor-panel.editor-open {
       actions.append(toggle, menu);
     }
 
-    function activateTab(tab) { if (document.body.classList.contains('desktop-mode')) { openDesktopWindow(tab); return; } document.body.classList.toggle('hide-hero', tab !== 'overview'); document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (document.body.classList.contains('sidebar-collapsed')) requestAnimationFrame(scrollActiveSidebarIconIntoView); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); }
+    function activateTab(tab) { if (document.body.classList.contains('desktop-mode')) { openDesktopWindow(tab); return; } document.body.classList.toggle('hide-hero', tab !== 'overview'); document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (document.body.classList.contains('sidebar-collapsed')) requestAnimationFrame(scrollActiveSidebarIconIntoView); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); if (tab === 'backups') loadBackups2(); if (tab === 'diagnostics') loadDiagnostics2(); if (tab === 'players') loadPlayers2(); if (tab === 'packs') loadPacks2(); if (tab === 'transfer') loadTransfer2(); if (tab === 'updates') loadUpdates2(); if (tab === 'firststart') loadProfiles2(); }
     function openRoot(root, path = '/') { activateTab('files'); setTimeout(async () => { await initFileManager(); currentFileRoot = root; fileRootSelect.value = root; await loadFileList(path); }, 0); }
 
-    async function loadStatus() { try { const data = await fetchJson('/api/status'); latestStatus = data; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
+    async function loadStatus() { try { const data = await fetchJson('/api/status'); latestStatus = data; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v||'Nicht verfügbar'}; set('statPlayers', data.metrics?.players?.label); set('statMemory', data.metrics?.memory?.label); set('statDisk', data.metrics?.disk?.label); set('statWinoVersion', data.winomc_version || '2.0.0'); set('statHealth', 'Health: ' + (data.health?.overall || 'Nicht verfügbar')); set('statLastBackup', data.backup?.latest?.name || 'Kein Backup'); set('statProtection', 'Online: '+(data.env.ONLINE_MODE||'-')+' · Allowlist: '+(data.env.ALLOW_LIST||'-')); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
 
-    async function initFileManager() { if (filesInitialized) { await loadFileList(); return; } filesInitialized = true; try { setFilesStatus('Lade Bereiche...', 'warn'); const data = await fetchJson('/api/files/roots'); fileRootSelect.innerHTML = ''; data.roots.forEach(root => { const option = document.createElement('option'); option.value = root.key; option.textContent = root.label + (root.exists ? '' : ' (fehlt)'); option.disabled = !root.exists || !root.readable; fileRootSelect.appendChild(option); }); const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled); if (![...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) currentFileRoot = firstEnabled ? firstEnabled.value : 'config'; fileRootSelect.value = currentFileRoot; await loadTrashSettings(); applyWebWriteLock(); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
+    async function initFileManager() { if (filesInitialized) { await loadFileList(); return; } filesInitialized = true; try { setFilesStatus('Lade Bereiche...', 'warn'); const data = await fetchJson('/api/files/roots'); fileRootSelect.innerHTML = ''; data.roots.forEach(root => { const option = document.createElement('option'); option.value = root.key; option.textContent = root.label + (root.exists ? '' : ' (fehlt)'); option.disabled = !root.exists || !root.readable; fileRootSelect.appendChild(option); }); const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled); if (![...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) currentFileRoot = firstEnabled ? firstEnabled.value : 'config'; fileRootSelect.value = currentFileRoot; await loadTrashSettings(); await syncWebProtectionFromServer(); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
     async function loadFileList(path) { if (path !== undefined) currentFilePath = normalizeUiPath(path); currentFileRoot = fileRootSelect.value || currentFileRoot; try { setFilesStatus('Lade...', 'warn'); updatePathDisplay(); const data = await fetchJson('/api/files/list', { root: currentFileRoot, path: currentFilePath }); currentFilePath = data.path || '/'; fileParent.disabled = currentFilePath === '/'; updatePathDisplay(); renderFileEntries(data.entries || []); setFilesStatus('Bereit', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
     function updatePathDisplay() { const full = currentFileRoot + ':' + currentFilePath; fileCurrentPath.textContent = full; filePathInput.value = currentFilePath; fileBreadcrumb.innerHTML = ''; const rootButton = document.createElement('button'); rootButton.type = 'button'; rootButton.textContent = currentFileRoot + ':/'; rootButton.addEventListener('click', () => loadFileList('/')); fileBreadcrumb.appendChild(rootButton); let current = ''; currentFilePath.split('/').filter(Boolean).forEach(part => { current += '/' + part; const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = part; const target = current; btn.addEventListener('click', () => loadFileList(target)); fileBreadcrumb.appendChild(btn); }); }
     function renderFileEntries(entries) {
@@ -5791,7 +5888,7 @@ body.winomc-mobile .editor-panel.editor-open {
     if (fileOpenTrash) fileOpenTrash.addEventListener('click', () => openRoot('trash', '/'));
     if (fileOpenTrashExplorer) fileOpenTrashExplorer.addEventListener('click', () => openRoot('trash', '/'));
     if (fileEmptyTrash) { fileEmptyTrash.dataset.writeAction = 'true'; fileEmptyTrash.addEventListener('click', emptyTrash); }
-    if (fileWriteLockToggle) fileWriteLockToggle.addEventListener('click', () => { webWriteLocked = !webWriteLocked; applyWebWriteLock(); });
+    if (fileWriteLockToggle) fileWriteLockToggle.addEventListener('click', async () => { try { await setWebProtectionOnServer(!webWriteLocked); } catch (err) { alert(err.message); } });
     if (trashRetentionSelect) trashRetentionSelect.addEventListener('change', () => saveTrashSettings(trashRetentionSelect.value));
     fileParent.addEventListener('click', () => loadFileList(parentUiPath(currentFilePath)));
     if (fileZipCurrent) fileZipCurrent.dataset.downloadAction = 'true';
@@ -7035,6 +7132,7 @@ body.winomc-mobile .editor-panel.editor-open {
       const assistant = document.createElement('div');
       assistant.id = 'commandAssistant';
       assistant.className = 'console-assistant';
+      if (document.body.classList.contains('ux-mobile') && !document.body.classList.contains('desktop-mode')) assistant.classList.add('winomc-mobile-assistant');
       assistant.innerHTML = '<div class="console-assistant-title">Befehlshilfe</div><div class="command-suggestion-list" id="commandSuggestionList"></div>';
       document.body.appendChild(assistant);
       const list = assistant.querySelector('#commandSuggestionList');
@@ -7204,16 +7302,18 @@ body.winomc-mobile .editor-panel.editor-open {
           btn.type = 'button';
           btn.className = 'command-suggestion' + (item.template ? ' is-template' : '');
           btn.setAttribute('aria-label', 'Befehl übernehmen: ' + item.cmd);
-          btn.innerHTML = '<span><code>' + escapeHtml(item.cmd) + '</code><small>' + escapeHtml(item.title) + '</small></span><span class="badge">' + escapeHtml(item.group) + '</span>';
+          btn.innerHTML = '<span><code>' + escapeHtml(item.cmd) + '</code><small>' + escapeHtml(item.title) + '</small></span><button type="button" class="command-insert-button primary">Einfügen</button>';
+          let touchStartY = 0;
+          btn.addEventListener('touchstart', event => { touchStartY = event.touches?.[0]?.clientY || 0; }, { passive: true });
           const apply = event => {
             event.preventDefault();
             event.stopPropagation();
             fillCommandFromSuggestion(item.cmd);
             hide();
           };
-          btn.addEventListener('pointerdown', apply, { passive: false });
-          btn.addEventListener('touchend', apply, { passive: false });
-          btn.addEventListener('click', apply);
+          btn.querySelector('.command-insert-button')?.addEventListener('click', apply);
+          btn.addEventListener('click', event => { if (!event.target.closest('.command-insert-button')) apply(event); });
+          btn.addEventListener('touchend', event => { const endY = event.changedTouches?.[0]?.clientY || touchStartY; if (Math.abs(endY - touchStartY) > 10) return; if (!event.target.closest('.command-insert-button')) apply(event); }, { passive: false });
           list.appendChild(btn);
         });
         assistant.classList.add('open');
@@ -7307,6 +7407,50 @@ body.winomc-mobile .editor-panel.editor-open {
     };
 
     refreshMobileConsoleLabels16132();
+
+
+    function frameworkCard(title, value, desc, badge) {
+      return '<article class="tile"><div class="tile-top"><div><div class="tile-title">' + escapeHtml(title) + '</div><div class="stat-value">' + escapeHtml(value || '-') + '</div><div class="tile-desc">' + escapeHtml(desc || '') + '</div></div><span class="badge ' + (badge === 'Warnung' || badge === 'warning' ? 'warn' : badge === 'Fehler' || badge === 'error' ? 'danger' : '') + '">' + escapeHtml(badge || 'OK') + '</span></div></article>';
+    }
+    async function loadBackups2() {
+      try {
+        const data = await fetchJson('/api/backups');
+        const panel = document.querySelector('[data-panel="backups"]');
+        let target = document.getElementById('backupWorkflow2');
+        if (!target && panel) { panel.insertAdjacentHTML('beforeend', '<div class="card"><div class="card-header"><div><h3>WinoMC 2.0 Backup & Restore</h3><p>Erstelle Backups, stelle sie mit Safety-Backup wieder her oder lösche alte Backups.</p></div><button class="primary" id="backupCreate2" type="button">Komplettbackup erstellen</button></div><div id="backupResult2" class="info">Bereit.</div><div class="file-table-wrap"><table class="file-table"><thead><tr><th>Name</th><th>Typ</th><th>Datum</th><th>Welt</th><th>Größe</th><th>Aktionen</th></tr></thead><tbody id="backupWorkflow2"></tbody></table></div></div>'); target = document.getElementById('backupWorkflow2'); }
+        if (!target) return;
+        target.innerHTML = (data.backups || []).map(b => '<tr><td>'+escapeHtml(b.name)+'</td><td>'+escapeHtml(b.type)+'</td><td>'+escapeHtml(b.created)+'</td><td>'+escapeHtml(b.world||'-')+'</td><td>'+escapeHtml(b.size_label||'-')+'</td><td><button data-backup-restore="'+escapeHtml(b.name)+'">Restore</button><button class="danger" data-backup-delete="'+escapeHtml(b.name)+'">Löschen</button></td></tr>').join('') || '<tr><td colspan="6">Noch kein Backup vorhanden.</td></tr>';
+      } catch (err) { appendLine('[Backups] ' + err.message, 'error'); }
+    }
+    async function loadDiagnostics2() { try { const data = await fetchJson('/api/diagnostics'); const s = document.getElementById('diagnosticsSummary'); if (s) s.innerHTML = 'Gesamtstatus: ' + escapeHtml(data.overall) + ' · ' + data.items.length + ' Prüfungen <button id="repairAllSafe2" type="button" class="primary">Sichere Reparaturen ausführen</button>'; const l = document.getElementById('diagnosticsList'); const repairMap = { 'allowlist.json':'repair_allowlist', 'permissions.json':'repair_permissions', 'Resource Packs':'ensure_directories', 'Behavior Packs':'ensure_directories', 'Backups':'ensure_directories' }; if (l) l.innerHTML = data.items.map(i => '<article class="tile"><div class="tile-title">'+escapeHtml(i.title)+'</div><div class="stat-value">'+escapeHtml(i.status)+'</div><div class="tile-desc">'+escapeHtml(i.message)+'</div>' + (repairMap[i.title] ? '<button data-diagnostics-repair="'+repairMap[i.title]+'">Reparieren</button>' : '') + '</article>').join(''); } catch (err) { appendLine('[Diagnose] ' + err.message, 'error'); } }
+    async function loadPacks2() { try { const data = await fetchJson('/api/packs'); const panel = document.querySelector('[data-panel="packs"]'); let target = document.getElementById('packs2Grid'); if (!target && panel) { panel.insertAdjacentHTML('beforeend', '<div class="card"><h3>Pack-Verwaltung 2.0</h3><p>Aktiviere/deaktiviere Packs für die aktuelle Welt. Vor Änderungen wird die Welt-Pack-Datei gesichert.</p><div id="packs2Grid" class="dashboard-grid auto"></div></div>'); target = document.getElementById('packs2Grid'); } if (!target) return; const render = (p,t) => '<article class="tile"><div class="tile-title">'+escapeHtml(p.name)+'</div><div class="tile-desc">'+escapeHtml((p.uuid||'Keine UUID')+' · '+(p.version||'keine Version')+' · '+(p.description||''))+'</div><span class="badge '+(p.active?'':'warn')+'">'+(p.active?'Aktiv':'Inaktiv')+'</span><div class="tile-actions"><button data-pack-activate="'+escapeHtml(t)+'" data-pack-path="'+escapeHtml(p.path||'')+'">Aktivieren</button><button data-pack-deactivate="'+escapeHtml(t)+'" data-pack-uuid="'+escapeHtml(p.uuid||'')+'">Deaktivieren</button></div></article>'; target.innerHTML = [...(data.resource_packs||[]).map(p=>render(p,'resource')), ...(data.behavior_packs||[]).map(p=>render(p,'behavior'))].join('') || frameworkCard('Keine Packs','-', 'Installierte Packs erscheinen hier.', 'Warnung'); } catch (err) { appendLine('[Packs] '+err.message,'error'); } }
+    async function loadPlayers2() { try { const data = await fetchJson('/api/players'); window.winomcPlayers2 = data.players || []; const w = document.getElementById('playersWarnings'); if (w) w.textContent = (data.warnings || []).join(' · ') || 'Keine akuten Warnungen.'; const t = document.getElementById('playersTable'); if (t) t.innerHTML = window.winomcPlayers2.map((p,i)=>'<tr><td><input data-player-field="name" data-player-index="'+i+'" value="'+escapeHtml(p.name||'')+'"></td><td><input data-player-field="xuid" data-player-index="'+i+'" value="'+escapeHtml(p.xuid||'')+'"></td><td><select data-player-field="allowlisted" data-player-index="'+i+'"><option value="true" '+(p.allowlisted?'selected':'')+'>Ja</option><option value="false" '+(!p.allowlisted?'selected':'')+'>Nein</option></select></td><td><select data-player-field="role" data-player-index="'+i+'"><option value="member" '+(p.role==='member'?'selected':'')+'>Member</option><option value="operator" '+(p.role==='operator'?'selected':'')+'>Operator</option><option value="visitor" '+(p.role==='visitor'?'selected':'')+'>Visitor</option></select></td><td>'+escapeHtml((p.issues||[]).join(', ')||'OK')+'</td></tr>').join('') || '<tr><td colspan="5">Noch keine Spieler. Nutze „Spieler hinzufügen“.</td></tr>'; const panel=document.querySelector('[data-panel="players"] .card-header .actions') || document.querySelector('[data-panel="players"] .card-header'); if(panel && !document.getElementById('playersSave2')) panel.insertAdjacentHTML('beforeend','<div class="actions"><button id="playersAdd2" type="button">Spieler hinzufügen</button><button class="primary" id="playersSave2" type="button">Speichern</button></div>'); } catch (err) { appendLine('[Spielerrechte] '+err.message,'error'); } }
+    function collectPlayers2(){ document.querySelectorAll('[data-player-field]').forEach(el=>{ const i=Number(el.dataset.playerIndex); const f=el.dataset.playerField; if(!window.winomcPlayers2[i]) return; window.winomcPlayers2[i][f]= f==='allowlisted' ? el.value==='true' : el.value; }); return window.winomcPlayers2 || []; }
+    async function loadTransfer2(){ try{ const data=await fetchJson('/api/addons/catalog'); const e=document.getElementById('transferSummary'); if(e) { const c=data.counts||{}; const cards=frameworkCard('Import-Eingang',c.inbox||0,'/share/winomc/import','OK')+frameworkCard('Installiert',c.installed||0,'Lokale Packs','OK')+frameworkCard('Aktiv',c.active||0,'Für aktuelle Welt aktiv','OK')+frameworkCard('Lokale Updates',c.updates||0,'Keine Internetprüfung','Warnung')+frameworkCard('Probleme',c.issues||0,'Bitte Details prüfen',c.issues?'Warnung':'OK'); const items=(data.items||[]).map(i=>'<article class="tile"><div class="tile-title">'+escapeHtml(i.name||i.filename||i.item_id)+'</div><div class="tile-desc">'+escapeHtml((i.type||'-')+' · '+(i.version||'keine Version')+' · '+(i.source||''))+'</div><span class="badge '+(i.risk==='red'?'danger':(i.risk==='yellow'?'warn':''))+'">Risiko '+escapeHtml(i.risk||'-')+'</span><div class="tile-desc">'+escapeHtml((i.update_status||'')+' '+((i.issues||[]).join(' · ')))+'</div><div class="tile-actions"><button data-addon-plan="'+escapeHtml(i.item_id)+'">Plan</button>'+(i.source==='Importordner'?'<button class="primary" data-addon-install="'+escapeHtml(i.item_id)+'">Installieren</button><button data-addon-install-activate="'+escapeHtml(i.item_id)+'">Installieren & aktivieren</button><button data-addon-remove="'+escapeHtml(i.item_id)+'">Aus Import entfernen</button>':'')+'</div></article>').join('') || '<article class="tile"><div class="tile-title">Noch keine Dateien im Import-Eingang.</div><div class="tile-desc">Lade ein .mcpack, .mcaddon, .mcworld oder .mctemplate herunter und lege es in /share/winomc/import.</div></article>'; e.innerHTML=cards+'<article class="tile"><div class="tile-title">WinoMC Add-on Manager</div><div class="tile-desc">User brings the file. WinoMC makes it safe and simple. Freier URL-Download ist deaktiviert.</div><div class="tile-actions"><button id="addonsScan2">Importordner scannen</button><button data-open-root="import">Importordner öffnen</button></div></article>'+items; } }catch(err){ appendLine('[Add-on Manager] '+err.message,'error'); } }
+
+    async function loadUpdates2(){ try{ const data=await fetchJson('/api/update-guard'); const e=document.getElementById('updatesSummary'); if(e) e.innerHTML=data.checks.map(c=>frameworkCard(c.title,c.status,c.message,c.status)).join('') + '<div class="tile"><button class="primary" id="updatesPrepare2" type="button">Update vorbereiten</button><p>Erstellt Backup und markiert Update-Bereitschaft. Danach Add-on neu starten.</p></div>'; }catch(err){ appendLine('[Updates] '+err.message,'error'); } }
+    async function loadProfiles2(){ try{ const data=await fetchJson('/api/profiles'); const e=document.getElementById('profilesGrid'); if(e) e.innerHTML=data.profiles.map(p=>'<article class="tile"><div class="tile-title">'+escapeHtml(p.name)+'</div><div class="tile-desc">'+escapeHtml(p.description)+'</div><pre>'+escapeHtml(JSON.stringify(p.defaults,null,2))+'</pre><button data-profile-prepare="'+escapeHtml(p.name)+'">Profil vorbereiten</button></article>').join(''); }catch(err){ appendLine('[Profile] '+err.message,'error'); } }
+    document.addEventListener('click', async (ev) => {
+      const t = ev.target;
+      try {
+        if (t?.id === 'diagnosticsRun') await loadDiagnostics2();
+        if (t?.id === 'repairAllSafe2') { const r=await postJson('/api/diagnostics/repair',{action:'repair_all_safe',mode:'safe'}); alert((r.plan ? ('Risiko '+r.plan.risk+': ') : '') + r.message); await loadDiagnostics2(); }
+        if (t?.dataset?.diagnosticsRepair) { const expert=confirm('Safety Planner: Diese Reparatur kann Konfiguration oder Add-on-Zustand verändern. Im Expertenmodus mit Backup fortfahren?'); const r=await postJson('/api/diagnostics/repair',{action:t.dataset.diagnosticsRepair,mode: expert ? 'expert':'safe',confirm: expert}); alert((r.plan ? ('Risiko '+r.plan.risk+': ') : '') + r.message); await loadDiagnostics2(); }
+        if (t?.id === 'backupCreate2') { const r=await postJson('/api/backups/create',{type:'complete',reason:'manual-ui'}); document.getElementById('backupResult2').textContent='Backup erstellt: '+r.backup.name; await loadBackups2(); }
+        if (t?.dataset?.backupRestore) { const plan=await postJson('/api/backups/restore/plan',{backup:t.dataset.backupRestore,mode:'complete'}); const ok=!plan.requires_confirmation || confirm('Restore-Plan Risiko '+plan.risk+'\n'+(plan.warnings||[]).join('\n')+'\nMit Safety-Backup fortfahren?'); if(ok) { const r=await postJson('/api/backups/restore',{backup:t.dataset.backupRestore,mode:'complete',confirm:true}); alert(r.message); await loadBackups2(); } }
+        if (t?.dataset?.backupDelete) { if(confirm('Backup löschen?')) { await postJson('/api/backups/delete',{backup:t.dataset.backupDelete}); await loadBackups2(); } }
+        if (t?.dataset?.packActivate) { await postJson('/api/packs/activate',{type:t.dataset.packActivate,path:t.dataset.packPath}); await loadPacks2(); }
+        if (t?.dataset?.packDeactivate) { await postJson('/api/packs/deactivate',{type:t.dataset.packDeactivate,uuid:t.dataset.packUuid}); await loadPacks2(); }
+        if (t?.id === 'playersAdd2') { window.winomcPlayers2=(window.winomcPlayers2||[]); window.winomcPlayers2.push({name:'',xuid:'',allowlisted:true,role:'member',issues:[]}); const tBody=document.getElementById('playersTable'); if(tBody) await loadPlayers2(); }
+        if (t?.id === 'playersSave2') { await postJson('/api/players/save',{players:collectPlayers2()}); await loadPlayers2(); }
+        if (t?.id === 'updatesPrepare2') { const r=await postJson('/api/updates/prepare',{warning:'Serverupdate wird vorbereitet. Bitte gleich neu verbinden.'}); alert(r.message); await loadUpdates2(); }
+        if (t?.dataset?.profilePrepare) { const r=await postJson('/api/profiles/prepare',{profile:t.dataset.profilePrepare}); alert(r.message); }
+        if (t?.id === 'addonsScan2') { await postJson('/api/addons/scan',{}); await loadTransfer2(); }
+        if (t?.dataset?.addonPlan) { const r=await postJson('/api/addons/plan',{item_id:t.dataset.addonPlan,action:'install'}); alert('Risiko '+r.risk+'\n'+(r.changes||[]).join('\n')+'\n'+(r.warnings||[]).join('\n')); }
+        if (t?.dataset?.addonInstall || t?.dataset?.addonInstallActivate) { const id=t.dataset.addonInstall||t.dataset.addonInstallActivate; const activate=Boolean(t.dataset.addonInstallActivate); const plan=await postJson('/api/addons/plan',{item_id:id,action:'install',activate}); const ok=!plan.requires_confirmation || confirm('Add-on Manager Risiko '+plan.risk+'\n'+(plan.warnings||[]).join('\n')+'\nFortfahren?'); if(ok){ await postJson('/api/addons/apply',{item_id:id,action:'install',activate,confirm:true}); await loadTransfer2(); await loadPacks2(); } }
+        if (t?.dataset?.addonRemove) { if(confirm('Importdatei entfernen?')) { await postJson('/api/addons/apply',{item_id:t.dataset.addonRemove,action:'remove_import',confirm:true}); await loadTransfer2(); } }
+      } catch (err) { alert(err.message); appendLine('[WinoMC 2.0] '+err.message,'error'); }
+    });
 
     initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); initAdaptiveUx(); renderDashboard(); connectLogs(); loadStatus();
   
@@ -9186,7 +9330,7 @@ def open_safe_download(candidate_path, mode="rb"):
 
 
 def ensure_directories():
-    for path in (DATA_DIR, WORLDS_DIR, RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR, WORLD_TEMPLATES_DIR, IMPORT_DIR, EXPORT_DIR, FILE_BACKUP_DIR, TRASH_DIR):
+    for path in (DATA_DIR, WORLDS_DIR, RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR, WORLD_TEMPLATES_DIR, IMPORT_DIR, EXPORT_DIR, BACKUP_DIR, FILE_BACKUP_DIR, TRASH_DIR, WINOMC_STATE_DIR, QUARANTINE_DIR):
         try:
             os.makedirs(canonical_path(path), exist_ok=True)
         except OSError as exc:
@@ -9925,8 +10069,1253 @@ def player_metrics_from_log(max_players_env=""):
     return result
 
 
+
+def json_file(path, fallback):
+    try:
+        safe = verify_root_path("config", path, require_exists=True, allow_missing=False)
+        if not safe.is_file():
+            return fallback, "Datei ist kein reguläres File"
+        with safe.open("r", encoding="utf-8", errors="replace") as handle:
+            return json.load(handle), None
+    except FileNotFoundError:
+        return fallback, "Datei fehlt"
+    except json.JSONDecodeError as exc:
+        return fallback, "JSON ungültig: Zeile %s" % exc.lineno
+    except Exception as exc:
+        return fallback, str(exc)
+
+
+def world_dir_path():
+    level = os.environ.get("LEVEL_NAME", "world") or "world"
+    return os.path.join(WORLDS_DIR, level)
+
+
+def dir_size(path, max_entries=250000):
+    total = 0
+    count = 0
+    skipped = 0
+    try:
+        base = verify_root_path("config", path, require_exists=False, allow_missing=True).path
+        if not os.path.exists(base):
+            return 0
+        for root, dirs, files in os.walk(base):
+            if count > max_entries:
+                break
+            for name in files:
+                count += 1
+                fp = os.path.join(root, name)
+                try:
+                    total += os.path.getsize(fp)
+                except OSError:
+                    skipped += 1
+                    continue
+        if skipped:
+            log_warning("dir_size skipped %s unreadable or vanished files under %s" % (skipped, base))
+    except Exception as exc:
+        log_warning("dir_size failed for %s: %s" % (path, exc))
+        return 0
+    return total
+
+
+def backup_manifest_path(name):
+    safe_name = safe_download_name(name, "backup")
+    return assert_safe_internal_path(BACKUP_DIR, os.path.join(BACKUP_DIR, safe_name + ".json"))
+
+
+def list_backups():
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    backups = []
+    for name in sorted(os.listdir(BACKUP_DIR), reverse=True):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(BACKUP_DIR, name)
+        try:
+            safe = verify_internal_path(BACKUP_DIR, path, require_exists=True, allow_missing=False)
+            with safe.open("r", encoding="utf-8") as handle:
+                meta = json.load(handle)
+            archive = os.path.join(BACKUP_DIR, meta.get("archive", ""))
+            size = os.path.getsize(archive) if meta.get("archive") and os.path.exists(archive) else 0
+            meta["size"] = size
+            meta["size_label"] = human_bytes(size)
+            backups.append(meta)
+        except Exception as exc:
+            backups.append({"name": name, "type": "unknown", "created": "-", "status": "Fehler", "error": str(exc), "size_label": "-"})
+    return backups
+
+
+def prune_backups():
+    keep = max(1, BACKUP_KEEP)
+    backups = list_backups()
+    for meta in backups[keep:]:
+        try:
+            for fn in (meta.get("archive"), meta.get("name") + ".json"):
+                if not fn:
+                    continue
+                path = verify_internal_path(BACKUP_DIR, os.path.join(BACKUP_DIR, os.path.basename(fn)), require_exists=False, allow_missing=True)
+                if path.exists():
+                    path.remove()
+        except Exception as exc:
+            log_warning("Backup-Aufbewahrung konnte %s nicht löschen: %s" % (meta.get("name"), exc))
+
+
+def create_framework_backup(kind="complete", reason="manual"):
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    kind = kind if kind in ("world", "config", "complete", "safety") else "complete"
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    level = os.environ.get("LEVEL_NAME", "world") or "world"
+    name = safe_download_name("%s-%s-%s" % (timestamp, kind, level), "winomc-backup")
+    archive_name = name + ".zip"
+    archive_path = assert_safe_internal_path(BACKUP_DIR, os.path.join(BACKUP_DIR, archive_name))
+    include = []
+    if kind in ("world", "complete", "safety"):
+        include.append((world_dir_path(), "worlds/" + level))
+    if kind in ("config", "complete", "safety"):
+        for rel in ("server.properties", "allowlist.json", "permissions.json", ".winomc/web_console_settings.json"):
+            include.append((os.path.join(DATA_DIR, rel), rel))
+    if kind in ("complete", "safety"):
+        include.extend([(RESOURCE_PACKS_DIR, "resource_packs"), (BEHAVIOR_PACKS_DIR, "behavior_packs")])
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        manifest = {"name": name, "created": timestamp, "server_version": os.environ.get("VERSION", "LATEST"), "winomc_version": WINOMC_VERSION, "world": level, "type": kind, "reason": reason, "status": "OK"}
+        zf.writestr("winomc-backup.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        for src, arc in include:
+            try:
+                src = verify_root_path("config", src, require_exists=False, allow_missing=True).path
+                if os.path.isdir(src):
+                    for root, dirs, files in os.walk(src):
+                        dirs[:] = [d for d in dirs if d not in (".git",)]
+                        for fn in files:
+                            fp = os.path.join(root, fn)
+                            if os.path.islink(fp):
+                                continue
+                            zf.write(fp, posixpath.join(arc, os.path.relpath(fp, src).replace(os.sep, "/")))
+                elif os.path.isfile(src):
+                    zf.write(src, arc)
+            except Exception as exc:
+                zf.writestr("warnings/%s.txt" % safe_download_name(arc, "item"), str(exc))
+    meta = {"name": name, "archive": archive_name, "created": timestamp, "server_version": os.environ.get("VERSION", "LATEST"), "winomc_version": WINOMC_VERSION, "world": level, "type": kind, "reason": reason, "status": "OK", "size": os.path.getsize(archive_path), "size_label": human_bytes(os.path.getsize(archive_path))}
+    with open_safe_internal(BACKUP_DIR, backup_manifest_path(name), "w", encoding="utf-8") as handle:
+        json.dump(meta, handle, ensure_ascii=False, indent=2)
+    prune_backups()
+    return meta
+
+
+def diagnostics_payload():
+    env = {k: os.environ.get(k, "") for k in ["SERVER_PORT", "SERVER_PORT_V6", "LEVEL_NAME", "SERVER_NAME", "ONLINE_MODE", "ALLOW_LIST"]}
+    items = []
+    def add(title, ok, message, repair=False):
+        items.append({"title": title, "status": "OK" if ok else ("Reparierbar" if repair else "Warnung"), "severity": "OK" if ok else "warning", "message": message})
+    add("Serverordner", os.path.isdir(DATA_DIR), DATA_DIR)
+    add("Weltordner", os.path.isdir(world_dir_path()), "Welt: %s" % (env.get("LEVEL_NAME") or "world"), True)
+    add("Schreibrechte", os.access(DATA_DIR, os.W_OK), "WinoMC kann /config schreiben." if os.access(DATA_DIR, os.W_OK) else "Keine Schreibrechte auf /config.")
+    add("Speicherplatz", (disk_usage_metrics().get("free") or 0) > 512*1024*1024, disk_usage_metrics().get("label", "Nicht verfügbar"))
+    props = os.path.join(DATA_DIR, "server.properties")
+    add("server.properties", os.path.isfile(props), "Datei vorhanden." if os.path.isfile(props) else "Kann aus Add-on-Optionen neu geschrieben werden.", True)
+    for port_key in ("SERVER_PORT", "SERVER_PORT_V6"):
+        try:
+            port = int(env.get(port_key) or 0); ok = 1 <= port <= 65535
+        except ValueError: ok = False
+        add(port_key, ok, "Port ist plausibel." if ok else "Port muss zwischen 1 und 65535 liegen.")
+    allow, ae = json_file(os.path.join(DATA_DIR, "allowlist.json"), [])
+    perms, pe = json_file(os.path.join(DATA_DIR, "permissions.json"), [])
+    add("allowlist.json", ae is None and isinstance(allow, list), ae or "%s Einträge" % len(allow), True)
+    add("permissions.json", pe is None and isinstance(perms, list), pe or "%s Einträge" % len(perms), True)
+    add("Resource Packs", os.path.isdir(RESOURCE_PACKS_DIR), "Ordner vorhanden." if os.path.isdir(RESOURCE_PACKS_DIR) else "Ordner fehlt.", True)
+    add("Behavior Packs", os.path.isdir(BEHAVIOR_PACKS_DIR), "Ordner vorhanden." if os.path.isdir(BEHAVIOR_PACKS_DIR) else "Ordner fehlt.", True)
+    add("Konsole", runtime_path_exists(runtime_fifo_path()), "FIFO vorhanden." if runtime_path_exists(runtime_fifo_path()) else "Serverprozess/FIFO nicht erreichbar.")
+    add("Logdatei", runtime_path_exists(runtime_log_path()), "Log lesbar." if runtime_path_exists(runtime_log_path()) else "Noch kein Log vorhanden.")
+    add("Backups", bool(list_backups()), "Letztes Backup vorhanden." if list_backups() else "Noch kein WinoMC-Backup vorhanden.", True)
+    world_safety = analyze_world_safety()
+    add("Welt-Schutzstatus", world_safety.get("risk") == "green", "%s / Risiko %s" % (world_safety.get("mode"), world_safety.get("risk")), bool(world_safety.get("risk") != "green"))
+    overall = "OK" if all(i["severity"] == "OK" for i in items) else "Warnung"
+    return {"ok": True, "overall": overall, "items": items, "world_safety": world_safety}
+
+
+def scan_packs(base_dir, pack_type):
+    packs=[]; seen={}
+    if not os.path.isdir(base_dir): return packs
+    for name in sorted(os.listdir(base_dir)):
+        pack_path=os.path.join(base_dir,name); manifest=os.path.join(pack_path,"manifest.json")
+        if not os.path.isdir(pack_path): continue
+        data, err=json_file(manifest, {})
+        header=data.get("header",{}) if isinstance(data,dict) else {}
+        uuid=header.get("uuid",""); version=header.get("version",[])
+        status="OK" if not err and uuid and version else "warning"
+        desc=header.get("description","") or (err or "Manifest geprüft")
+        if uuid and uuid in seen: status="warning"; desc="Doppelte UUID mit %s"%seen[uuid]
+        if uuid: seen[uuid]=name
+        packs.append({"name": header.get("name") or name, "path": name, "type": pack_type, "uuid": uuid, "version": ".".join(map(str,version)) if isinstance(version,list) else str(version), "description": desc, "status": status})
+    return packs
+
+
+def players_payload():
+    allow, ae = json_file(os.path.join(DATA_DIR,"allowlist.json"), [])
+    perms, pe = json_file(os.path.join(DATA_DIR,"permissions.json"), [])
+    allow = allow if isinstance(allow, list) else []
+    perms = perms if isinstance(perms, list) else []
+    by = {}
+    for a in allow:
+        key = str(a.get("xuid") or a.get("name") or "")
+        by.setdefault(key, {"name": a.get("name","-"), "xuid": a.get("xuid",""), "allowlisted": True, "role": "member", "issues": []})
+    for p in perms:
+        key = str(p.get("xuid") or p.get("permission") or len(by))
+        row = by.setdefault(key, {"name": p.get("name","-"), "xuid": p.get("xuid",""), "allowlisted": False, "role": "member", "issues": []})
+        row["role"] = p.get("permission", "member")
+        if row["role"] == "operator" and not row["allowlisted"]:
+            row["issues"].append("OP nicht auf Allowlist")
+    warnings=[]
+    if ae: warnings.append("allowlist.json: "+ae)
+    if pe: warnings.append("permissions.json: "+pe)
+    if parse_bool(os.environ.get("ALLOW_LIST"), False) and not allow: warnings.append("Allowlist ist aktiv, aber leer.")
+    if not parse_bool(os.environ.get("ONLINE_MODE"), True): warnings.append("Online Mode ist deaktiviert und sollte nur bewusst genutzt werden.")
+    return {"ok": True, "players": list(by.values()), "warnings": warnings}
+
+
+def profiles_payload():
+    return {"ok": True, "profiles": [
+        {"name":"Familienserver","description":"Sicherer, ruhiger Start für kleine private Gruppen.","defaults":{"ONLINE_MODE":True,"ALLOW_LIST":True,"MAX_PLAYERS":10,"DIFFICULTY":"easy","GAMEMODE":"survival","ALLOW_CHEATS":False,"EMIT_SERVER_TELEMETRY":False}},
+        {"name":"Vanilla Survival","description":"Klassischer Survival-Server ohne Gameplay-Eingriffe.","defaults":{"ONLINE_MODE":True,"ALLOW_LIST":True,"GAMEMODE":"survival","DIFFICULTY":"normal","ALLOW_CHEATS":False}},
+        {"name":"Kreativserver","description":"Bauen im Creative-Modus mit überschaubaren Schutzempfehlungen.","defaults":{"ONLINE_MODE":True,"ALLOW_LIST":True,"GAMEMODE":"creative","DIFFICULTY":"peaceful","ALLOW_CHEATS":True}},
+        {"name":"Privater Freunde-Server","description":"Einfacher privater Server mit Allowlist-Empfehlung.","defaults":{"ONLINE_MODE":True,"ALLOW_LIST":True,"MAX_PLAYERS":10,"DIFFICULTY":"normal"}},
+        {"name":"Experimentell / Test","description":"Zum Ausprobieren, ohne bestehende Installationen automatisch zu verändern.","defaults":{"ONLINE_MODE":True,"ALLOW_LIST":False,"MAX_PLAYERS":5,"ALLOW_CHEATS":True}}
+    ]}
+
+
+def import_export_payload():
+    return {"ok": True, "import_count": len(os.listdir(IMPORT_DIR)) if os.path.isdir(IMPORT_DIR) else 0, "export_count": len(os.listdir(EXPORT_DIR)) if os.path.isdir(EXPORT_DIR) else 0, "zip_slip_protection": True, "overwrite_policy": "abort_or_backup"}
+
+
+def update_guard_payload():
+    checks=[]
+    def add(t, ok, msg): checks.append({"title":t,"status":"OK" if ok else "Warnung","severity":"OK" if ok else "warning","message":msg})
+    add("Backup", bool(list_backups()), "Aktuelles Backup vorhanden." if list_backups() else "Vor Update Backup erstellen.")
+    add("Speicherplatz", (disk_usage_metrics().get("free") or 0)>1024*1024*1024, disk_usage_metrics().get("label","Nicht verfügbar"))
+    add("Zielversion", bool(os.environ.get("VERSION","LATEST")), "VERSION=" + os.environ.get("VERSION","LATEST"))
+    add("Direkte URL", True, "BDS_DIRECT_DOWNLOAD_URL wird akzeptiert, wenn gesetzt; LATEST bleibt unterstützt.")
+    add("Spielerstatus", True, player_metrics_from_log(os.environ.get("MAX_PLAYERS","")).get("label","unbekannt"))
+    add("Schreibrechte", os.access(DATA_DIR, os.W_OK), "/config schreibbar" if os.access(DATA_DIR, os.W_OK) else "/config nicht schreibbar")
+    return {"ok": True, "checks": checks}
+
+
+def atomic_write_json_root(root_key, rel_path, data, backup=True):
+    file_path, normalized_rel = resolve_safe_path(root_key, rel_path)
+    parent = assert_safe_path(root_key, os.path.dirname(file_path), require_exists=True)
+    if path_is_dir_root(root_key, file_path):
+        raise ValueError("Ziel ist ein Ordner, keine JSON-Datei.")
+    backup_path = make_file_backup(file_path, root_key, normalized_rel) if backup and path_exists_root(root_key, file_path) else None
+    fd, temp_path = mkstemp_root(root_key, parent, prefix=".winomc-json-")
+    os.close(fd)
+    try:
+        with open_safe(root_key, temp_path, "w", encoding="utf-8", newline="") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        replace_safe(root_key, temp_path, file_path)
+    except Exception:
+        try:
+            remove_safe(root_key, temp_path)
+        except Exception as exc:
+            log_warning("Temporäre JSON-Datei konnte nicht entfernt werden: %s" % exc)
+        raise
+    return {"path": normalized_rel, "backup_created": bool(backup_path), "backup_path": backup_path}
+
+
+def world_pack_rel_path(pack_type):
+    pack_type = str(pack_type or "resource").lower()
+    if pack_type not in ("resource", "behavior"):
+        raise ValueError("Pack-Typ muss resource oder behavior sein.")
+    level = os.environ.get("LEVEL_NAME", "world") or "world"
+    filename = "world_resource_packs.json" if pack_type == "resource" else "world_behavior_packs.json"
+    return normalize_rel_path(posixpath.join("/worlds", level, filename))
+
+
+def pack_base_dir(pack_type):
+    pack_type = str(pack_type or "resource").lower()
+    if pack_type == "resource":
+        return "resource_packs", RESOURCE_PACKS_DIR
+    if pack_type == "behavior":
+        return "behavior_packs", BEHAVIOR_PACKS_DIR
+    raise ValueError("Pack-Typ muss resource oder behavior sein.")
+
+
+def read_pack_manifest(pack_type, pack_path):
+    root_key, base_dir = pack_base_dir(pack_type)
+    pack_path = safe_rel_parts(pack_path)
+    if not pack_path:
+        raise ValueError("Pack-Pfad fehlt.")
+    pack_dir = os.path.join(base_dir, *pack_path)
+    pack_dir = assert_safe_path(root_key, pack_dir, require_exists=True)
+    if not path_is_dir_root(root_key, pack_dir):
+        raise FileNotFoundError("Pack-Ordner wurde nicht gefunden.")
+    manifest_path = os.path.join(pack_dir, "manifest.json")
+    data, err = json_file(manifest_path, {})
+    if err:
+        raise ValueError("Pack-Manifest ist ungültig: %s" % err)
+    header = data.get("header", {}) if isinstance(data, dict) else {}
+    uuid = str(header.get("uuid", "")).strip()
+    version = header.get("version")
+    if not uuid or not isinstance(version, list) or not version:
+        raise ValueError("Pack-Manifest braucht UUID und Version.")
+    version = [int(v) for v in version]
+    return {"pack_id": uuid, "version": version, "name": header.get("name") or os.path.basename(pack_dir), "path": "/" + "/".join(pack_path)}
+
+
+def read_world_pack_entries(pack_type):
+    rel = world_pack_rel_path(pack_type)
+    path, _ = resolve_safe_path("config", rel)
+    if not path_exists_root("config", path):
+        return []
+    data, err = json_file(path, [])
+    if err:
+        raise ValueError("Welt-Pack-Datei ist ungültig: %s" % err)
+    if not isinstance(data, list):
+        raise ValueError("Welt-Pack-Datei muss eine JSON-Liste sein.")
+    clean = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        pack_id = str(item.get("pack_id") or "").strip()
+        version = item.get("version")
+        if pack_id and isinstance(version, list):
+            clean.append({"pack_id": pack_id, "version": [int(v) for v in version]})
+    return clean
+
+
+def write_world_pack_entries(pack_type, entries):
+    rel = world_pack_rel_path(pack_type)
+    path, _ = resolve_safe_path("config", rel)
+    parent = os.path.dirname(path)
+    makedirs_root("config", parent, exist_ok=True)
+    return atomic_write_json_root("config", rel, entries, backup=True)
+
+
+def activate_pack(pack_type, pack_path):
+    manifest = read_pack_manifest(pack_type, pack_path)
+    entries = read_world_pack_entries(pack_type)
+    entries = [entry for entry in entries if entry.get("pack_id") != manifest["pack_id"]]
+    entries.append({"pack_id": manifest["pack_id"], "version": manifest["version"]})
+    result = write_world_pack_entries(pack_type, entries)
+    result.update({"ok": True, "pack": manifest, "entries": entries, "message": "Pack wurde für diese Welt aktiviert."})
+    return result
+
+
+def deactivate_pack(pack_type, uuid):
+    uuid = str(uuid or "").strip()
+    if not uuid:
+        raise ValueError("UUID fehlt.")
+    entries = read_world_pack_entries(pack_type)
+    new_entries = [entry for entry in entries if entry.get("pack_id") != uuid]
+    if len(new_entries) == len(entries):
+        raise FileNotFoundError("Aktiver Pack-Eintrag wurde nicht gefunden.")
+    result = write_world_pack_entries(pack_type, new_entries)
+    result.update({"ok": True, "uuid": uuid, "entries": new_entries, "message": "Pack wurde für diese Welt deaktiviert."})
+    return result
+
+
+def packs_payload():
+    resource = scan_packs(RESOURCE_PACKS_DIR, "resource")
+    behavior = scan_packs(BEHAVIOR_PACKS_DIR, "behavior")
+    active = {"resource": read_world_pack_entries("resource"), "behavior": read_world_pack_entries("behavior")}
+    active_ids = {"resource": {e["pack_id"] for e in active["resource"]}, "behavior": {e["pack_id"] for e in active["behavior"]}}
+    for pack in resource:
+        pack["active"] = bool(pack.get("uuid") in active_ids["resource"])
+    for pack in behavior:
+        pack["active"] = bool(pack.get("uuid") in active_ids["behavior"])
+    return {"ok": True, "resource_packs": resource, "behavior_packs": behavior, "active": active, "texturepack_required": parse_bool(os.environ.get("TEXTUREPACK_REQUIRED"), False)}
+
+
+def normalize_role(role):
+    role = str(role or "member").lower().strip()
+    if role not in ("operator", "member", "visitor"):
+        raise ValueError("Rolle muss operator, member oder visitor sein.")
+    return role
+
+
+def normalize_player_entry(item):
+    if not isinstance(item, dict):
+        raise ValueError("Spieler-Eintrag ist ungültig.")
+    name = str(item.get("name") or "").strip()
+    xuid = str(item.get("xuid") or "").strip()
+    if not name and not xuid:
+        raise ValueError("Spieler braucht mindestens Name oder XUID.")
+    if xuid and not re.match(r"^[0-9]{5,32}$", xuid):
+        raise ValueError("XUID sieht ungültig aus: %s" % xuid)
+    return {"name": name, "xuid": xuid, "allowlisted": bool(item.get("allowlisted", True)), "role": normalize_role(item.get("role", "member"))}
+
+
+def save_players(players):
+    if not isinstance(players, list):
+        raise ValueError("players muss eine Liste sein.")
+    normalized = [normalize_player_entry(item) for item in players]
+    seen = set()
+    for player in normalized:
+        key = player.get("xuid") or player.get("name")
+        if key in seen:
+            raise ValueError("Doppelter Spieler/XUID: %s" % key)
+        seen.add(key)
+    allowlist = []
+    permissions = []
+    for player in normalized:
+        if player["allowlisted"]:
+            entry = {"name": player["name"] or player["xuid"], "ignoresPlayerLimit": False}
+            if player["xuid"]:
+                entry["xuid"] = player["xuid"]
+            allowlist.append(entry)
+        if player["xuid"]:
+            permissions.append({"permission": player["role"], "xuid": player["xuid"]})
+    allow_result = atomic_write_json_root("config", "/allowlist.json", allowlist, backup=True)
+    perm_result = atomic_write_json_root("config", "/permissions.json", permissions, backup=True)
+    payload = players_payload()
+    payload.update({"saved": True, "allowlist_result": allow_result, "permissions_result": perm_result, "message": "Spielerrechte wurden gespeichert."})
+    return payload
+
+
+def find_backup_meta(backup_name):
+    safe_name = safe_download_name(backup_name, "")
+    if not safe_name:
+        raise ValueError("Backup-Name fehlt.")
+    for meta in list_backups():
+        if safe_name in (meta.get("name"), meta.get("archive"), os.path.basename(meta.get("archive", ""))):
+            archive = os.path.join(BACKUP_DIR, meta.get("archive", ""))
+            archive = verify_internal_path(BACKUP_DIR, archive, require_exists=True, allow_missing=False)
+            return meta, archive.path
+    candidate = verify_internal_path(BACKUP_DIR, os.path.join(BACKUP_DIR, safe_name), require_exists=True, allow_missing=False)
+    if not candidate.is_file() or not safe_name.endswith(".zip"):
+        raise FileNotFoundError("Backup wurde nicht gefunden.")
+    return {"name": safe_name, "archive": safe_name, "type": "unknown"}, candidate.path
+
+
+
+def backup_contains(archive_path):
+    contains = {"worlds": False, "resource_packs": False, "behavior_packs": False, "world_resource_packs": False, "world_behavior_packs": False, "server_properties": False, "files": 0, "size": 0}
+    with zipfile.ZipFile(archive_path, "r") as archive:
+        for member in archive.infolist():
+            raw = str(member.filename or "").replace("\\", "/")
+            if not raw or raw == "winomc-backup.json" or raw.startswith("warnings/"):
+                continue
+            contains["files"] += 1
+            contains["size"] += int(member.file_size or 0)
+            if raw.startswith("worlds/"):
+                contains["worlds"] = True
+            if raw.startswith("resource_packs/"):
+                contains["resource_packs"] = True
+            if raw.startswith("behavior_packs/"):
+                contains["behavior_packs"] = True
+            if raw.endswith("world_resource_packs.json"):
+                contains["world_resource_packs"] = True
+            if raw.endswith("world_behavior_packs.json"):
+                contains["world_behavior_packs"] = True
+            if raw == "server.properties":
+                contains["server_properties"] = True
+    return contains
+
+
+def build_restore_plan(backup_name, mode="complete"):
+    mode = str(mode or "complete").lower()
+    if mode not in ("config", "world", "complete"):
+        raise ValueError("Restore-Modus muss config, world oder complete sein.")
+    meta, archive_path = find_backup_meta(backup_name)
+    contains = backup_contains(archive_path)
+    world = analyze_world_safety()
+    changes = []
+    warnings = []
+    if mode in ("world", "complete") and contains["worlds"]:
+        changes.append("Weltdaten werden aus dem Backup wiederhergestellt.")
+    if mode in ("config", "complete"):
+        for key, label in (("server_properties", "server.properties"), ("world_resource_packs", "world_resource_packs.json"), ("world_behavior_packs", "world_behavior_packs.json")):
+            if contains.get(key):
+                changes.append("%s wird aus dem Backup wiederhergestellt." % label)
+    if mode == "complete":
+        if contains["resource_packs"]:
+            changes.append("Resource-Pack-Ordner werden wiederhergestellt.")
+        if contains["behavior_packs"]:
+            changes.append("Behavior-Pack-Ordner werden wiederhergestellt.")
+    risk = "yellow" if changes else "green"
+    if world.get("risk") in ("yellow", "red") and (contains["world_resource_packs"] or contains["world_behavior_packs"] or contains["behavior_packs"]):
+        risk = "red"
+        warnings.append("Aktuelle Welt enthält Add-on-/Pack-Hinweise; Restore kann aktive Add-ons verändern.")
+    free = disk_usage_metrics().get("free") or 0
+    needed = int(contains.get("size") or 0) * 2
+    if free and needed and free < needed:
+        risk = risk_level(risk, "red")
+        warnings.append("Wenig freier Speicher für Restore plus Safety-Backup.")
+    return {"ok": True, "kind": "restore", "backup": meta, "mode": mode, "risk": risk, "summary": "Restore-Vorschau für %s" % meta.get("name", backup_name), "changes": changes, "warnings": warnings, "backup_plan": ["Safety-Backup vor Restore"], "will_restore": changes, "will_skip": [], "contains": contains, "world_safety": world, "requires_confirmation": requires_confirmation({"risk": risk})}
+
+
+def restore_backup(backup_name, mode="complete", restart=False, confirm=False):
+    plan = build_restore_plan(backup_name, mode)
+    assert_plan_confirmed(plan, confirm)
+    meta, archive_path = find_backup_meta(backup_name)
+    safety = create_framework_backup("safety", "pre-restore")
+    prefixes = []
+    if mode in ("world", "complete"):
+        prefixes.append("worlds/")
+    if mode in ("config", "complete"):
+        prefixes.extend(["server.properties", "allowlist.json", "permissions.json", ".winomc/"])
+    if mode == "complete":
+        prefixes.extend(["resource_packs/", "behavior_packs/"])
+    restored = []
+    skipped = []
+    root_base = allowed_root_base("config")
+    with zipfile.ZipFile(archive_path, "r") as archive:
+        for member in archive.infolist():
+            raw_name = str(member.filename or "").replace("\\", "/")
+            if not raw_name or raw_name == "winomc-backup.json" or raw_name.startswith("warnings/"):
+                continue
+            normalized = posixpath.normpath(raw_name)
+            if normalized.startswith("../") or normalized.startswith("/") or normalized == "..":
+                raise ValueError("Unsicherer Backup-Pfad blockiert: %s" % raw_name)
+            if member.is_dir() or zip_member_is_symlink(member):
+                if zip_member_is_symlink(member):
+                    raise ValueError("Symlink im Backup blockiert: %s" % raw_name)
+            if not any(normalized == prefix or normalized.startswith(prefix) for prefix in prefixes):
+                skipped.append(normalized)
+                continue
+            target = assert_safe_path("config", os.path.join(DATA_DIR, normalized))
+            if not is_inside_base(root_base, target):
+                raise ValueError("Restore-Ziel außerhalb von /config blockiert: %s" % raw_name)
+            if member.is_dir():
+                makedirs_root("config", target, exist_ok=True)
+                continue
+            if path_exists_root("config", target):
+                make_file_backup(target, "config", "/" + normalized)
+            makedirs_root("config", os.path.dirname(target), exist_ok=True)
+            with archive.open(member, "r") as source, open_safe("config", target, "wb") as dest:
+                shutil.copyfileobj(source, dest, length=1024 * 1024)
+            restored.append(normalized)
+    if restart:
+        append_console_note("Restore abgeschlossen. Bitte Add-on/Server manuell neu starten, falls nötig.")
+    return {"ok": True, "backup": meta, "mode": mode, "plan": plan, "safety_backup": safety, "restored": restored, "skipped": skipped, "message": "Restore abgeschlossen. Bitte Serverzustand und Health prüfen."}
+
+def delete_backup(backup_name):
+    meta, archive_path = find_backup_meta(backup_name)
+    removed = []
+    for path in (archive_path, backup_manifest_path(meta.get("name", ""))):
+        try:
+            verified = verify_internal_path(BACKUP_DIR, path, require_exists=False, allow_missing=True)
+            if verified.exists():
+                verified.remove(); removed.append(os.path.basename(verified.path))
+        except Exception as exc:
+            log_warning("Backup-Datei konnte nicht gelöscht werden: %s" % exc)
+    return {"ok": True, "removed": removed, "message": "Backup wurde gelöscht."}
+
+
+def prepare_update(payload=None):
+    payload = payload or {}
+    warning = str(payload.get("warning", "")).strip()
+    if warning:
+        try:
+            write_command("say " + warning)
+        except Exception as exc:
+            append_console_note("Spielerwarnung konnte nicht gesendet werden: %s" % exc)
+    backup = create_framework_backup("complete", "pre-update")
+    state_dir = makedirs_internal(os.path.join(DATA_DIR, ".winomc"), os.path.join(DATA_DIR, ".winomc"), exist_ok=True)
+    state_path = assert_safe_internal_path(state_dir, os.path.join(state_dir, "update-prepared.json"))
+    state = {"prepared_at": time.strftime("%Y-%m-%d_%H-%M-%S"), "backup": backup, "version": os.environ.get("VERSION", "LATEST"), "auto_update": os.environ.get("BDS_AUTO_UPDATE", ""), "message": "Update vorbereitet. Bitte Add-on neu starten, damit BDS_AUTO_UPDATE/VERSION greift."}
+    with open_safe_internal(state_dir, state_path, "w", encoding="utf-8") as handle:
+        json.dump(state, handle, ensure_ascii=False, indent=2)
+    return {"ok": True, "state": state, "checks": update_guard_payload().get("checks", []), "message": state["message"]}
+
+
+def prepare_profile(profile_id):
+    profiles = profiles_payload().get("profiles", [])
+    selected = None
+    slug = str(profile_id or "").lower().replace(" ", "-")
+    for profile in profiles:
+        if slug in (profile["name"].lower().replace(" ", "-"), safe_download_name(profile["name"].lower(), "")):
+            selected = profile
+            break
+    if not selected:
+        raise FileNotFoundError("Profil wurde nicht gefunden.")
+    create_framework_backup("config", "pre-profile-prepare")
+    state_dir = makedirs_internal(os.path.join(DATA_DIR, ".winomc"), os.path.join(DATA_DIR, ".winomc"), exist_ok=True)
+    state_path = assert_safe_internal_path(state_dir, os.path.join(state_dir, "prepared-profile.json"))
+    state = {"prepared_at": time.strftime("%Y-%m-%d_%H-%M-%S"), "profile": selected, "applied": False, "message": "Profil vorbereitet. Werte bitte in Home Assistant prüfen und übernehmen; Add-on-Optionen wurden nicht automatisch überschrieben."}
+    with open_safe_internal(state_dir, state_path, "w", encoding="utf-8") as handle:
+        json.dump(state, handle, ensure_ascii=False, indent=2)
+    return {"ok": True, "profile": selected, "state": state, "message": state["message"]}
+
+
+def state_dir_path():
+    return makedirs_internal(WINOMC_STATE_DIR, WINOMC_STATE_DIR, exist_ok=True)
+
+
+def write_state_json(path, payload):
+    base = state_dir_path()
+    target = assert_safe_internal_path(base, path)
+    with open_safe_internal(base, target, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    return target
+
+
+def read_web_protection_state():
+    default = {"ok": True, "enabled": False, "source": "default", "updated_at": None}
+    try:
+        base = state_dir_path()
+        target = assert_safe_internal_path(base, WEB_PROTECTION_FILE, require_exists=False)
+        if not os.path.exists(target):
+            return default
+        with open_safe_internal(base, target, "r", encoding="utf-8", errors="replace") as handle:
+            data = json.load(handle)
+        return {"ok": True, "enabled": bool(data.get("enabled", False)), "source": data.get("source", "server"), "updated_at": data.get("updated_at")}
+    except Exception as exc:
+        log_warning("Webschutz-Status konnte nicht gelesen werden: %s" % exc)
+        return default
+
+
+def set_web_protection_state(enabled, source="web-ui"):
+    payload = {"enabled": bool(enabled), "updated_at": time.strftime("%Y-%m-%d_%H-%M-%S"), "source": safe_download_name(source, "web-ui")}
+    write_state_json(WEB_PROTECTION_FILE, payload)
+    payload["ok"] = True
+    return payload
+
+
+def write_import_status(status, message, extra=None):
+    payload = {"ok": True, "status": status, "message": message, "updated_at": time.strftime("%Y-%m-%d_%H-%M-%S")}
+    if isinstance(extra, dict):
+        payload.update(extra)
+    write_state_json(IMPORT_STATUS_FILE, payload)
+    return payload
+
+
+def read_import_status():
+    try:
+        base = state_dir_path()
+        target = assert_safe_internal_path(base, IMPORT_STATUS_FILE, require_exists=False)
+        if not os.path.exists(target):
+            return {"ok": True, "status": "idle", "message": "Noch kein URL-Import ausgeführt."}
+        with open_safe_internal(base, target, "r", encoding="utf-8", errors="replace") as handle:
+            data = json.load(handle)
+        data["ok"] = True
+        return data
+    except Exception as exc:
+        return {"ok": False, "status": "error", "message": str(exc)}
+
+
+
+def risk_level(*levels):
+    order = {"green": 0, "yellow": 1, "red": 2}
+    best = "green"
+    for level in levels:
+        if order.get(str(level or "green"), 0) > order[best]:
+            best = str(level)
+    return best
+
+
+def requires_confirmation(plan):
+    return str(plan.get("risk", "green")) in ("yellow", "red") or bool(plan.get("requires_confirmation", False))
+
+
+def assert_plan_confirmed(plan, confirm=False, mode="safe"):
+    if str(plan.get("risk")) == "red" and mode != "expert":
+        raise PermissionError("Diese Aktion ist rot eingestuft und erfordert Expertenmodus mit bewusster Bestätigung.")
+    if requires_confirmation(plan) and not bool(confirm):
+        raise PermissionError("Aktion nicht ausgeführt: %s Bestätigung erforderlich." % plan.get("summary", "Safety Planner verlangt eine Bestätigung."))
+
+
+def pack_manifest_signals(base_dir, label):
+    signals = []
+    if not os.path.isdir(base_dir):
+        return signals
+    for root, dirs, files in os.walk(base_dir):
+        dirs[:] = [d for d in dirs if d not in ("__MACOSX", ".git")]
+        if "manifest.json" not in files:
+            continue
+        data, err = json_file(os.path.join(root, "manifest.json"), {})
+        rel = os.path.relpath(root, base_dir)
+        if err:
+            signals.append({"type": "manifest_invalid", "pack": rel, "message": "%s Manifest ungültig: %s" % (label, err)})
+            continue
+        modules = data.get("modules", []) if isinstance(data, dict) else []
+        header = data.get("header", {}) if isinstance(data, dict) else {}
+        module_types = [str(m.get("type", "")).lower() for m in modules if isinstance(m, dict)]
+        for key in ("dependencies", "capabilities", "metadata"):
+            if data.get(key):
+                signals.append({"type": key, "pack": rel, "message": "%s enthält %s." % (rel, key)})
+        if header.get("min_engine_version") or data.get("min_engine_version"):
+            signals.append({"type": "min_engine_version", "pack": rel, "message": "%s nennt eine minimale Bedrock-Version." % rel})
+        if any(t in ("data", "script", "client_data") or "script" in t for t in module_types):
+            signals.append({"type": "behavior_or_script", "pack": rel, "message": "%s enthält Behavior-/Script-Module." % rel})
+        elif "resources" in module_types:
+            signals.append({"type": "resources", "pack": rel, "message": "%s enthält Resource-Module." % rel})
+    return signals
+
+
+def read_world_pack_file(pack_type):
+    rel = world_pack_rel_path(pack_type)
+    path, _ = resolve_safe_path("config", rel)
+    if not path_exists_root("config", path):
+        return {"exists": False, "valid": True, "entries": [], "error": None, "rel": rel}
+    data, err = json_file(path, [])
+    return {"exists": True, "valid": err is None and isinstance(data, list), "entries": data if isinstance(data, list) else [], "error": err, "rel": rel}
+
+
+def analyze_world_safety():
+    signals = []
+    warnings = []
+    mode = "vanilla"
+    risk = "green"
+    resource_file = read_world_pack_file("resource")
+    behavior_file = read_world_pack_file("behavior")
+    for label, info in (("world_resource_packs.json", resource_file), ("world_behavior_packs.json", behavior_file)):
+        if info["exists"] and not info["valid"]:
+            mode = "unknown"; risk = risk_level(risk, "red"); warnings.append("%s ist ungültig; automatische Reparatur würde Pack-Zustand verändern." % label)
+        elif info["entries"]:
+            signals.append({"type": "active_pack_file", "file": label, "count": len(info["entries"]), "message": "%s enthält aktive Einträge." % label})
+            if label.startswith("world_behavior"):
+                mode = "addons"; risk = risk_level(risk, "red")
+            elif mode == "vanilla":
+                mode = "resource_packs"; risk = risk_level(risk, "yellow")
+    resource_signals = pack_manifest_signals(RESOURCE_PACKS_DIR, "Resource Pack")
+    behavior_signals = pack_manifest_signals(BEHAVIOR_PACKS_DIR, "Behavior Pack")
+    signals.extend(resource_signals + behavior_signals)
+    if behavior_signals:
+        mode = "addons"; risk = risk_level(risk, "red")
+    elif resource_signals and mode == "vanilla":
+        mode = "resource_packs"; risk = risk_level(risk, "yellow")
+    world = world_dir_path()
+    for marker in ("premium_cache", "valid_known_packs.json", "world_resource_pack_history.json"):
+        if os.path.exists(os.path.join(world, marker)):
+            mode = "marketplace_or_unknown"; risk = risk_level(risk, "yellow"); signals.append({"type": "marketplace_or_unknown", "message": "Marketplace/unklare Weltspur: %s" % marker})
+    if mode == "addons":
+        warnings.append("Add-ons erkannt: automatische Reparaturen werden nur nach Bestätigung ausgeführt.")
+    return {"ok": True, "mode": mode, "risk": risk, "signals": signals, "warnings": warnings, "recommendation": "Analyze first. Explain risk. Backup. Confirm. Then act."}
+
+
+def build_repair_plan(action):
+    action = str(action or "").strip()
+    world = analyze_world_safety()
+    changes=[]; warnings=[]; backup_plan=[]; risk="green"
+    if action in ("ensure_directories", "repair_all_safe"):
+        changes.append("Fehlende Standardordner werden erstellt.")
+    targets = []
+    if action in ("repair_allowlist", "repair_all_safe"):
+        targets.append(("/allowlist.json", "allowlist.json", False))
+    if action in ("repair_permissions", "repair_all_safe"):
+        targets.append(("/permissions.json", "permissions.json", False))
+    if action in ("repair_world_resource_packs", "repair_pack_files", "repair_all_safe"):
+        targets.append((world_pack_rel_path("resource"), "world_resource_packs.json", True))
+    if action in ("repair_world_behavior_packs", "repair_pack_files", "repair_all_safe"):
+        targets.append((world_pack_rel_path("behavior"), "world_behavior_packs.json", True))
+    for rel,label,is_pack in targets:
+        path,_ = resolve_safe_path("config", rel)
+        if path_exists_root("config", path):
+            data,err=json_file(path, [])
+            if err is None and isinstance(data, list):
+                changes.append("%s ist gültig und wird nicht ersetzt." % label)
+                if data and is_pack:
+                    warnings.append("%s enthält aktive Pack-Einträge und wird nicht geleert." % label)
+                    risk = risk_level(risk, "red")
+                continue
+            backup_plan.append("Sicherungskopie von %s" % label)
+            changes.append("Ungültige %s könnte als leere Liste neu erzeugt werden." % label)
+            risk = risk_level(risk, "red" if is_pack or world.get("risk") != "green" else "yellow")
+        else:
+            changes.append("Fehlende %s könnte als leere Liste erstellt werden." % label)
+            if is_pack and world.get("risk") != "green":
+                risk = risk_level(risk, "yellow"); warnings.append("Pack-/Add-on-Spuren gefunden; fehlende Pack-Datei wird nicht ohne Bestätigung erstellt.")
+    if action in ("repair_pack_files", "repair_all_safe") and world.get("risk") == "red":
+        risk = risk_level(risk, "red")
+    return {"ok": True, "kind": "repair", "action": action, "risk": risk, "summary": "Reparaturplan für %s" % action, "changes": changes, "warnings": warnings, "backup_plan": backup_plan, "world_safety": world, "requires_confirmation": risk in ("yellow", "red")}
+
+
+def repair_json_list(rel_path, label, confirm=False, mode="safe", plan=None):
+    file_path, normalized = resolve_safe_path("config", rel_path)
+    parent = os.path.dirname(file_path)
+    makedirs_root("config", parent, exist_ok=True)
+    is_pack_file = label in ("world_resource_packs.json", "world_behavior_packs.json")
+    if path_exists_root("config", file_path):
+        data, err = json_file(file_path, [])
+        if err is None and isinstance(data, list):
+            return {"action": label, "status": "skipped", "message": "%s ist bereits gültig und wurde nicht ersetzt." % label}
+        if is_pack_file or (plan and plan.get("risk") == "red"):
+            assert_plan_confirmed(plan or {"risk":"red","summary":label}, confirm, mode)
+        backup_path = make_file_backup(file_path, "config", normalized) if path_is_file_root("config", file_path) else None
+    else:
+        if is_pack_file and plan and plan.get("risk") in ("yellow", "red"):
+            assert_plan_confirmed(plan, confirm, mode)
+        backup_path = None
+    result = atomic_write_json_root("config", normalized, [], backup=False)
+    return {"action": label, "status": "repaired", "message": "%s wurde als leere valide JSON-Liste geschrieben." % label, "backup_path": backup_path, "result": result}
+
+
+def repair_diagnostics(action, confirm=False, mode="safe"):
+    action = str(action or "").strip()
+    mode = str(mode or "safe").lower()
+    plan = build_repair_plan(action)
+    if plan["risk"] == "red" or (plan["risk"] == "yellow" and action not in ("ensure_directories",)):
+        assert_plan_confirmed(plan, confirm, mode)
+    results = []
+    if action in ("ensure_directories", "repair_all_safe"):
+        ensure_directories(); state_dir_path(); results.append({"action": "ensure_directories", "status": "ok", "message": "Ordnerstruktur wurde geprüft/erstellt."})
+    if action in ("repair_allowlist", "repair_all_safe"):
+        results.append(repair_json_list("/allowlist.json", "allowlist.json", confirm, mode, plan))
+    if action in ("repair_permissions", "repair_all_safe"):
+        results.append(repair_json_list("/permissions.json", "permissions.json", confirm, mode, plan))
+    if action != "repair_all_safe":
+        if action in ("repair_world_resource_packs", "repair_pack_files"):
+            results.append(repair_json_list(world_pack_rel_path("resource"), "world_resource_packs.json", confirm, mode, plan))
+        if action in ("repair_world_behavior_packs", "repair_pack_files"):
+            results.append(repair_json_list(world_pack_rel_path("behavior"), "world_behavior_packs.json", confirm, mode, plan))
+    if not results:
+        raise ValueError("Unbekannte oder nicht sichere Reparaturaktion: %s" % action)
+    return {"ok": True, "action": action, "plan": plan, "results": results, "message": "Reparatur abgeschlossen."}
+
+
+
+SUPPORTED_IMPORT_EXTENSIONS = {".mcpack", ".mcaddon", ".mcworld", ".mctemplate", ".zip"}
+REJECTED_IMPORT_EXTENSIONS = {".jar", ".fabric", ".forge", ".exe", ".sh", ".bat", ".cmd", ".msi"}
+JAVA_MOD_MARKERS = {"mods.toml", "fabric.mod.json", "quilt.mod.json", "meta-inf/mods.toml", "neoforge.mods.toml"}
+HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
+
+
+
+
+def quarantine_dir_path():
+    return makedirs_internal(QUARANTINE_DIR, QUARANTINE_DIR, exist_ok=True)
+
+
+def manual_url_import_disabled_response():
+    return {
+        "ok": False,
+        "manual_import_required": True,
+        "addon_manager_available": True,
+        "message": "Freier serverseitiger URL-Download ist deaktiviert. Lade die Datei selbst herunter und lege sie in /share/winomc/import oder lade sie über WinoMC hoch.",
+    }
+
+
+def validate_external_download_url(url):
+    # Keinen Netzwerkzugriff auslösen: URL-Import ist bewusst durch lokalen Add-on Manager ersetzt.
+    return manual_url_import_disabled_response()
+
+
+def check_import_url(url):
+    return manual_url_import_disabled_response()
+
+
+def download_external_pack(url):
+    raise PermissionError(manual_url_import_disabled_response()["message"])
+
+def zip_member_is_symlink(member):
+    return stat.S_ISLNK((getattr(member, "external_attr", 0) >> 16) & 0o170000)
+
+
+def safe_zip_members(archive_path):
+    manifests = []
+    java_markers = []
+    with zipfile.ZipFile(archive_path, "r") as archive:
+        total = 0
+        count = 0
+        for member in archive.infolist():
+            count += 1
+            if count > MAX_IMPORT_ARCHIVE_FILES:
+                raise ValueError("Archiv enthält zu viele Dateien.")
+            raw = str(member.filename or "").replace("\\", "/")
+            if not raw or raw.startswith("/") or raw.startswith("../") or "/../" in raw or len(raw) > MAX_IMPORT_FILENAME_LENGTH:
+                raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
+            if zip_member_is_symlink(member):
+                raise ValueError("Symlink im Archiv blockiert: %s" % raw)
+            total += int(member.file_size or 0)
+            if total > MAX_ZIP_UNPACK_BYTES:
+                raise ValueError("Archiv ist zu groß oder wirkt wie eine ZIP-Bombe.")
+            name = posixpath.basename(raw)
+            lower = raw.lower()
+            if lower.startswith("__macosx/"):
+                continue
+            if name == "manifest.json":
+                try:
+                    with archive.open(member) as handle:
+                        data = json.loads(handle.read(1024 * 1024).decode("utf-8", errors="replace"))
+                    manifests.append({"path": raw, "data": data})
+                except Exception as exc:
+                    raise ValueError("manifest.json ist ungültig: %s" % exc)
+            if lower.endswith(".jar") or lower in JAVA_MOD_MARKERS or lower.endswith("mods.toml"):
+                java_markers.append(raw)
+    if java_markers:
+        raise ValueError("Diese Datei sieht nach einem Java-Mod aus. WinoMC unterstützt nur Minecraft Bedrock Packs/Add-ons.")
+    return manifests
+
+
+def classify_bedrock_archive(archive_path, ext):
+    archive_path = verify_internal_path(QUARANTINE_DIR, archive_path, require_exists=True, allow_missing=False).path
+    manifests = safe_zip_members(archive_path)
+    if ext in (".mcworld", ".mctemplate"):
+        return {"supported": True, "kind": "world" if ext == ".mcworld" else "template", "manifests": manifests, "packs": [], "risk": "yellow", "warnings": ["Welt/Template wird nur als neues Ziel importiert, niemals still überschrieben."], "message": "Bedrock-Welt/Template erkannt."}
+    packs = []
+    all_uuids = set()
+    warnings = []
+    for manifest in manifests:
+        data = manifest.get("data") or {}
+        header = data.get("header", {}) if isinstance(data, dict) else {}
+        modules = data.get("modules", []) if isinstance(data, dict) else []
+        if not data.get("format_version") or not header.get("uuid") or not isinstance(header.get("version"), list) or not isinstance(modules, list):
+            continue
+        module_types = {str(m.get("type", "")).lower() for m in modules if isinstance(m, dict)}
+        pack_type = "behavior" if any("data" in t or "script" in t for t in module_types) else "resource"
+        deps = data.get("dependencies", []) if isinstance(data.get("dependencies", []), list) else []
+        caps = data.get("capabilities", []) if isinstance(data.get("capabilities", []), list) else []
+        min_engine = header.get("min_engine_version") or data.get("min_engine_version")
+        pack = {"manifest_path": manifest["path"], "name": header.get("name") or "Bedrock Pack", "uuid": header.get("uuid"), "version": header.get("version"), "type": pack_type, "module_types": sorted(module_types), "dependencies": deps, "capabilities": caps, "min_engine_version": min_engine, "metadata": data.get("metadata", {})}
+        packs.append(pack); all_uuids.add(str(pack["uuid"]))
+        if deps:
+            missing = [d for d in deps if isinstance(d, dict) and str(d.get("uuid", "")) and str(d.get("uuid")) not in all_uuids]
+            if missing:
+                warnings.append("Pack %s nennt Abhängigkeiten; bitte zusammengehörige Packs prüfen." % pack["name"])
+        if caps or min_engine:
+            warnings.append("Pack %s nennt capabilities/min_engine_version; bitte Bedrock-Kompatibilität testen." % pack["name"])
+        if pack.get("metadata", {}).get("product_type") or "marketplace" in json.dumps(pack.get("metadata", {}), ensure_ascii=False).lower():
+            warnings.append("Marketplace-Inhalte können konto-/plattformabhängig sein.")
+    if not packs:
+        raise ValueError("Kein gültiges Bedrock manifest.json mit format_version, header.uuid, header.version und modules gefunden.")
+    kind = "mcaddon" if len(packs) > 1 or ext == ".mcaddon" else packs[0]["type"]
+    risk = "red" if any(p["type"] == "behavior" for p in packs) else ("yellow" if warnings or len(packs) > 1 else "green")
+    return {"supported": True, "kind": kind, "packs": packs, "risk": risk, "warnings": warnings, "message": "Bedrock-Manifest gefunden."}
+
+
+def classify_local_bedrock_archive(root_key, archive_path, ext):
+    archive_path = assert_safe_path(root_key, archive_path, require_exists=True)
+    manifests = safe_zip_members(archive_path)
+    if ext in (".mcworld", ".mctemplate"):
+        return {"supported": True, "kind": "world" if ext == ".mcworld" else "template", "manifests": manifests, "packs": [], "risk": "yellow", "warnings": ["Welt/Template wird nur als neues Ziel importiert, niemals still überschrieben."], "message": "Bedrock-Welt/Template erkannt."}
+    packs = []
+    warnings = []
+    for manifest in manifests:
+        data = manifest.get("data") or {}
+        header = data.get("header", {}) if isinstance(data, dict) else {}
+        modules = data.get("modules", []) if isinstance(data, dict) else []
+        if not data.get("format_version") or not header.get("uuid") or not isinstance(header.get("version"), list) or not isinstance(modules, list):
+            continue
+        module_types = {str(m.get("type", "")).lower() for m in modules if isinstance(m, dict)}
+        pack_type = "behavior" if any("data" in t or "script" in t for t in module_types) else "resource"
+        deps = data.get("dependencies", []) if isinstance(data.get("dependencies", []), list) else []
+        caps = data.get("capabilities", []) if isinstance(data.get("capabilities", []), list) else []
+        pack = {"manifest_path": manifest["path"], "name": header.get("name") or os.path.splitext(os.path.basename(archive_path))[0], "uuid": header.get("uuid"), "version": header.get("version"), "type": pack_type, "module_types": sorted(module_types), "dependencies": deps, "capabilities": caps, "min_engine_version": header.get("min_engine_version") or data.get("min_engine_version"), "metadata": data.get("metadata", {})}
+        packs.append(pack)
+        if deps:
+            warnings.append("Pack %s nennt Abhängigkeiten; bitte zusammengehörige Packs prüfen." % pack["name"])
+        if caps or pack.get("min_engine_version"):
+            warnings.append("Pack %s nennt capabilities/min_engine_version; bitte Bedrock-Kompatibilität testen." % pack["name"])
+    if not packs:
+        raise ValueError("Kein gültiges Bedrock manifest.json gefunden.")
+    kind = "mcaddon" if len(packs) > 1 or ext == ".mcaddon" else packs[0]["type"]
+    risk = "red" if any(p["type"] == "behavior" for p in packs) else ("yellow" if warnings or len(packs) > 1 else "green")
+    return {"supported": True, "kind": kind, "packs": packs, "risk": risk, "warnings": warnings, "message": "Lokales Bedrock-Manifest gefunden."}
+
+
+def existing_pack_uuid_index():
+    index = {}
+    for pack in scan_packs(RESOURCE_PACKS_DIR, "resource") + scan_packs(BEHAVIOR_PACKS_DIR, "behavior"):
+        if pack.get("uuid"):
+            index.setdefault(pack["uuid"], []).append(pack)
+    return index
+
+
+def quarantine_file_path(quarantine_id):
+    safe_id = safe_download_name(quarantine_id, "winomc-import")
+    base = quarantine_dir_path()
+    path = assert_safe_internal_path(base, os.path.join(base, safe_id), require_exists=True)
+    if not os.path.isfile(path):
+        raise FileNotFoundError("Quarantäne-Datei nicht gefunden.")
+    return path
+
+
+def build_import_plan_from_quarantine(quarantine_id, filename=None, extension=None):
+    archive_path = quarantine_file_path(quarantine_id)
+    extension = extension or file_extension(filename or quarantine_id)
+    classification = classify_bedrock_archive(archive_path, extension)
+    warnings = list(classification.get("warnings", []))
+    changes = []
+    backup_plan = []
+    risk = classification.get("risk", "green")
+    duplicate_uuids = []
+    existing = existing_pack_uuid_index()
+    for pack in classification.get("packs", []):
+        changes.append("%s Pack '%s' installieren." % (pack["type"], pack["name"]))
+        if pack.get("uuid") in existing:
+            duplicate_uuids.append({"uuid": pack.get("uuid"), "existing": existing[pack.get("uuid")], "incoming": pack})
+            warnings.append("Doppelte UUID erkannt: %s. Möglicherweise Update desselben Packs; bitte bewusst ersetzen." % pack.get("uuid"))
+            risk = risk_level(risk, "red")
+        if pack.get("dependencies"):
+            risk = risk_level(risk, "yellow")
+        if pack.get("type") == "behavior":
+            risk = risk_level(risk, "red")
+    if classification["kind"] in ("world", "template"):
+        changes.append("%s als neues Ziel importieren; bestehende Ziele werden nicht überschrieben." % classification["kind"])
+        risk = risk_level(risk, "yellow")
+    free = disk_usage_metrics().get("free") or 0
+    size = os.path.getsize(archive_path)
+    if free and free < size * 2:
+        warnings.append("Wenig freier Speicher: Import benötigt grob mindestens die doppelte Downloadgröße.")
+        risk = risk_level(risk, "red")
+    return {"ok": True, "kind": "import", "risk": risk, "summary": "Importplan für %s" % (filename or quarantine_id), "changes": changes, "warnings": warnings, "backup_plan": backup_plan or ["Rollback/Cleanup bei Fehler", "Sicherung vor Aktivierung von World-Pack-Dateien"], "requires_confirmation": risk in ("yellow", "red"), "classification": classification, "duplicate_uuids": duplicate_uuids, "source": {"filename": filename or quarantine_id, "quarantine_id": safe_download_name(quarantine_id, "winomc-import"), "size": size}}
+
+
+def build_import_plan(source):
+    return build_import_plan_from_quarantine(source.get("quarantine_id", ""), source.get("filename"), source.get("extension"))
+
+
+
+
+def install_import_url(url, activate=False, confirm=False):
+    return manual_url_import_disabled_response()
+
+
+def addon_history_path():
+    base = makedirs_internal(os.path.dirname(ADDON_HISTORY_FILE), os.path.dirname(ADDON_HISTORY_FILE), exist_ok=True)
+    return assert_safe_internal_path(base, ADDON_HISTORY_FILE, require_exists=False)
+
+
+def read_addon_history():
+    try:
+        path = addon_history_path()
+        if not os.path.exists(path):
+            return []
+        with open_safe_internal(os.path.dirname(path), path, "r", encoding="utf-8", errors="replace") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, list) else []
+    except Exception as exc:
+        log_warning("Add-on-History konnte nicht gelesen werden: %s" % exc)
+        return []
+
+
+def append_addon_history(entry):
+    history = read_addon_history()
+    entry = dict(entry or {})
+    entry["installed_at"] = time.strftime("%Y-%m-%d_%H-%M-%S")
+    history.insert(0, entry)
+    path = addon_history_path()
+    with open_safe_internal(os.path.dirname(path), path, "w", encoding="utf-8") as handle:
+        json.dump(history[:200], handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+
+
+def version_tuple(value):
+    if isinstance(value, list):
+        return tuple(int(x) for x in value if str(x).isdigit())
+    return tuple(int(x) for x in re.findall(r"\d+", str(value or "")))
+
+
+def addon_item_id(prefix, value):
+    return "%s:%s" % (prefix, safe_download_name(value, "item"))
+
+
+def resolve_addon_item(item_id):
+    item_id = str(item_id or "")
+    if ":" not in item_id:
+        raise ValueError("item_id fehlt oder ist ungültig.")
+    prefix, raw = item_id.split(":", 1)
+    safe_id = safe_download_name(raw, "item")
+    if prefix == "import":
+        path = assert_safe_path("import", os.path.join(IMPORT_DIR, safe_id), require_exists=True)
+        return {"prefix": prefix, "id": item_id, "safe_id": safe_id, "root_key": "import", "path": path, "filename": safe_id}
+    if prefix in ("installed", "active"):
+        for item in addon_catalog_items(include_import=False):
+            if item.get("uuid") == raw or item.get("item_id") == item_id:
+                return item
+    if prefix == "world":
+        path = assert_safe_path("worlds", os.path.join(WORLDS_DIR, safe_id), require_exists=True)
+        return {"prefix": prefix, "id": item_id, "safe_id": safe_id, "root_key": "worlds", "path": path, "filename": safe_id}
+    if prefix == "template":
+        path = assert_safe_path("world_templates", os.path.join(WORLD_TEMPLATES_DIR, safe_id), require_exists=True)
+        return {"prefix": prefix, "id": item_id, "safe_id": safe_id, "root_key": "world_templates", "path": path, "filename": safe_id}
+    raise ValueError("Unbekannte item_id: %s" % item_id)
+
+
+def installed_uuid_status():
+    installed = {}
+    active = {"resource": {e.get("pack_id") for e in read_world_pack_entries("resource")}, "behavior": {e.get("pack_id") for e in read_world_pack_entries("behavior")}}
+    for pack in scan_packs(RESOURCE_PACKS_DIR, "resource") + scan_packs(BEHAVIOR_PACKS_DIR, "behavior"):
+        uuid = pack.get("uuid")
+        if uuid:
+            installed[uuid] = {"installed": True, "active": uuid in active.get(pack.get("type"), set()), "installed_version": pack.get("version"), "pack": pack}
+    return installed
+
+
+def import_catalog_item(filename):
+    path = assert_safe_path("import", os.path.join(IMPORT_DIR, safe_download_name(filename, "import")), require_exists=True)
+    stat_info = stat_root("import", path)
+    ext = file_extension(filename)
+    item = {"item_id": addon_item_id("import", filename), "name": filename, "filename": filename, "type": "unsupported", "source": "Importordner", "status": "Import-Eingang", "risk": "red", "size": stat_info.st_size, "size_label": human_bytes(stat_info.st_size), "detected_at": int(stat_info.st_mtime), "manifest_status": "not_checked", "installed": False, "active": False, "local_update_available": False, "duplicate_uuid": False, "warnings": [], "issues": []}
+    if ext in REJECTED_IMPORT_EXTENSIONS:
+        item["issues"].append("Nicht unterstützt. WinoMC unterstützt Minecraft Bedrock Packs, keine Java-Mods oder ausführbaren Dateien.")
+        return item
+    if ext not in SUPPORTED_IMPORT_EXTENSIONS:
+        item["issues"].append("Dateityp wird nicht unterstützt.")
+        return item
+    try:
+        classification = classify_local_bedrock_archive("import", path, ext)
+        item.update({"type": classification.get("kind", ext.lstrip(".")), "risk": classification.get("risk", "yellow"), "manifest_status": "ok", "classification": classification, "warnings": classification.get("warnings", [])})
+        packs = classification.get("packs", [])
+        if packs:
+            first = packs[0]
+            item.update({"name": first.get("name") or filename, "uuid": first.get("uuid"), "version": ".".join(map(str, first.get("version", []))), "detected_type": first.get("type")})
+            installed = installed_uuid_status().get(first.get("uuid"), {})
+            item["installed"] = bool(installed.get("installed"))
+            item["active"] = bool(installed.get("active"))
+            item["installed_version"] = installed.get("installed_version")
+            item["duplicate_uuid"] = item["installed"]
+            iv = version_tuple(item.get("version")); xv = version_tuple(item.get("installed_version"))
+            if item["installed"] and iv and xv:
+                if iv > xv:
+                    item["local_update_available"] = True; item["update_status"] = "Lokales Update verfügbar"
+                elif iv == xv:
+                    item["update_status"] = "Bereits installiert"
+                else:
+                    item["update_status"] = "Ältere Version"
+            elif item["installed"]:
+                item["update_status"] = "Version unklar"
+        return item
+    except Exception as exc:
+        item["manifest_status"] = "error"
+        item["issues"].append(str(exc))
+        return item
+
+
+def addon_catalog_items(include_import=True):
+    items = []
+    if include_import and os.path.isdir(IMPORT_DIR):
+        for name in sorted(os.listdir(IMPORT_DIR)):
+            full = os.path.join(IMPORT_DIR, name)
+            if os.path.isfile(full):
+                items.append(import_catalog_item(name))
+    for pack in scan_packs(RESOURCE_PACKS_DIR, "resource") + scan_packs(BEHAVIOR_PACKS_DIR, "behavior"):
+        uuid = pack.get("uuid") or pack.get("path")
+        active = bool(pack.get("uuid") in {e.get("pack_id") for e in read_world_pack_entries(pack.get("type"))}) if pack.get("uuid") else False
+        items.append({"item_id": addon_item_id("active" if active else "installed", uuid), "name": pack.get("name"), "filename": pack.get("path"), "type": pack.get("type"), "source": "Aktiv" if active else "Installiert", "status": "Aktiv" if active else "Installiert", "uuid": pack.get("uuid"), "version": pack.get("version"), "risk": "green", "manifest_status": pack.get("status"), "installed": True, "active": active, "local_update_available": False, "duplicate_uuid": False, "warnings": [] if pack.get("status") == "OK" else [pack.get("description", "Warnung")], "issues": [] if pack.get("status") == "OK" else [pack.get("description", "Warnung")]})
+    return items
+
+
+def addon_counts(items):
+    return {"inbox": sum(1 for i in items if i.get("source") == "Importordner"), "installed": sum(1 for i in items if i.get("installed")), "active": sum(1 for i in items if i.get("active")), "updates": sum(1 for i in items if i.get("local_update_available")), "issues": sum(1 for i in items if i.get("issues")), "resource": sum(1 for i in items if i.get("type") == "resource"), "behavior": sum(1 for i in items if i.get("type") == "behavior"), "worlds": sum(1 for i in items if i.get("type") == "world"), "templates": sum(1 for i in items if i.get("type") == "template")}
+
+
+def addons_overview_payload():
+    items = addon_catalog_items()
+    return {"ok": True, "counts": addon_counts(items), "message": "User brings the file. WinoMC makes it safe and simple."}
+
+
+def addons_catalog_payload(filters=None):
+    filters = filters or {}
+    items = addon_catalog_items()
+    q = str(filters.get("q", [""])[0] if isinstance(filters.get("q"), list) else filters.get("q", "")).lower()
+    type_filter = str(filters.get("type", [""])[0] if isinstance(filters.get("type"), list) else filters.get("type", "")).lower()
+    risk_filter = str(filters.get("risk", [""])[0] if isinstance(filters.get("risk"), list) else filters.get("risk", "")).lower()
+    def keep(item):
+        if q and q not in json.dumps(item, ensure_ascii=False).lower(): return False
+        if type_filter and item.get("type") != type_filter: return False
+        if risk_filter and item.get("risk") != risk_filter: return False
+        for flag in ("updates", "active", "installed", "issues"):
+            val = filters.get(flag, [""])[0] if isinstance(filters.get(flag), list) else filters.get(flag, "")
+            if str(val).lower() in ("1", "true", "yes") and not (item.get("local_update_available") if flag == "updates" else item.get(flag)):
+                return False
+        return True
+    filtered = [item for item in items if keep(item)]
+    return {"ok": True, "items": filtered, "counts": addon_counts(items), "filters": filters}
+
+
+def addons_item_payload(item_id):
+    for item in addon_catalog_items():
+        if item.get("item_id") == item_id:
+            return {"ok": True, "item": item}
+    raise FileNotFoundError("Add-on Manager Eintrag wurde nicht gefunden.")
+
+
+def build_addon_plan(item_id, action="install", activate=False):
+    item = addons_item_payload(item_id)["item"]
+    risk = item.get("risk", "yellow")
+    changes = []
+    warnings = list(item.get("warnings") or item.get("issues") or [])
+    if action in ("install", "update"):
+        changes.append("Lokale Importdatei wird analysiert und in den passenden WinoMC-Ordner installiert.")
+        if item.get("duplicate_uuid"):
+            risk = risk_level(risk, "yellow" if item.get("local_update_available") else "red")
+            warnings.append("UUID ist bereits installiert; kein stilles Ersetzen.")
+    if activate or action == "activate":
+        risk = risk_level(risk, "yellow")
+        changes.append("World-Pack-Datei wird nach Backup aktualisiert.")
+    if item.get("type") == "behavior" or (item.get("classification", {}).get("kind") == "mcaddon" and any(p.get("type") == "behavior" for p in item.get("classification", {}).get("packs", []))):
+        risk = risk_level(risk, "red")
+    return {"ok": True, "kind": "addon", "item_id": item_id, "action": action, "risk": risk, "summary": "Add-on Manager Plan für %s" % item.get("name"), "changes": changes, "warnings": warnings, "backup_plan": ["Sicherung vor Änderungen", "Rollback/Cleanup bei Fehler"], "requires_confirmation": risk in ("yellow", "red"), "item": item}
+
+
+def install_local_import_item(item, activate=False):
+    path = resolve_addon_item(item["item_id"])["path"]
+    classification = item.get("classification") or classify_local_bedrock_archive("import", path, file_extension(item.get("filename")))
+    installed = []
+    created = []
+    try:
+        if classification["kind"] in ("world", "template"):
+            target_root = "world_templates" if classification["kind"] == "template" else "worlds"
+            base_name = safe_download_name(os.path.splitext(item["filename"])[0], classification["kind"])
+            dest_base, _ = resolve_safe_path(target_root, "/")
+            dest = assert_safe_path(target_root, os.path.join(dest_base, base_name))
+            if path_exists_root(target_root, dest): raise FileExistsError("Ziel existiert bereits; kein stilles Überschreiben.")
+            makedirs_root(target_root, dest, exist_ok=False); created.append((target_root, dest))
+            with zipfile.ZipFile(path, "r") as archive:
+                for member in archive.infolist():
+                    raw = str(member.filename or "").replace("\\", "/")
+                    if not raw or raw.startswith("/") or raw.startswith("../") or "/../" in raw or zip_member_is_symlink(member): raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
+                    target = assert_safe_path(target_root, os.path.join(dest, posixpath.normpath(raw)))
+                    if member.is_dir(): makedirs_root(target_root, target, exist_ok=True); continue
+                    makedirs_root(target_root, os.path.dirname(target), exist_ok=True)
+                    with archive.open(member, "r") as src, open_safe(target_root, target, "wb") as out: shutil.copyfileobj(src, out, length=1024*1024)
+            installed.append({"type": classification["kind"], "name": base_name, "active": False})
+        else:
+            with zipfile.ZipFile(path, "r") as archive:
+                for pack in classification["packs"]:
+                    root_key, base_dir = pack_base_dir(pack["type"])
+                    pack_name = safe_download_name(pack.get("name"), pack["type"] + "-pack")
+                    dest = assert_safe_path(root_key, os.path.join(base_dir, pack_name))
+                    if path_exists_root(root_key, dest): raise FileExistsError("Pack-Ziel existiert bereits: %s" % pack_name)
+                    prefix = posixpath.dirname(pack["manifest_path"])
+                    makedirs_root(root_key, dest, exist_ok=False); created.append((root_key, dest))
+                    for member in archive.infolist():
+                        raw = str(member.filename or "").replace("\\", "/")
+                        if prefix and not (raw == prefix or raw.startswith(prefix + "/")): continue
+                        rel = posixpath.relpath(raw, prefix) if prefix else raw
+                        if rel in (".", "") or raw.lower().startswith("__macosx/"): continue
+                        if rel.startswith("../") or rel.startswith("/") or "/../" in rel or zip_member_is_symlink(member): raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
+                        target = assert_safe_path(root_key, os.path.join(dest, rel))
+                        if member.is_dir(): makedirs_root(root_key, target, exist_ok=True); continue
+                        makedirs_root(root_key, os.path.dirname(target), exist_ok=True)
+                        with archive.open(member, "r") as src, open_safe(root_key, target, "wb") as out: shutil.copyfileobj(src, out, length=1024*1024)
+                    active = False
+                    if activate:
+                        activate_pack(pack["type"], "/" + pack_name); active = True
+                    installed.append({"type": pack["type"], "name": pack_name, "uuid": pack.get("uuid"), "active": active})
+        append_addon_history({"item_id": item["item_id"], "source_filename": item.get("filename"), "action": "install", "detected_name": item.get("name"), "detected_uuid": item.get("uuid"), "detected_version": item.get("version"), "detected_type": item.get("type"), "activated": activate, "result": "ok", "warnings": item.get("warnings", [])})
+        return {"ok": True, "installed": installed, "message": "Lokaler Import wurde installiert."}
+    except Exception:
+        for root_key, dest in reversed(created):
+            try:
+                if path_is_dir_root(root_key, dest): shutil.rmtree(dest)
+            except Exception as cleanup_exc: log_warning("Add-on Manager Cleanup fehlgeschlagen: %s" % cleanup_exc)
+        raise
+
+
+def apply_addon_action(item_id, action="install", activate=False, confirm=False):
+    action = str(action or "install")
+    plan = build_addon_plan(item_id, action, activate)
+    assert_plan_confirmed(plan, confirm, "expert" if plan.get("risk") == "red" else "safe")
+    item = plan["item"]
+    if action in ("install", "update"):
+        result = install_local_import_item(item, activate)
+        result["plan"] = plan
+        return result
+    if action == "activate":
+        if not item.get("uuid") or item.get("source") == "Importordner": raise ValueError("Aktivieren erfordert ein installiertes Pack.")
+        pack = resolve_addon_item(item_id)
+        result = activate_pack(pack.get("type", item.get("type")), pack.get("path", item.get("filename")))
+        append_addon_history({"item_id": item_id, "action": "activate", "detected_uuid": item.get("uuid"), "detected_type": item.get("type"), "activated": True, "result": "ok", "warnings": item.get("warnings", [])})
+        result["plan"] = plan
+        return result
+    if action == "remove_import":
+        resolved = resolve_addon_item(item_id)
+        remove_safe("import", resolved["path"])
+        return {"ok": True, "plan": plan, "message": "Importdatei wurde entfernt."}
+    raise ValueError("Unbekannte Add-on Manager Aktion: %s" % action)
+
 def status_payload():
-    env_keys = ["SERVER_NAME", "LEVEL_NAME", "VERSION", "BDS_AUTO_UPDATE", "SERVER_PORT", "SERVER_PORT_V6", "ENABLE_LAN_VISIBILITY", "ENABLE_BDS_V6BIND_FIX", "GAMEMODE", "DIFFICULTY", "ALLOW_CHEATS", "ALLOW_LIST", "MAX_PLAYERS", "TEXTUREPACK_REQUIRED", "PACKAGE_BACKUP_KEEP"]
+    env_keys = ["SERVER_NAME", "LEVEL_NAME", "VERSION", "BDS_AUTO_UPDATE", "SERVER_PORT", "SERVER_PORT_V6", "ENABLE_LAN_VISIBILITY", "ENABLE_BDS_V6BIND_FIX", "GAMEMODE", "DIFFICULTY", "ALLOW_CHEATS", "ALLOW_LIST", "ONLINE_MODE", "MAX_PLAYERS", "TEXTUREPACK_REQUIRED", "PACKAGE_BACKUP_KEEP"]
     env = {key: os.environ.get(key, "") for key in env_keys}
     metrics = {
         "players": player_metrics_from_log(env.get("MAX_PLAYERS", "")),
@@ -9935,7 +11324,7 @@ def status_payload():
         "loadavg": loadavg_metrics(),
         "log_size": human_bytes(runtime_getsize(runtime_log_path())) if runtime_path_exists(runtime_log_path()) else "-",
     }
-    return {"ok": True, "fifo_exists": runtime_path_exists(runtime_fifo_path()), "log_exists": runtime_path_exists(runtime_log_path()), "env": env, "roots": list_file_roots(), "metrics": metrics}
+    backups = list_backups(); return {"ok": True, "winomc_version": WINOMC_VERSION, "fifo_exists": runtime_path_exists(runtime_fifo_path()), "log_exists": runtime_path_exists(runtime_log_path()), "env": env, "roots": list_file_roots(), "metrics": metrics, "backup": {"latest": backups[0] if backups else None, "count": len(backups)}, "web_protection": read_web_protection_state(), "health": {"overall": diagnostics_payload().get("overall", "Nicht verfügbar")}, "world_safety": analyze_world_safety()}
 
 def safe_header_value(value, fallback="application/octet-stream"):
     value = str(value or fallback)
@@ -9955,7 +11344,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCConsole/1.6.14.22"
+    server_version = "WinoMCConsole/2.0.0"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
@@ -9972,14 +11361,16 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def _web_protection_active(self):
-        cookie_header = self.headers.get("Cookie", "")
-        cookies = {}
-        for part in cookie_header.split(";"):
-            if "=" not in part:
-                continue
-            key, value = part.split("=", 1)
-            cookies[key.strip()] = value.strip()
-        return cookies.get("winomc_web_protection") == "1"
+        # Server-persistenter Schutzstatus ist die Quelle der Wahrheit.
+        # Der alte Cookie bleibt nur UI-Komfort und darf direkte API-Aufrufe nicht allein steuern.
+        return bool(read_web_protection_state().get("enabled", False))
+
+    def require_web_write_allowed(self, action_name):
+        if self._web_protection_active():
+            raise PermissionError("Diese Aktion ist durch den serverseitigen Webschutz gesperrt. Bitte Webschutz in der Dateiansicht entsperren: %s." % str(action_name or "Aktion"))
+
+    def _read_json_payload(self, max_bytes=65536):
+        return json.loads(self._read_request_body(max_bytes=max_bytes) or "{}")
 
     def _send_json(self, status, payload):
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -10151,6 +11542,45 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith("/api/files/roots") or path == "/api/files/roots":
             self._send_json(200, {"ok": True, "roots": list_file_roots()})
             return
+        if path.endswith("/api/web-protection") or path == "/api/web-protection":
+            self._send_json(200, read_web_protection_state())
+            return
+        if path.endswith("/api/import/status") or path == "/api/import/status":
+            self._send_json(200, read_import_status())
+            return
+        if path.endswith("/api/backups") or path == "/api/backups":
+            self._send_json(200, {"ok": True, "backups": list_backups(), "keep": BACKUP_KEEP})
+            return
+        if path.endswith("/api/diagnostics") or path == "/api/diagnostics":
+            self._send_json(200, diagnostics_payload())
+            return
+        if path.endswith("/api/packs") or path == "/api/packs":
+            self._send_json(200, packs_payload())
+            return
+        if path.endswith("/api/players") or path == "/api/players":
+            self._send_json(200, players_payload())
+            return
+        if path.endswith("/api/import-export") or path == "/api/import-export":
+            self._send_json(200, import_export_payload())
+            return
+        if path.endswith("/api/update-guard") or path == "/api/update-guard":
+            self._send_json(200, update_guard_payload())
+            return
+        if path.endswith("/api/profiles") or path == "/api/profiles":
+            self._send_json(200, profiles_payload())
+            return
+        if path.endswith("/api/addons/overview") or path == "/api/addons/overview":
+            self._send_json(200, addons_overview_payload())
+            return
+        if path.endswith("/api/addons/catalog") or path == "/api/addons/catalog":
+            self._send_json(200, addons_catalog_payload(query))
+            return
+        if path.endswith("/api/addons/item") or path == "/api/addons/item":
+            try:
+                self._send_json(200, addons_item_payload(query.get("id", [""])[0]))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
         if path.endswith("/api/files/list") or path == "/api/files/list":
             try:
                 self._send_json(200, list_directory(query.get("root", ["config"])[0], query.get("path", ["/"])[0]))
@@ -10181,6 +11611,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/zip") or path == "/api/files/zip":
             try:
+                self.require_web_write_allowed("ZIP erstellen oder exportieren")
                 if self._web_protection_active():
                     raise PermissionError("ZIP-Download ist durch den Web-Schutz gesperrt. Bitte Web-Schutz entsperren.")
                 zip_info = create_zip_from_paths(query.get("root", ["config"])[0], [query.get("path", ["/"])[0]], save_to_export=False)
@@ -10206,8 +11637,137 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
+        if path.endswith("/api/web-protection") or path == "/api/web-protection":
+            try:
+                payload = self._read_json_payload()
+                self._send_json(200, set_web_protection_state(bool(payload.get("enabled", False)), "web-ui"))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/addons/scan") or path == "/api/addons/scan":
+            try:
+                self._send_json(200, addons_catalog_payload({}))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/addons/plan") or path == "/api/addons/plan":
+            try:
+                payload = self._read_json_payload()
+                self._send_json(200, build_addon_plan(str(payload.get("item_id", "")), str(payload.get("action", "install")), bool(payload.get("activate", False))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/addons/apply") or path == "/api/addons/apply":
+            try:
+                self.require_web_write_allowed("Add-on Manager Aktion ausführen")
+                payload = self._read_json_payload()
+                self._send_json(200, apply_addon_action(str(payload.get("item_id", "")), str(payload.get("action", "install")), bool(payload.get("activate", False)), bool(payload.get("confirm", False))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/diagnostics/repair") or path == "/api/diagnostics/repair":
+            try:
+                self.require_web_write_allowed("Diagnose-Reparatur")
+                payload = self._read_json_payload()
+                self._send_json(200, repair_diagnostics(str(payload.get("action", "")), bool(payload.get("confirm", False)), str(payload.get("mode", "safe"))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/import/url/check") or path == "/api/import/url/check":
+            try:
+                self.require_web_write_allowed("URL-Import prüfen")
+                payload = self._read_json_payload()
+                self._send_json(200, check_import_url(str(payload.get("url", ""))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/import/url/install") or path == "/api/import/url/install":
+            try:
+                self.require_web_write_allowed("URL-Import installieren")
+                payload = self._read_json_payload()
+                self._send_json(200, install_import_url(str(payload.get("url", "")), bool(payload.get("activate", False)), bool(payload.get("confirm", False))))
+            except Exception as exc:
+                write_import_status("error", str(exc))
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
+        if path.endswith("/api/backups/create") or path == "/api/backups/create":
+            try:
+                self.require_web_write_allowed("Backup erstellen")
+                payload = json.loads(self._read_request_body(max_bytes=65536) or "{}")
+                self._send_json(200, {"ok": True, "backup": create_framework_backup(str(payload.get("type", "complete")), str(payload.get("reason", "manual")))})
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
+        if path.endswith("/api/backups/restore/plan") or path == "/api/backups/restore/plan":
+            try:
+                self.require_web_write_allowed("Restore planen")
+                payload = self._read_json_payload()
+                self._send_json(200, build_restore_plan(str(payload.get("backup", "")), str(payload.get("mode", "complete"))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/backups/restore") or path == "/api/backups/restore":
+            try:
+                self.require_web_write_allowed("Backup wiederherstellen")
+                payload = self._read_json_payload()
+                self._send_json(200, restore_backup(str(payload.get("backup", "")), str(payload.get("mode", "complete")), bool(payload.get("restart", False)), bool(payload.get("confirm", False))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/backups/delete") or path == "/api/backups/delete":
+            try:
+                self.require_web_write_allowed("Backup löschen")
+                payload = self._read_json_payload()
+                self._send_json(200, delete_backup(str(payload.get("backup", ""))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/packs/activate") or path == "/api/packs/activate":
+            try:
+                self.require_web_write_allowed("Pack aktivieren")
+                payload = self._read_json_payload()
+                self._send_json(200, activate_pack(str(payload.get("type", "resource")), str(payload.get("path", ""))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/packs/deactivate") or path == "/api/packs/deactivate":
+            try:
+                self.require_web_write_allowed("Pack deaktivieren")
+                payload = self._read_json_payload()
+                self._send_json(200, deactivate_pack(str(payload.get("type", "resource")), str(payload.get("uuid", ""))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/players/save") or path == "/api/players/save":
+            try:
+                self.require_web_write_allowed("Spielerrechte speichern")
+                payload = self._read_json_payload(max_bytes=1024 * 1024)
+                self._send_json(200, save_players(payload.get("players", [])))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/updates/prepare") or path == "/api/updates/prepare":
+            try:
+                self.require_web_write_allowed("Update vorbereiten")
+                payload = self._read_json_payload()
+                self._send_json(200, prepare_update(payload))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/profiles/prepare") or path == "/api/profiles/prepare":
+            try:
+                self.require_web_write_allowed("Profil vorbereiten")
+                payload = self._read_json_payload()
+                self._send_json(200, prepare_profile(str(payload.get("profile", ""))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
         if path.endswith("/api/files/upload") or path == "/api/files/upload":
             try:
+                self.require_web_write_allowed("Datei hochladen")
                 query = parse_qs(parsed.query)
                 root_key = query.get("root", ["import"])[0]
                 dir_rel_path = query.get("path", ["/"])[0]
@@ -10222,6 +11782,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/upload-json") or path == "/api/files/upload-json":
             try:
+                self.require_web_write_allowed("Datei hochladen")
                 body = self._read_request_body(max_bytes=MAX_JSON_UPLOAD_BYTES * 2)
                 payload = json.loads(body or "{}")
                 root_key = str(payload.get("root", "import"))
@@ -10242,6 +11803,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/write") or path == "/api/files/write":
             try:
+                self.require_web_write_allowed("Datei speichern")
                 body = self._read_request_body(max_bytes=MAX_TEXT_FILE_BYTES + 65536)
                 payload = json.loads(body or "{}")
                 self._send_json(200, write_text_file(str(payload.get("root", "config")), str(payload.get("path", "/")), str(payload.get("content", ""))))
@@ -10250,6 +11812,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/zip") or path == "/api/files/zip":
             try:
+                self.require_web_write_allowed("ZIP erstellen oder exportieren")
                 body = self._read_request_body(max_bytes=65536)
                 payload = json.loads(body or "{}")
                 root_key = str(payload.get("root", "config"))
@@ -10268,6 +11831,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/unzip") or path == "/api/files/unzip":
             try:
+                self.require_web_write_allowed("Archiv entpacken")
                 body = self._read_request_body(max_bytes=65536)
                 payload = json.loads(body or "{}")
                 self._send_json(200, extract_zip_file(str(payload.get("root", "import")), str(payload.get("path", "/")), destination_rel_path=str(payload.get("destination", "/")), overwrite=bool(payload.get("overwrite", False))))
@@ -10276,6 +11840,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/delete") or path == "/api/files/delete":
             try:
+                self.require_web_write_allowed("Datei löschen")
                 body = self._read_request_body(max_bytes=65536)
                 payload = json.loads(body or "{}")
                 self._send_json(200, delete_or_trash_path(str(payload.get("root", "config")), str(payload.get("path", "/")), permanent=bool(payload.get("permanent", False))))
@@ -10284,6 +11849,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/move") or path == "/api/files/move":
             try:
+                self.require_web_write_allowed("Datei verschieben")
                 body = self._read_request_body(max_bytes=65536)
                 payload = json.loads(body or "{}")
                 self._send_json(200, move_path(str(payload.get("root", "config")), str(payload.get("source", "/")), str(payload.get("destination", "/")), overwrite=bool(payload.get("overwrite", False))))
@@ -10292,6 +11858,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/trash/restore") or path == "/api/files/trash/restore":
             try:
+                self.require_web_write_allowed("Papierkorb wiederherstellen")
                 body = self._read_request_body(max_bytes=65536)
                 payload = json.loads(body or "{}")
                 self._send_json(200, restore_from_trash(
@@ -10305,6 +11872,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/trash/settings") or path == "/api/files/trash/settings":
             try:
+                self.require_web_write_allowed("Papierkorb-Einstellung ändern")
                 body = self._read_request_body(max_bytes=65536)
                 payload = json.loads(body or "{}")
                 self._send_json(200, set_trash_retention_days(payload.get("retention_days", TRASH_RETENTION_DAYS)))
@@ -10313,12 +11881,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/trash/empty") or path == "/api/files/trash/empty":
             try:
+                self.require_web_write_allowed("Papierkorb leeren")
                 self._send_json(200, empty_trash())
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
         if path.endswith("/api/worlds/export-safe") or path == "/api/worlds/export-safe":
             try:
+                self.require_web_write_allowed("Welt exportieren")
                 body = self._read_request_body(max_bytes=65536)
                 payload = json.loads(body or "{}")
                 zip_info = create_safe_world_export(str(payload.get("path", "/world")), save_to_export=bool(payload.get("save_to_export", True)))

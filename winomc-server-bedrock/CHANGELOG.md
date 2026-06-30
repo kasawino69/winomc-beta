@@ -1,4 +1,48 @@
-## Changelog
+# Changelog
+
+### 2.0.0
+
+#### Added
+* Add-on Manager für lokale Dateien: Import-Eingang unter `/share/winomc/import`, Katalog, Suche/Filter, lokale Update-Erkennung, installierter/aktiver Status und Safety-Pläne für lokale Installationen.
+* freier URL-Download deaktiviert: WinoMC ist kein Internet-Downloader; Nutzer bringen die Datei, WinoMC macht Analyse, Katalog und Installation sicher.
+* Safety Planner für Reparatur, URL-Import und Restore: Risikoampel `green`/`yellow`/`red`, Welt-Schutzanalyse, Bestätigungspflicht, Quarantäne, Restore-Vorschau, Speicherplatzhinweise und Duplicate-UUID-Schutz.
+* RC-Nacharbeit: serverseitig persistenter Webschutz mit `/api/web-protection` und Statusdatei unter `/config/.winomc/web_protection.json`.
+* RC-Nacharbeit: Diagnose-Reparaturaktionen über `POST /api/diagnostics/repair` für Ordnerstruktur und sichere JSON-Reparaturen.
+* RC-Nacharbeit: URL-Import für direkte Bedrock-Pack/Add-on-Dateien mit sicherer HTTPS-/Privat-IP-Prüfung, Bedrock-Manifestvalidierung und Java-Mod-Ablehnung.
+* RC-Nacharbeit: Mobile Befehlshilfe als scrollbareres, touchfreundliches Panel mit kontrollierter Einfügen-Aktion.
+* RC-Nacharbeit: bessere Statusmeldungen für längere UI-Aktionen wie URL-Import und Reparaturen.
+* Serverseitig erzwungener Webschutz für gefährliche Datei-, Backup-, Pack-, Player-, Profile- und Update-Aktionen.
+* Sicherer Restore-Workflow mit `POST /api/backups/restore`, Safety-Backup vor Restore und Modi `config`, `world`, `complete`.
+* Backup-Löschung über `POST /api/backups/delete` mit Webschutz.
+* Pack-Aktivierung/-Deaktivierung über `POST /api/packs/activate` und `POST /api/packs/deactivate`; WinoMC schreibt valide World-Pack-Dateien mit `pack_id` und `version`.
+* Spielerrechte-Speicherung über `POST /api/players/save` für `allowlist.json` und `permissions.json` mit atomarem JSON-Schreiben und Sicherungskopie.
+* Update-Vorbereitungsworkflow über `POST /api/updates/prepare`: Backup, optionale Spielerwarnung und klarer Neustart-Hinweis statt unsicherem Live-Update.
+* Profil-Vorbereitung über `POST /api/profiles/prepare`; Add-on-Optionen werden nicht heimlich überschrieben.
+* UI-Aktionen für Backup/Restore, Pack-Aktivierung, Spielerrechte speichern, Update vorbereiten und Profile vorbereiten.
+* Erweiterte Validierung für Webschutz, erwartete Endpunkte und ehrliche Dokumentation.
+
+#### Changed
+* Dokumentation wurde korrigiert: vollständig funktionierende Workflows werden als solche beschrieben; Profil-Anwendung und Update bleiben bewusst vorbereitende Workflows.
+* Import/Export wird als sicher geführter Workflow beschrieben, ohne stilles Überschreiben oder nicht vorhandene Komplettimport-Automation zu versprechen.
+
+#### Fixed
+* Foundation-Stubs wurden zu echten Backend-Workflows erweitert.
+* Direkte POST-API-Aufrufe können Webschutz nicht mehr umgehen.
+* Pack- und Player-Änderungen schreiben JSON nicht direkt, sondern über zentrale atomare Helper mit Backup.
+
+#### Security
+* Neue zentrale Funktion `require_web_write_allowed(action_name)` schützt gefährliche Endpunkte.
+* Restore, Pack-Aktivierung und Player-Speicherung nutzen erlaubte Roots, Pfadvalidierung und Sicherungskopien.
+* URL-Import-Endpunkte bleiben kompatibel, öffnen aber keine Netzwerkverbindung mehr und verweisen auf Upload oder `/share/winomc/import`.
+* Auto-Reparaturen leeren aktive World-Pack-Dateien nicht automatisch und schützen Add-on-/Marketplace-Welten vor blindem Vanilla-Reset.
+* Restore prüft ZIP-Einträge gegen Path Traversal/ZIP Slip und schreibt nur unter `/config`.
+
+#### Migration
+* Keine Multi-Instanz-Migration. Bestehende Welten, Packs, Allowlist, Permissions und `server.properties` werden nicht verschoben oder gelöscht.
+* Neue Workflows sichern Dateien vor Änderungen und brechen bei ungültigen Eingaben ab.
+
+#### Notes
+* Keine Multi-Instanzen, Cluster, Proxies, Teleport-Features oder Gameplay-Eingriffe in 2.0.0.
 
 ### next
 
