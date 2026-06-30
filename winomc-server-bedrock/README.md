@@ -1,69 +1,62 @@
 # [BETA] WinoMC Bedrock Server 2.0.0
 
-WinoMC ist ein Home-Assistant-Add-on für **einen** offiziellen Minecraft Bedrock Dedicated Server. Version 2.0.0 macht daraus ein nutzerfreundliches Framework: starten, sichern, diagnostizieren, reparieren und verwalten – ohne JSON-, Linux- oder Container-Wissen.
-
-## Was WinoMC 2.0.0 bietet
-
-- Server starten, stoppen und neu starten
-- Live-Konsole mit Befehlseingabe
-- stabiles Webinterface für Desktop, klassische Ansicht und Mobile
-- Dateimanager mit Upload/Download, sofern Webschutz es erlaubt
-- Backup & Restore unter `/config/backups`
-- Diagnose & Reparaturhinweise
-- Health-Dashboard mit Spielern, RAM, Speicher, Ports, Backup-Status und Schutzstatus
-- Resource-Pack- und Behavior-Pack-Prüfung
-- Allowlist- und Rollenübersicht für Operator, Member und Visitor
-- Update-Schutz mit Backup-, Speicher- und Zielversionsprüfung
-- sichererer Import/Export für Welten, Packs und ZIP-Dateien
-- Erststart-Profile für Familienserver, Vanilla Survival, Kreativserver, Freunde und Tests
-
-## Bewusste Nicht-Ziele
-
-WinoMC 2.0.0 ist **kein** Multi-Instanz-, Cluster-, Proxy-, Teleport- oder Gameplay-Modifikationssystem. Es bleibt ein Framework um einen Bedrock Dedicated Server herum.
+WinoMC betreibt **einen** Minecraft Bedrock Dedicated Server in Home Assistant. Version 2.0.0 ist kein Cluster- oder Multi-Instanz-System, sondern ein sicheres und verständliches Framework für normale Endanwender.
 
 ## Schnellstart
 
-1. Repository in Home Assistant hinzufügen.
-2. Add-on `[BETA] WinoMC Bedrock Server` installieren.
-3. `VERSION` auf `LATEST` lassen oder eine konkrete BDS-Version eintragen.
-4. `SERVER_NAME`, `LEVEL_NAME`, `MAX_PLAYERS`, `ONLINE_MODE` und `ALLOW_LIST` prüfen.
-5. Add-on starten.
-6. Weboberfläche öffnen und im Erststart-Assistenten ein Profil als Orientierung wählen.
-7. Vor größeren Änderungen ein Backup erstellen.
+1. Add-on installieren.
+2. `VERSION` auf `LATEST` lassen oder eine konkrete Bedrock-Version eintragen.
+3. `SERVER_NAME`, `LEVEL_NAME`, `MAX_PLAYERS`, `ONLINE_MODE`, `ALLOW_LIST` und Ports prüfen.
+4. Add-on starten.
+5. Weboberfläche öffnen.
+6. Unter **Backups** ein Komplettbackup erstellen, bevor größere Änderungen erfolgen.
+
+## Weboberfläche
+
+Die Oberfläche enthält Desktop-, klassische und Mobile-Ansicht. Der Dateiexplorer gehört in den Menüpunkt **Dateien**. Die Live-Konsole bleibt erreichbar. Mobile verzichtet bewusst auf PC-Workbench-Logik.
 
 ## Backups und Restore
 
-WinoMC speichert Framework-Backups persistent in `/config/backups`. Unterstützt werden Welt-, Config- und Komplettbackups. Metadaten enthalten Name, Datum, BDS-Version, Weltname, Backup-Typ, Größe und Status. Die Aufbewahrung wird über `WINOMC_BACKUP_KEEP` gesteuert.
+WinoMC kann Welt-, Config-, Safety- und Komplettbackups unter `/config/backups` erstellen. Jedes Backup erhält Metadaten mit Name, Datum, Welt, Typ, Version, Größe und Status. Die Anzahl behaltener Backups wird über `WINOMC_BACKUP_KEEP` gesteuert.
 
-Vor Restore, Import oder Update soll ein Sicherheitsbackup erstellt werden. Restore darf bestehende Daten nicht still überschreiben.
+Restore ist als sicherer Workflow umgesetzt: Backup auswählen, Modus `config`, `world` oder `complete` wählen, Safety-Backup vor Restore erstellen, ZIP-Pfade validieren und nur erlaubte Ziele unter `/config` wiederherstellen. Nach Restore sollte der Serverzustand in **Diagnose** und **Health** geprüft werden.
 
 ## Diagnose
 
-Die Diagnose prüft Serverordner, Weltordner, Schreibrechte, Speicherplatz, `server.properties`, Ports, `allowlist.json`, `permissions.json`, Pack-Ordner, Konsole, Logs und Backup-Status. Ergebnisse werden als OK, Warnung oder reparierbar angezeigt.
+Die Diagnose prüft Ordner, Weltpfad, Schreibrechte, Speicherplatz, `server.properties`, Ports, `allowlist.json`, `permissions.json`, Pack-Ordner, Konsole, Logs und Backup-Status. Fehler werden verständlich angezeigt.
 
 ## Packs
 
-Resource Packs und Behavior Packs werden über `manifest.json` erkannt. WinoMC zeigt Name, Typ, UUID, Version, Beschreibung und Fehler wie fehlendes Manifest oder doppelte UUIDs verständlich an.
+Resource Packs und Behavior Packs werden über `manifest.json` erkannt. WinoMC zeigt Name, UUID, Version, Status und aktive Einträge an. Packs können für die aktuelle Welt aktiviert oder deaktiviert werden; dabei schreibt WinoMC valide `world_resource_packs.json` bzw. `world_behavior_packs.json` und erstellt vorher eine Sicherungskopie.
 
-## Allowlist und Rechte
+## Spielerrechte / Allowlist
 
-Die UI erklärt Spielername, XUID, Allowlist-Status und Rolle. Warnungen helfen bei leerer Allowlist, fehlender XUID, Operator ohne Allowlist oder deaktiviertem Online Mode. Bestehende Optionen wie `ALLOW_LIST_USERS`, `OPS`, `MEMBERS` und `VISITORS` bleiben kompatibel.
+WinoMC kann `allowlist.json` und `permissions.json` über eine UI/API speichern. Unterstützt werden Name, XUID, Allowlist-Status und Rollen `operator`, `member`, `visitor`. Vor Änderungen werden Sicherungskopien erzeugt. WinoMC warnt bei fehlender/ungültiger XUID, doppelten Einträgen, Operator ohne Allowlist, leerer aktiver Allowlist und deaktiviertem Online Mode.
 
 ## Import / Export
 
-Importe und Exporte nutzen erlaubte Verzeichnisse unter `/share/winomc/import`, `/share/winomc/export` und `/config`. ZIP-Dateien werden gegen ZIP Slip geprüft. Bestehende Ziele werden nicht still überschrieben.
+Der Dateimanager und die Import-/Export-Seite zeigen `/share/winomc/import` und `/share/winomc/export`. ZIP-Erstellung, ZIP-Entpacken und sicherer Welt-Export respektieren Webschutz und Pfadprüfungen. Bestehende Ziele werden nicht still überschrieben; Nutzer müssen Überschreiben bewusst erlauben oder eine Kopie wählen.
+
+## Update-Schutz
+
+WinoMC führt keinen riskanten Live-Update-Fake aus. Der Workflow **Update vorbereiten** erstellt ein Komplettbackup, kann Spieler per Konsole warnen, schreibt einen Update-Vorbereitungsstatus und fordert danach klar zum Add-on-Neustart auf. Beim Neustart greifen `BDS_AUTO_UPDATE`, `VERSION` oder `LATEST` wie bisher.
+
+## Erststart-Profile
+
+Profile wie Familienserver, Vanilla Survival, Kreativserver, Freunde und Test werden angezeigt und können vorbereitet werden. Da Home-Assistant-Add-on-Optionen nicht zuverlässig direkt aus der Webconsole überschrieben werden, speichert WinoMC eine Profil-Empfehlung und zeigt Werte zum Prüfen/Übernehmen an. Es behauptet nicht, Optionen automatisch angewendet zu haben.
 
 ## Webschutz
 
-Webschutz darf nicht nur UI-Buttons verstecken: Backend-Endpunkte müssen direkte Aufrufe ebenfalls blockieren, wenn Schreib-, Download-, Export-, Import-, Lösch- oder Restore-Aktionen gesperrt sind.
+Webschutz blockiert gefährliche Backend-Aktionen serverseitig: Upload, Schreiben, ZIP/Export, Entpacken, Löschen, Verschieben, Restore, Pack-Aktivierung, Spielerrechte speichern, Profil vorbereiten und Update vorbereiten. Direkte API-Aufrufe dürfen den Schutz nicht umgehen.
 
 ## Troubleshooting
 
-- Server nicht sichtbar: UDP-Port 19132 prüfen und LAN Visibility aktivieren.
-- Keine Spieleranzeige: in der Konsole `list` ausführen, damit aktuelle Werte im Log stehen.
-- Pack defekt: `manifest.json`, UUID und Version prüfen.
-- Restore unsicher: erst manuelles Komplettbackup erstellen und Server stoppen.
+- Server nicht sichtbar: UDP-Port 19132/19133, Firewall und LAN Visibility prüfen.
+- Spielerzahl unbekannt: in der Konsole `list` ausführen.
+- Pack wird nicht aktiv: `manifest.json` muss UUID und Version enthalten.
+- Restore unsicher: erst Diagnose lesen, Server stoppen und Safety-Backup prüfen.
+- Update nicht gestartet: Add-on nach vorbereiteten Update bewusst neu starten.
 
 ## Credits und Lizenz
 
-WinoMC integriert den offiziellen Bedrock Dedicated Server in Home Assistant. Minecraft/BDS gehören Mojang/Microsoft. Siehe Repository-Lizenz.
+Minecraft/BDS gehören Mojang/Microsoft. WinoMC verändert keine Spielmechaniken und liefert keine eigenen Gameplay-Add-ons. Lizenz siehe Repository.

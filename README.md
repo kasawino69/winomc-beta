@@ -1,37 +1,60 @@
 # [BETA] WinoMC 2.0.0 – Bedrock Server Framework für Home Assistant
 
-WinoMC betreibt **einen** Minecraft Bedrock Dedicated Server in Home Assistant und macht Verwaltung, Sicherheit und Diagnose für normale Endanwender verständlich. WinoMC 2.0.0 setzt bewusst **keine Multi-Instanzen, Cluster, Proxies oder Gameplay-Add-ons** um.
+WinoMC ist ein **Beta-Add-on-Repository** für Home Assistant. Im Mittelpunkt steht ein einzelner Minecraft Bedrock Dedicated Server, der einfach, sicher und verständlich verwaltet werden soll.
 
 > Keep it simple, with innovative UX and modern design.
 
-## Fokus
+## Was WinoMC ist
 
-- ein Server, stabil und gut verwaltbar
-- moderne Weboberfläche für Desktop, klassische Ansicht und Mobile
-- Live-Konsole, Dateimanager, Import/Export und Pack-Verwaltung
-- Backup & Restore als Kernworkflow unter `/config/backups`
-- Diagnose, Reparaturhinweise, Health-Dashboard und Update-Schutz
-- Allowlist- und Rechteverwaltung ohne JSON-Pflichtwissen
-- Home-Assistant-nahes Bedienkonzept statt einschüchterndem Admin-Panel
+WinoMC bringt den offiziellen Bedrock Dedicated Server in Home Assistant und ergänzt ihn um eine Weboberfläche für Alltag, Diagnose und sichere Dateiabläufe. Die Zielgruppe sind private Server, Familien, Freundesgruppen und Vanilla-nahe Welten – nicht professionelle Cluster-Setups.
 
-## Sicherheit und Einfachheit
+## Installation
 
-Dateioperationen bleiben auf erlaubte WinoMC-Verzeichnisse begrenzt. Upload, Download, Import, Export, Backup, Restore und ZIP-Entpacken nutzen zentrale Pfadprüfung, blockieren Path Traversal und schützen gegen ZIP Slip. Kritische Aktionen sollen nachvollziehbar sein und vor Überschreiben ein Backup ermöglichen.
+Repository in Home Assistant hinzufügen:
 
-## Architekturentscheidung 2.0.0
+```text
+https://github.com/kasawino69/winomc-beta
+```
 
-WinoMC 2.0.0 ist kein Multi-Instanz-System. Die Version stärkt die Foundation: Backups, Diagnose, Health, Updates, Packs, Rechte, Import/Export und Dokumentation für einen einzelnen Bedrock-Server.
+Dann im Add-on-Store installieren:
 
-## Add-ons
+```text
+[BETA] WinoMC Bedrock Server
+```
 
-- `winomc-server-bedrock`: Haupt-Add-on für den Bedrock Dedicated Server
-- `winomc-friend-broadcast`: ergänzendes Broadcast-/Automation-Add-on
-- `winomc-blueprints-proposal`: optionale Home-Assistant-Blueprints
+## Add-ons in diesem Repository
 
-## Hinweise
+- `winomc-server-bedrock`: Haupt-Add-on für einen Bedrock Dedicated Server.
+- `winomc-friend-broadcast`: ergänzendes Broadcast-/Automation-Add-on.
+- `winomc-blueprints-proposal`: optionale Home-Assistant-Blueprints.
 
-`amd64` bleibt die priorisierte Architektur. `aarch64` bleibt experimentell. Prüfe vor produktivem Einsatz die manuelle PR-Checkliste und erstelle ein vollständiges Backup deiner Welt.
+## WinoMC 2.0.0 Fokus
 
-## Lizenz
+- ein Server, keine Multi-Instanzen
+- Webkonsole mit Desktop-, klassischer und Mobile-Ansicht
+- sichere Dateioperationen mit Webschutz und Backend-Prüfung
+- Backup, Restore, Diagnose und Health-Übersicht
+- Pack-Aktivierung für Welt-Pack-Dateien
+- Allowlist-/Permissions-Verwaltung über UI/API
+- Update-Vorbereitung mit Backup statt riskanter Live-Fake-Automation
+- Erststart-Profile als vorbereitete Home-Assistant-Konfigurationsvorschläge
 
-Siehe `LICENSE`. Minecraft und Bedrock Dedicated Server gehören Mojang/Microsoft; WinoMC liefert keine eigenen Gameplay-Add-ons und verändert keine Spielmechaniken.
+## Weboberfläche
+
+Die Weboberfläche bietet Konsole, Dateimanager, Backups, Diagnose, Packs, Spielerrechte, Import/Export, Updates und Profile. Desktop, klassische Ansicht und Mobile bleiben getrennte Bedienkonzepte. Mobile zeigt keine PC-Workbench.
+
+## Sicherheit
+
+WinoMC begrenzt Dateioperationen auf erlaubte WinoMC-Verzeichnisse, prüft Pfade, blockiert Path Traversal und schützt ZIP-Entpacken vor ZIP Slip. Webschutz wird serverseitig für gefährliche Aktionen erzwungen, nicht nur über deaktivierte UI-Buttons.
+
+## Nicht-Ziele
+
+WinoMC 2.0.0 baut keine Multi-Instanzen, kein Cluster, keinen Proxy, keinen Teleport-Service und keine Gameplay-Modifikationen. WinoMC ist das Framework um den Server herum, nicht das Spiel selbst.
+
+## Support / Issues
+
+Bitte Fehler mit Add-on-Version, Architektur, kurzer Beschreibung, relevanter UI-Ansicht und anonymisierten Logs melden. Keine privaten Namen, Tokens, IP-Adressen oder personenbezogenen Daten veröffentlichen.
+
+## Credits und Lizenz
+
+Minecraft und Bedrock Dedicated Server gehören Mojang/Microsoft. WinoMC liefert keine eigenen Gameplay-Add-ons. Lizenz siehe `LICENSE`.
