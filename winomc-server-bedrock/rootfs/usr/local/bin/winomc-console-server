@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import base64
 import hashlib
+import ipaddress
 import json
 import mimetypes
 import os
@@ -11,11 +12,13 @@ import signal
 import stat
 import sys
 import tempfile
+import socket
 import time
 import zipfile
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse
+from urllib.request import Request, urlopen
 
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("WINOMC_CONSOLE_PORT", "8099"))
@@ -48,6 +51,9 @@ BACKUP_DIR = os.environ.get("WINOMC_BACKUP_DIR", os.path.join(DATA_DIR, "backups
 BACKUP_KEEP = int(os.environ.get("WINOMC_BACKUP_KEEP", os.environ.get("PACKAGE_BACKUP_KEEP", "5")))
 SERVER_DIR = os.environ.get("WINOMC_SERVER_DIR", DATA_DIR)
 SERVER_PROPERTIES_PATH = os.environ.get("WINOMC_SERVER_PROPERTIES", os.path.join(DATA_DIR, "server.properties"))
+WINOMC_STATE_DIR = os.environ.get("WINOMC_STATE_DIR", os.path.join(DATA_DIR, ".winomc"))
+WEB_PROTECTION_FILE = os.environ.get("WINOMC_WEB_PROTECTION_FILE", os.path.join(WINOMC_STATE_DIR, "web_protection.json"))
+IMPORT_STATUS_FILE = os.environ.get("WINOMC_IMPORT_STATUS_FILE", os.path.join(WINOMC_STATE_DIR, "import-status.json"))
 
 MAX_TEXT_FILE_BYTES = int(os.environ.get("WINOMC_FILE_EDITOR_MAX_BYTES", str(2 * 1024 * 1024)))
 MAX_UPLOAD_BYTES = int(os.environ.get("WINOMC_FILE_UPLOAD_MAX_BYTES", str(512 * 1024 * 1024)))
@@ -2798,6 +2804,38 @@ INDEX_HTML = r"""<!doctype html>
     .console-assistant.open { display: grid; }
     .console-assistant-title { color: var(--muted-2); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
     .command-suggestion-list { display: grid; gap: 6px; }
+    body.ux-mobile:not(.desktop-mode) #commandAssistant.winomc-mobile-assistant {
+      position: fixed !important;
+      left: 10px !important;
+      right: 10px !important;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 12px) !important;
+      max-height: min(46dvh, 360px) !important;
+      overflow: hidden !important;
+      z-index: 260 !important;
+      border-radius: 16px !important;
+      box-shadow: 0 18px 46px rgba(0,0,0,.45) !important;
+    }
+    body.ux-mobile:not(.desktop-mode) #commandAssistant.winomc-mobile-assistant .command-suggestion-list {
+      max-height: min(36dvh, 280px) !important;
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch !important;
+      overscroll-behavior: contain !important;
+      touch-action: pan-y !important;
+    }
+    body.ux-mobile:not(.desktop-mode) #commandAssistant .command-suggestion {
+      width: 100% !important;
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) auto !important;
+      gap: 8px !important;
+      text-align: left !important;
+    }
+    body.ux-mobile:not(.desktop-mode) #commandAssistant .command-suggestion code,
+    body.ux-mobile:not(.desktop-mode) #commandAssistant .command-suggestion small {
+      white-space: normal !important;
+      word-break: break-word !important;
+    }
+    .command-insert-button { min-height: 36px; align-self: center; }
+
     .command-suggestion {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -5379,6 +5417,24 @@ body.winomc-mobile .editor-panel.editor-open {
       if (currentEditorFile && currentEditorFile.root !== 'trash') setEditorPreviewMode(webWriteLocked, webWriteLocked ? 'Web-Schutz aktiv: Vorschau. Zum Speichern oben entsperren.' : '');
     }
 
+    async function syncWebProtectionFromServer() {
+      try {
+        const data = await fetchJson('/api/web-protection');
+        webWriteLocked = Boolean(data.enabled);
+        applyWebWriteLock();
+      } catch (err) {
+        appendLine('[Webschutz] Serverstatus konnte nicht geladen werden: ' + err.message, 'error');
+        applyWebWriteLock();
+      }
+    }
+
+    async function setWebProtectionOnServer(enabled) {
+      const data = await postJson('/api/web-protection', { enabled: Boolean(enabled) });
+      webWriteLocked = Boolean(data.enabled);
+      applyWebWriteLock();
+      return data;
+    }
+
     function ensureWriteAllowed(actionLabel = 'Diese Aktion') {
       if (!webWriteLocked) return true;
       alert(actionLabel + ' ist durch den Web-Schutz gesperrt.\n\nDas betrifft nur diese Weboberfläche. Der Minecraft Server selbst kann seine Dateien weiterhin schreiben.');
@@ -5448,7 +5504,7 @@ body.winomc-mobile .editor-panel.editor-open {
 
     async function loadStatus() { try { const data = await fetchJson('/api/status'); latestStatus = data; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v||'Nicht verfügbar'}; set('statPlayers', data.metrics?.players?.label); set('statMemory', data.metrics?.memory?.label); set('statDisk', data.metrics?.disk?.label); set('statWinoVersion', data.winomc_version || '2.0.0'); set('statHealth', 'Health: ' + (data.health?.overall || 'Nicht verfügbar')); set('statLastBackup', data.backup?.latest?.name || 'Kein Backup'); set('statProtection', 'Online: '+(data.env.ONLINE_MODE||'-')+' · Allowlist: '+(data.env.ALLOW_LIST||'-')); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
 
-    async function initFileManager() { if (filesInitialized) { await loadFileList(); return; } filesInitialized = true; try { setFilesStatus('Lade Bereiche...', 'warn'); const data = await fetchJson('/api/files/roots'); fileRootSelect.innerHTML = ''; data.roots.forEach(root => { const option = document.createElement('option'); option.value = root.key; option.textContent = root.label + (root.exists ? '' : ' (fehlt)'); option.disabled = !root.exists || !root.readable; fileRootSelect.appendChild(option); }); const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled); if (![...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) currentFileRoot = firstEnabled ? firstEnabled.value : 'config'; fileRootSelect.value = currentFileRoot; await loadTrashSettings(); applyWebWriteLock(); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
+    async function initFileManager() { if (filesInitialized) { await loadFileList(); return; } filesInitialized = true; try { setFilesStatus('Lade Bereiche...', 'warn'); const data = await fetchJson('/api/files/roots'); fileRootSelect.innerHTML = ''; data.roots.forEach(root => { const option = document.createElement('option'); option.value = root.key; option.textContent = root.label + (root.exists ? '' : ' (fehlt)'); option.disabled = !root.exists || !root.readable; fileRootSelect.appendChild(option); }); const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled); if (![...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) currentFileRoot = firstEnabled ? firstEnabled.value : 'config'; fileRootSelect.value = currentFileRoot; await loadTrashSettings(); await syncWebProtectionFromServer(); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
     async function loadFileList(path) { if (path !== undefined) currentFilePath = normalizeUiPath(path); currentFileRoot = fileRootSelect.value || currentFileRoot; try { setFilesStatus('Lade...', 'warn'); updatePathDisplay(); const data = await fetchJson('/api/files/list', { root: currentFileRoot, path: currentFilePath }); currentFilePath = data.path || '/'; fileParent.disabled = currentFilePath === '/'; updatePathDisplay(); renderFileEntries(data.entries || []); setFilesStatus('Bereit', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
     function updatePathDisplay() { const full = currentFileRoot + ':' + currentFilePath; fileCurrentPath.textContent = full; filePathInput.value = currentFilePath; fileBreadcrumb.innerHTML = ''; const rootButton = document.createElement('button'); rootButton.type = 'button'; rootButton.textContent = currentFileRoot + ':/'; rootButton.addEventListener('click', () => loadFileList('/')); fileBreadcrumb.appendChild(rootButton); let current = ''; currentFilePath.split('/').filter(Boolean).forEach(part => { current += '/' + part; const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = part; const target = current; btn.addEventListener('click', () => loadFileList(target)); fileBreadcrumb.appendChild(btn); }); }
     function renderFileEntries(entries) {
@@ -5828,7 +5884,7 @@ body.winomc-mobile .editor-panel.editor-open {
     if (fileOpenTrash) fileOpenTrash.addEventListener('click', () => openRoot('trash', '/'));
     if (fileOpenTrashExplorer) fileOpenTrashExplorer.addEventListener('click', () => openRoot('trash', '/'));
     if (fileEmptyTrash) { fileEmptyTrash.dataset.writeAction = 'true'; fileEmptyTrash.addEventListener('click', emptyTrash); }
-    if (fileWriteLockToggle) fileWriteLockToggle.addEventListener('click', () => { webWriteLocked = !webWriteLocked; applyWebWriteLock(); });
+    if (fileWriteLockToggle) fileWriteLockToggle.addEventListener('click', async () => { try { await setWebProtectionOnServer(!webWriteLocked); } catch (err) { alert(err.message); } });
     if (trashRetentionSelect) trashRetentionSelect.addEventListener('change', () => saveTrashSettings(trashRetentionSelect.value));
     fileParent.addEventListener('click', () => loadFileList(parentUiPath(currentFilePath)));
     if (fileZipCurrent) fileZipCurrent.dataset.downloadAction = 'true';
@@ -7072,6 +7128,7 @@ body.winomc-mobile .editor-panel.editor-open {
       const assistant = document.createElement('div');
       assistant.id = 'commandAssistant';
       assistant.className = 'console-assistant';
+      if (document.body.classList.contains('ux-mobile') && !document.body.classList.contains('desktop-mode')) assistant.classList.add('winomc-mobile-assistant');
       assistant.innerHTML = '<div class="console-assistant-title">Befehlshilfe</div><div class="command-suggestion-list" id="commandSuggestionList"></div>';
       document.body.appendChild(assistant);
       const list = assistant.querySelector('#commandSuggestionList');
@@ -7241,16 +7298,18 @@ body.winomc-mobile .editor-panel.editor-open {
           btn.type = 'button';
           btn.className = 'command-suggestion' + (item.template ? ' is-template' : '');
           btn.setAttribute('aria-label', 'Befehl übernehmen: ' + item.cmd);
-          btn.innerHTML = '<span><code>' + escapeHtml(item.cmd) + '</code><small>' + escapeHtml(item.title) + '</small></span><span class="badge">' + escapeHtml(item.group) + '</span>';
+          btn.innerHTML = '<span><code>' + escapeHtml(item.cmd) + '</code><small>' + escapeHtml(item.title) + '</small></span><button type="button" class="command-insert-button primary">Einfügen</button>';
+          let touchStartY = 0;
+          btn.addEventListener('touchstart', event => { touchStartY = event.touches?.[0]?.clientY || 0; }, { passive: true });
           const apply = event => {
             event.preventDefault();
             event.stopPropagation();
             fillCommandFromSuggestion(item.cmd);
             hide();
           };
-          btn.addEventListener('pointerdown', apply, { passive: false });
-          btn.addEventListener('touchend', apply, { passive: false });
-          btn.addEventListener('click', apply);
+          btn.querySelector('.command-insert-button')?.addEventListener('click', apply);
+          btn.addEventListener('click', event => { if (!event.target.closest('.command-insert-button')) apply(event); });
+          btn.addEventListener('touchend', event => { const endY = event.changedTouches?.[0]?.clientY || touchStartY; if (Math.abs(endY - touchStartY) > 10) return; if (!event.target.closest('.command-insert-button')) apply(event); }, { passive: false });
           list.appendChild(btn);
         });
         assistant.classList.add('open');
@@ -7359,17 +7418,19 @@ body.winomc-mobile .editor-panel.editor-open {
         target.innerHTML = (data.backups || []).map(b => '<tr><td>'+escapeHtml(b.name)+'</td><td>'+escapeHtml(b.type)+'</td><td>'+escapeHtml(b.created)+'</td><td>'+escapeHtml(b.world||'-')+'</td><td>'+escapeHtml(b.size_label||'-')+'</td><td><button data-backup-restore="'+escapeHtml(b.name)+'">Restore</button><button class="danger" data-backup-delete="'+escapeHtml(b.name)+'">Löschen</button></td></tr>').join('') || '<tr><td colspan="6">Noch kein Backup vorhanden.</td></tr>';
       } catch (err) { appendLine('[Backups] ' + err.message, 'error'); }
     }
-    async function loadDiagnostics2() { try { const data = await fetchJson('/api/diagnostics'); const s = document.getElementById('diagnosticsSummary'); if (s) s.textContent = 'Gesamtstatus: ' + data.overall + ' · ' + data.items.length + ' Prüfungen'; const l = document.getElementById('diagnosticsList'); if (l) l.innerHTML = data.items.map(i => frameworkCard(i.title, i.status, i.message, i.status)).join(''); } catch (err) { appendLine('[Diagnose] ' + err.message, 'error'); } }
+    async function loadDiagnostics2() { try { const data = await fetchJson('/api/diagnostics'); const s = document.getElementById('diagnosticsSummary'); if (s) s.innerHTML = 'Gesamtstatus: ' + escapeHtml(data.overall) + ' · ' + data.items.length + ' Prüfungen <button id="repairAllSafe2" type="button" class="primary">Sichere Reparaturen ausführen</button>'; const l = document.getElementById('diagnosticsList'); const repairMap = { 'allowlist.json':'repair_allowlist', 'permissions.json':'repair_permissions', 'Resource Packs':'ensure_directories', 'Behavior Packs':'ensure_directories', 'Backups':'ensure_directories' }; if (l) l.innerHTML = data.items.map(i => '<article class="tile"><div class="tile-title">'+escapeHtml(i.title)+'</div><div class="stat-value">'+escapeHtml(i.status)+'</div><div class="tile-desc">'+escapeHtml(i.message)+'</div>' + (repairMap[i.title] ? '<button data-diagnostics-repair="'+repairMap[i.title]+'">Reparieren</button>' : '') + '</article>').join(''); } catch (err) { appendLine('[Diagnose] ' + err.message, 'error'); } }
     async function loadPacks2() { try { const data = await fetchJson('/api/packs'); const panel = document.querySelector('[data-panel="packs"]'); let target = document.getElementById('packs2Grid'); if (!target && panel) { panel.insertAdjacentHTML('beforeend', '<div class="card"><h3>Pack-Verwaltung 2.0</h3><p>Aktiviere/deaktiviere Packs für die aktuelle Welt. Vor Änderungen wird die Welt-Pack-Datei gesichert.</p><div id="packs2Grid" class="dashboard-grid auto"></div></div>'); target = document.getElementById('packs2Grid'); } if (!target) return; const render = (p,t) => '<article class="tile"><div class="tile-title">'+escapeHtml(p.name)+'</div><div class="tile-desc">'+escapeHtml((p.uuid||'Keine UUID')+' · '+(p.version||'keine Version')+' · '+(p.description||''))+'</div><span class="badge '+(p.active?'':'warn')+'">'+(p.active?'Aktiv':'Inaktiv')+'</span><div class="tile-actions"><button data-pack-activate="'+escapeHtml(t)+'" data-pack-path="'+escapeHtml(p.path||'')+'">Aktivieren</button><button data-pack-deactivate="'+escapeHtml(t)+'" data-pack-uuid="'+escapeHtml(p.uuid||'')+'">Deaktivieren</button></div></article>'; target.innerHTML = [...(data.resource_packs||[]).map(p=>render(p,'resource')), ...(data.behavior_packs||[]).map(p=>render(p,'behavior'))].join('') || frameworkCard('Keine Packs','-', 'Installierte Packs erscheinen hier.', 'Warnung'); } catch (err) { appendLine('[Packs] '+err.message,'error'); } }
     async function loadPlayers2() { try { const data = await fetchJson('/api/players'); window.winomcPlayers2 = data.players || []; const w = document.getElementById('playersWarnings'); if (w) w.textContent = (data.warnings || []).join(' · ') || 'Keine akuten Warnungen.'; const t = document.getElementById('playersTable'); if (t) t.innerHTML = window.winomcPlayers2.map((p,i)=>'<tr><td><input data-player-field="name" data-player-index="'+i+'" value="'+escapeHtml(p.name||'')+'"></td><td><input data-player-field="xuid" data-player-index="'+i+'" value="'+escapeHtml(p.xuid||'')+'"></td><td><select data-player-field="allowlisted" data-player-index="'+i+'"><option value="true" '+(p.allowlisted?'selected':'')+'>Ja</option><option value="false" '+(!p.allowlisted?'selected':'')+'>Nein</option></select></td><td><select data-player-field="role" data-player-index="'+i+'"><option value="member" '+(p.role==='member'?'selected':'')+'>Member</option><option value="operator" '+(p.role==='operator'?'selected':'')+'>Operator</option><option value="visitor" '+(p.role==='visitor'?'selected':'')+'>Visitor</option></select></td><td>'+escapeHtml((p.issues||[]).join(', ')||'OK')+'</td></tr>').join('') || '<tr><td colspan="5">Noch keine Spieler. Nutze „Spieler hinzufügen“.</td></tr>'; const panel=document.querySelector('[data-panel="players"] .card-header .actions') || document.querySelector('[data-panel="players"] .card-header'); if(panel && !document.getElementById('playersSave2')) panel.insertAdjacentHTML('beforeend','<div class="actions"><button id="playersAdd2" type="button">Spieler hinzufügen</button><button class="primary" id="playersSave2" type="button">Speichern</button></div>'); } catch (err) { appendLine('[Spielerrechte] '+err.message,'error'); } }
     function collectPlayers2(){ document.querySelectorAll('[data-player-field]').forEach(el=>{ const i=Number(el.dataset.playerIndex); const f=el.dataset.playerField; if(!window.winomcPlayers2[i]) return; window.winomcPlayers2[i][f]= f==='allowlisted' ? el.value==='true' : el.value; }); return window.winomcPlayers2 || []; }
-    async function loadTransfer2(){ try{ const data=await fetchJson('/api/import-export'); const e=document.getElementById('transferSummary'); if(e) e.innerHTML=frameworkCard('Import',data.import_count+' Dateien','/share/winomc/import','OK')+frameworkCard('Export',data.export_count+' Dateien','/share/winomc/export','OK')+frameworkCard('Sicherheit',data.zip_slip_protection?'Aktiv':'Prüfen','Kein stilles Überschreiben; ZIP Slip geschützt','OK'); }catch(err){ appendLine('[Import/Export] '+err.message,'error'); } }
+    async function loadTransfer2(){ try{ const data=await fetchJson('/api/import-export'); const e=document.getElementById('transferSummary'); if(e) e.innerHTML=frameworkCard('Import',data.import_count+' Dateien','/share/winomc/import','OK')+frameworkCard('Export',data.export_count+' Dateien','/share/winomc/export','OK')+frameworkCard('Sicherheit',data.zip_slip_protection?'Aktiv':'Prüfen','Kein stilles Überschreiben; ZIP Slip geschützt','OK')+'<article class="tile"><div class="tile-title">Von URL installieren</div><input id="urlImportInput2" placeholder="https://example.com/pack.mcaddon"><label><input type="checkbox" id="urlImportActivate2" checked> Nach Installation aktivieren</label><div class="tile-actions"><button id="urlImportCheck2">Prüfen</button><button class="primary" id="urlImportInstall2">Installieren</button></div><div id="urlImportStatus2" class="info">Direkte Bedrock-Datei-URL verwenden. Java-.jar wird abgelehnt.</div></article>'; }catch(err){ appendLine('[Import/Export] '+err.message,'error'); } }
     async function loadUpdates2(){ try{ const data=await fetchJson('/api/update-guard'); const e=document.getElementById('updatesSummary'); if(e) e.innerHTML=data.checks.map(c=>frameworkCard(c.title,c.status,c.message,c.status)).join('') + '<div class="tile"><button class="primary" id="updatesPrepare2" type="button">Update vorbereiten</button><p>Erstellt Backup und markiert Update-Bereitschaft. Danach Add-on neu starten.</p></div>'; }catch(err){ appendLine('[Updates] '+err.message,'error'); } }
     async function loadProfiles2(){ try{ const data=await fetchJson('/api/profiles'); const e=document.getElementById('profilesGrid'); if(e) e.innerHTML=data.profiles.map(p=>'<article class="tile"><div class="tile-title">'+escapeHtml(p.name)+'</div><div class="tile-desc">'+escapeHtml(p.description)+'</div><pre>'+escapeHtml(JSON.stringify(p.defaults,null,2))+'</pre><button data-profile-prepare="'+escapeHtml(p.name)+'">Profil vorbereiten</button></article>').join(''); }catch(err){ appendLine('[Profile] '+err.message,'error'); } }
     document.addEventListener('click', async (ev) => {
       const t = ev.target;
       try {
         if (t?.id === 'diagnosticsRun') await loadDiagnostics2();
+        if (t?.id === 'repairAllSafe2') { const r=await postJson('/api/diagnostics/repair',{action:'repair_all_safe'}); alert(r.message); await loadDiagnostics2(); }
+        if (t?.dataset?.diagnosticsRepair) { const r=await postJson('/api/diagnostics/repair',{action:t.dataset.diagnosticsRepair}); alert(r.message); await loadDiagnostics2(); }
         if (t?.id === 'backupCreate2') { const r=await postJson('/api/backups/create',{type:'complete',reason:'manual-ui'}); document.getElementById('backupResult2').textContent='Backup erstellt: '+r.backup.name; await loadBackups2(); }
         if (t?.dataset?.backupRestore) { if(confirm('Restore überschreibt Daten nach Safety-Backup. Fortfahren?')) { const r=await postJson('/api/backups/restore',{backup:t.dataset.backupRestore,mode:'complete'}); alert(r.message); await loadBackups2(); } }
         if (t?.dataset?.backupDelete) { if(confirm('Backup löschen?')) { await postJson('/api/backups/delete',{backup:t.dataset.backupDelete}); await loadBackups2(); } }
@@ -7379,6 +7440,8 @@ body.winomc-mobile .editor-panel.editor-open {
         if (t?.id === 'playersSave2') { await postJson('/api/players/save',{players:collectPlayers2()}); await loadPlayers2(); }
         if (t?.id === 'updatesPrepare2') { const r=await postJson('/api/updates/prepare',{warning:'Serverupdate wird vorbereitet. Bitte gleich neu verbinden.'}); alert(r.message); await loadUpdates2(); }
         if (t?.dataset?.profilePrepare) { const r=await postJson('/api/profiles/prepare',{profile:t.dataset.profilePrepare}); alert(r.message); }
+        if (t?.id === 'urlImportCheck2') { const box=document.getElementById('urlImportStatus2'); box.textContent='URL wird geprüft...'; const r=await postJson('/api/import/url/check',{url:document.getElementById('urlImportInput2').value}); box.textContent=r.message; }
+        if (t?.id === 'urlImportInstall2') { const box=document.getElementById('urlImportStatus2'); box.textContent='Download und Installation laufen...'; const r=await postJson('/api/import/url/install',{url:document.getElementById('urlImportInput2').value, activate:document.getElementById('urlImportActivate2').checked}); box.textContent=r.message + ' ' + (r.installed||[]).map(i=>i.name).join(', '); await loadPacks2(); }
       } catch (err) { alert(err.message); appendLine('[WinoMC 2.0] '+err.message,'error'); }
     });
 
@@ -9260,7 +9323,7 @@ def open_safe_download(candidate_path, mode="rb"):
 
 
 def ensure_directories():
-    for path in (DATA_DIR, WORLDS_DIR, RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR, WORLD_TEMPLATES_DIR, IMPORT_DIR, EXPORT_DIR, BACKUP_DIR, FILE_BACKUP_DIR, TRASH_DIR):
+    for path in (DATA_DIR, WORLDS_DIR, RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR, WORLD_TEMPLATES_DIR, IMPORT_DIR, EXPORT_DIR, BACKUP_DIR, FILE_BACKUP_DIR, TRASH_DIR, WINOMC_STATE_DIR):
         try:
             os.makedirs(canonical_path(path), exist_ok=True)
         except OSError as exc:
@@ -10498,6 +10561,275 @@ def prepare_profile(profile_id):
         json.dump(state, handle, ensure_ascii=False, indent=2)
     return {"ok": True, "profile": selected, "state": state, "message": state["message"]}
 
+
+def state_dir_path():
+    return makedirs_internal(WINOMC_STATE_DIR, WINOMC_STATE_DIR, exist_ok=True)
+
+
+def write_state_json(path, payload):
+    base = state_dir_path()
+    target = assert_safe_internal_path(base, path)
+    with open_safe_internal(base, target, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    return target
+
+
+def read_web_protection_state():
+    default = {"ok": True, "enabled": False, "source": "default", "updated_at": None}
+    try:
+        base = state_dir_path()
+        target = assert_safe_internal_path(base, WEB_PROTECTION_FILE, require_exists=False)
+        if not os.path.exists(target):
+            return default
+        with open_safe_internal(base, target, "r", encoding="utf-8", errors="replace") as handle:
+            data = json.load(handle)
+        return {"ok": True, "enabled": bool(data.get("enabled", False)), "source": data.get("source", "server"), "updated_at": data.get("updated_at")}
+    except Exception as exc:
+        log_warning("Webschutz-Status konnte nicht gelesen werden: %s" % exc)
+        return default
+
+
+def set_web_protection_state(enabled, source="web-ui"):
+    payload = {"enabled": bool(enabled), "updated_at": time.strftime("%Y-%m-%d_%H-%M-%S"), "source": safe_download_name(source, "web-ui")}
+    write_state_json(WEB_PROTECTION_FILE, payload)
+    payload["ok"] = True
+    return payload
+
+
+def write_import_status(status, message, extra=None):
+    payload = {"ok": True, "status": status, "message": message, "updated_at": time.strftime("%Y-%m-%d_%H-%M-%S")}
+    if isinstance(extra, dict):
+        payload.update(extra)
+    write_state_json(IMPORT_STATUS_FILE, payload)
+    return payload
+
+
+def read_import_status():
+    try:
+        base = state_dir_path()
+        target = assert_safe_internal_path(base, IMPORT_STATUS_FILE, require_exists=False)
+        if not os.path.exists(target):
+            return {"ok": True, "status": "idle", "message": "Noch kein URL-Import ausgeführt."}
+        with open_safe_internal(base, target, "r", encoding="utf-8", errors="replace") as handle:
+            data = json.load(handle)
+        data["ok"] = True
+        return data
+    except Exception as exc:
+        return {"ok": False, "status": "error", "message": str(exc)}
+
+
+def repair_json_list(rel_path, label):
+    file_path, normalized = resolve_safe_path("config", rel_path)
+    parent = os.path.dirname(file_path)
+    makedirs_root("config", parent, exist_ok=True)
+    if path_exists_root("config", file_path):
+        data, err = json_file(file_path, [])
+        if err is None and isinstance(data, list):
+            return {"action": label, "status": "skipped", "message": "%s ist bereits gültig." % label}
+        backup_path = make_file_backup(file_path, "config", normalized) if path_is_file_root("config", file_path) else None
+    else:
+        backup_path = None
+    result = atomic_write_json_root("config", normalized, [], backup=False)
+    return {"action": label, "status": "repaired", "message": "%s wurde als leere valide JSON-Liste geschrieben." % label, "backup_path": backup_path, "result": result}
+
+
+def repair_diagnostics(action):
+    action = str(action or "").strip()
+    results = []
+    if action in ("ensure_directories", "repair_all_safe"):
+        ensure_directories()
+        state_dir_path()
+        results.append({"action": "ensure_directories", "status": "ok", "message": "Ordnerstruktur wurde geprüft/erstellt."})
+    if action in ("repair_allowlist", "repair_all_safe"):
+        results.append(repair_json_list("/allowlist.json", "allowlist.json"))
+    if action in ("repair_permissions", "repair_all_safe"):
+        results.append(repair_json_list("/permissions.json", "permissions.json"))
+    if action in ("repair_world_resource_packs", "repair_pack_files", "repair_all_safe"):
+        results.append(repair_json_list(world_pack_rel_path("resource"), "world_resource_packs.json"))
+    if action in ("repair_world_behavior_packs", "repair_pack_files", "repair_all_safe"):
+        results.append(repair_json_list(world_pack_rel_path("behavior"), "world_behavior_packs.json"))
+    if not results:
+        raise ValueError("Unbekannte oder nicht sichere Reparaturaktion: %s" % action)
+    return {"ok": True, "action": action, "results": results, "message": "Reparatur abgeschlossen."}
+
+
+SUPPORTED_IMPORT_EXTENSIONS = {".mcpack", ".mcaddon", ".mcworld", ".mctemplate", ".zip"}
+REJECTED_IMPORT_EXTENSIONS = {".jar", ".fabric", ".forge", ".exe", ".sh", ".bat", ".cmd", ".msi"}
+JAVA_MOD_MARKERS = {"mods.toml", "fabric.mod.json", "quilt.mod.json", "META-INF/mods.toml"}
+
+
+def validate_external_download_url(url):
+    parsed = urlparse(str(url or "").strip())
+    if parsed.scheme != "https":
+        raise ValueError("URL-Import erlaubt nur https:// Direktdownloads.")
+    if not parsed.hostname:
+        raise ValueError("URL enthält keinen Hostnamen.")
+    host = parsed.hostname.strip().lower()
+    if host in ("localhost", "localhost.localdomain"):
+        raise ValueError("Lokale Hosts sind für URL-Import blockiert.")
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or 443, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        raise ValueError("Host konnte nicht aufgelöst werden: %s" % exc)
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+            raise ValueError("URL-Import blockiert lokale/private Zieladressen.")
+    name = os.path.basename(unquote(parsed.path or ""))
+    ext = file_extension(name)
+    if ext in REJECTED_IMPORT_EXTENSIONS:
+        raise ValueError("Diese Datei sieht nach einem Java-Mod oder ausführbaren Paket aus. WinoMC unterstützt nur Minecraft Bedrock Packs/Add-ons.")
+    if ext not in SUPPORTED_IMPORT_EXTENSIONS:
+        if "curseforge" in host:
+            raise ValueError("CurseForge-Projektseiten werden nicht automatisch installiert. Bitte direkten Bedrock-Dateidownload (.mcpack/.mcaddon/.mcworld/.mctemplate/.zip) kopieren; Java-Mods (.jar) werden nicht unterstützt.")
+        raise ValueError("Bitte einen direkten Bedrock-Dateidownload mit .mcpack, .mcaddon, .mcworld, .mctemplate oder geeigneter .zip verwenden.")
+    return {"ok": True, "url": parsed.geturl(), "filename": safe_download_name(name, "winomc-import" + ext), "extension": ext, "host": host}
+
+
+def safe_zip_members(archive_path):
+    manifests = []
+    java_markers = []
+    with zipfile.ZipFile(archive_path, "r") as archive:
+        total = 0
+        for member in archive.infolist():
+            raw = str(member.filename or "").replace("\\", "/")
+            if not raw or raw.startswith("/") or raw.startswith("../") or "/../" in raw:
+                raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
+            total += int(member.file_size or 0)
+            if total > MAX_ZIP_UNPACK_BYTES:
+                raise ValueError("Archiv ist zu groß.")
+            name = posixpath.basename(raw)
+            lower = raw.lower()
+            if name == "manifest.json":
+                try:
+                    with archive.open(member) as handle:
+                        data = json.loads(handle.read(1024 * 1024).decode("utf-8", errors="replace"))
+                    manifests.append({"path": raw, "data": data})
+                except Exception as exc:
+                    raise ValueError("manifest.json ist ungültig: %s" % exc)
+            if lower.endswith(".jar") or lower in JAVA_MOD_MARKERS or lower.endswith("mods.toml"):
+                java_markers.append(raw)
+    if java_markers and not manifests:
+        raise ValueError("Diese Datei sieht nach einem Java-Mod aus. WinoMC unterstützt nur Minecraft Bedrock Packs/Add-ons.")
+    return manifests
+
+
+def classify_bedrock_archive(archive_path, ext):
+    manifests = safe_zip_members(archive_path)
+    if ext in (".mcworld", ".mctemplate"):
+        return {"supported": True, "kind": "world" if ext == ".mcworld" else "template", "manifests": manifests, "message": "Bedrock-Welt/Template erkannt."}
+    packs = []
+    for manifest in manifests:
+        data = manifest.get("data") or {}
+        header = data.get("header", {}) if isinstance(data, dict) else {}
+        modules = data.get("modules", []) if isinstance(data, dict) else []
+        if not data.get("format_version") or not header.get("uuid") or not isinstance(header.get("version"), list) or not isinstance(modules, list):
+            continue
+        module_types = {str(m.get("type", "")).lower() for m in modules if isinstance(m, dict)}
+        pack_type = "behavior" if any("data" in t or "script" in t for t in module_types) else "resource"
+        packs.append({"manifest_path": manifest["path"], "name": header.get("name") or "Bedrock Pack", "uuid": header.get("uuid"), "version": header.get("version"), "type": pack_type})
+    if not packs:
+        raise ValueError("Kein gültiges Bedrock manifest.json mit format_version, header.uuid, header.version und modules gefunden.")
+    kind = "mcaddon" if len(packs) > 1 or ext == ".mcaddon" else packs[0]["type"]
+    return {"supported": True, "kind": kind, "packs": packs, "message": "Bedrock-Manifest gefunden."}
+
+
+def download_external_pack(url):
+    info = validate_external_download_url(url)
+    write_import_status("downloading", "Download startet.", {"filename": info["filename"]})
+    request = Request(info["url"], headers={"User-Agent": "WinoMC/2.0 URL Import"})
+    with urlopen(request, timeout=20) as response:
+        final_url = response.geturl()
+        if final_url != info["url"]:
+            info = validate_external_download_url(final_url)
+        content_length = response.headers.get("Content-Length")
+        if content_length and int(content_length) > MAX_UPLOAD_BYTES:
+            raise ValueError("Download ist zu groß.")
+        import_dir, _ = resolve_safe_path("import", "/")
+        makedirs_root("import", import_dir, exist_ok=True)
+        filename = info["filename"]
+        target = assert_safe_path("import", os.path.join(import_dir, filename))
+        if path_exists_root("import", target):
+            filename = safe_download_name("%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), filename), "winomc-import")
+            target = assert_safe_path("import", os.path.join(import_dir, filename))
+        total = 0
+        with open_safe("import", target, "wb") as handle:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    raise ValueError("Download ist zu groß.")
+                handle.write(chunk)
+    return {"path": target, "root": "import", "rel_path": normalize_rel_path("/" + filename), "filename": filename, "extension": file_extension(filename), "size": total}
+
+
+def check_import_url(url):
+    info = validate_external_download_url(url)
+    kind = info["extension"].lstrip(".")
+    return {"ok": True, "supported": True, "kind": kind, "message": "Sieht nach einem direkten Bedrock-Dateidownload aus. Beim Installieren wird zusätzlich manifest.json geprüft.", "filename": info["filename"]}
+
+
+def install_import_url(url, activate=False):
+    downloaded = download_external_pack(url)
+    write_import_status("validating", "Datei wird geprüft.", {"filename": downloaded["filename"]})
+    classification = classify_bedrock_archive(downloaded["path"], downloaded["extension"])
+    installed = []
+    if classification["kind"] in ("world", "template"):
+        target_root = "world_templates" if classification["kind"] == "template" else "worlds"
+        base_name = safe_download_name(os.path.splitext(downloaded["filename"])[0], classification["kind"])
+        dest_base, _ = resolve_safe_path(target_root, "/")
+        dest = assert_safe_path(target_root, os.path.join(dest_base, base_name))
+        if path_exists_root(target_root, dest):
+            raise FileExistsError("Ziel existiert bereits. WinoMC überschreibt Welten/Templates nicht still.")
+        makedirs_root(target_root, dest, exist_ok=False)
+        with zipfile.ZipFile(downloaded["path"], "r") as archive:
+            for member in archive.infolist():
+                raw = str(member.filename or "").replace("\\", "/")
+                if not raw or raw.startswith("/") or raw.startswith("../") or "/../" in raw:
+                    raise ValueError("Unsicherer Archiv-Pfad blockiert: %s" % raw)
+                rel = posixpath.normpath(raw)
+                target = assert_safe_path(target_root, os.path.join(dest, rel))
+                if member.is_dir():
+                    makedirs_root(target_root, target, exist_ok=True); continue
+                makedirs_root(target_root, os.path.dirname(target), exist_ok=True)
+                with archive.open(member, "r") as source, open_safe(target_root, target, "wb") as out:
+                    shutil.copyfileobj(source, out, length=1024 * 1024)
+        installed.append({"type": classification["kind"], "name": base_name, "active": False})
+    else:
+        with zipfile.ZipFile(downloaded["path"], "r") as archive:
+            for pack in classification["packs"]:
+                pack_type = pack["type"]
+                root_key, base_dir = pack_base_dir(pack_type)
+                pack_name = safe_download_name(pack.get("name"), pack_type + "-pack")
+                dest = assert_safe_path(root_key, os.path.join(base_dir, pack_name))
+                if path_exists_root(root_key, dest):
+                    raise FileExistsError("Pack-Ziel existiert bereits: %s" % pack_name)
+                prefix = posixpath.dirname(pack["manifest_path"])
+                makedirs_root(root_key, dest, exist_ok=False)
+                for member in archive.infolist():
+                    raw = str(member.filename or "").replace("\\", "/")
+                    if prefix and not (raw == prefix or raw.startswith(prefix + "/")):
+                        continue
+                    rel = posixpath.relpath(raw, prefix) if prefix else raw
+                    if rel in (".", ""):
+                        continue
+                    target = assert_safe_path(root_key, os.path.join(dest, rel))
+                    if member.is_dir():
+                        makedirs_root(root_key, target, exist_ok=True); continue
+                    makedirs_root(root_key, os.path.dirname(target), exist_ok=True)
+                    with archive.open(member, "r") as source, open_safe(root_key, target, "wb") as out:
+                        shutil.copyfileobj(source, out, length=1024 * 1024)
+                active = False
+                if activate:
+                    activate_pack(pack_type, "/" + pack_name)
+                    active = True
+                installed.append({"type": pack_type, "name": pack_name, "active": active})
+    write_import_status("done", "URL-Import abgeschlossen.", {"installed": installed})
+    return {"ok": True, "installed": installed, "classification": classification, "message": "Import abgeschlossen."}
+
 def status_payload():
     env_keys = ["SERVER_NAME", "LEVEL_NAME", "VERSION", "BDS_AUTO_UPDATE", "SERVER_PORT", "SERVER_PORT_V6", "ENABLE_LAN_VISIBILITY", "ENABLE_BDS_V6BIND_FIX", "GAMEMODE", "DIFFICULTY", "ALLOW_CHEATS", "ALLOW_LIST", "ONLINE_MODE", "MAX_PLAYERS", "TEXTUREPACK_REQUIRED", "PACKAGE_BACKUP_KEEP"]
     env = {key: os.environ.get(key, "") for key in env_keys}
@@ -10508,7 +10840,7 @@ def status_payload():
         "loadavg": loadavg_metrics(),
         "log_size": human_bytes(runtime_getsize(runtime_log_path())) if runtime_path_exists(runtime_log_path()) else "-",
     }
-    backups = list_backups(); return {"ok": True, "winomc_version": WINOMC_VERSION, "fifo_exists": runtime_path_exists(runtime_fifo_path()), "log_exists": runtime_path_exists(runtime_log_path()), "env": env, "roots": list_file_roots(), "metrics": metrics, "backup": {"latest": backups[0] if backups else None, "count": len(backups)}, "health": {"overall": diagnostics_payload().get("overall", "Nicht verfügbar")}}
+    backups = list_backups(); return {"ok": True, "winomc_version": WINOMC_VERSION, "fifo_exists": runtime_path_exists(runtime_fifo_path()), "log_exists": runtime_path_exists(runtime_log_path()), "env": env, "roots": list_file_roots(), "metrics": metrics, "backup": {"latest": backups[0] if backups else None, "count": len(backups)}, "web_protection": read_web_protection_state(), "health": {"overall": diagnostics_payload().get("overall", "Nicht verfügbar")}}
 
 def safe_header_value(value, fallback="application/octet-stream"):
     value = str(value or fallback)
@@ -10545,18 +10877,13 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def _web_protection_active(self):
-        cookie_header = self.headers.get("Cookie", "")
-        cookies = {}
-        for part in cookie_header.split(";"):
-            if "=" not in part:
-                continue
-            key, value = part.split("=", 1)
-            cookies[key.strip()] = value.strip()
-        return cookies.get("winomc_web_protection") == "1"
+        # Server-persistenter Schutzstatus ist die Quelle der Wahrheit.
+        # Der alte Cookie bleibt nur UI-Komfort und darf direkte API-Aufrufe nicht allein steuern.
+        return bool(read_web_protection_state().get("enabled", False))
 
     def require_web_write_allowed(self, action_name):
         if self._web_protection_active():
-            raise PermissionError("Diese Aktion ist durch den Webschutz gesperrt. Bitte Webschutz in der Dateiansicht entsperren: %s." % str(action_name or "Aktion"))
+            raise PermissionError("Diese Aktion ist durch den serverseitigen Webschutz gesperrt. Bitte Webschutz in der Dateiansicht entsperren: %s." % str(action_name or "Aktion"))
 
     def _read_json_payload(self, max_bytes=65536):
         return json.loads(self._read_request_body(max_bytes=max_bytes) or "{}")
@@ -10731,6 +11058,12 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith("/api/files/roots") or path == "/api/files/roots":
             self._send_json(200, {"ok": True, "roots": list_file_roots()})
             return
+        if path.endswith("/api/web-protection") or path == "/api/web-protection":
+            self._send_json(200, read_web_protection_state())
+            return
+        if path.endswith("/api/import/status") or path == "/api/import/status":
+            self._send_json(200, read_import_status())
+            return
         if path.endswith("/api/backups") or path == "/api/backups":
             self._send_json(200, {"ok": True, "backups": list_backups(), "keep": BACKUP_KEEP})
             return
@@ -10808,6 +11141,39 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return
+        if path.endswith("/api/web-protection") or path == "/api/web-protection":
+            try:
+                payload = self._read_json_payload()
+                self._send_json(200, set_web_protection_state(bool(payload.get("enabled", False)), "web-ui"))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/diagnostics/repair") or path == "/api/diagnostics/repair":
+            try:
+                self.require_web_write_allowed("Diagnose-Reparatur")
+                payload = self._read_json_payload()
+                self._send_json(200, repair_diagnostics(str(payload.get("action", ""))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/import/url/check") or path == "/api/import/url/check":
+            try:
+                self.require_web_write_allowed("URL-Import prüfen")
+                payload = self._read_json_payload()
+                self._send_json(200, check_import_url(str(payload.get("url", ""))))
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+        if path.endswith("/api/import/url/install") or path == "/api/import/url/install":
+            try:
+                self.require_web_write_allowed("URL-Import installieren")
+                payload = self._read_json_payload()
+                self._send_json(200, install_import_url(str(payload.get("url", "")), bool(payload.get("activate", False))))
+            except Exception as exc:
+                write_import_status("error", str(exc))
+                self._send_json(400, {"ok": False, "error": str(exc)})
+            return
+
         if path.endswith("/api/backups/create") or path == "/api/backups/create":
             try:
                 self.require_web_write_allowed("Backup erstellen")

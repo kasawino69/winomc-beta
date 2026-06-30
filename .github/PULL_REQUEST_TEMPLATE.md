@@ -65,3 +65,13 @@
 - [ ] Welt exportieren
 - [ ] Bestehende Ziele werden nicht still überschrieben
 - [ ] ZIP wird sicher verarbeitet
+
+### RC final checks
+- [ ] Webschutz-Status über `/api/web-protection` lesen und setzen
+- [ ] Serverpersistenter Webschutz blockiert gefährliche POST-Route auch ohne Cookie-Manipulation
+- [ ] Diagnose-Reparatur `ensure_directories` ausführen
+- [ ] Diagnose-Reparatur für fehlende/ungültige `allowlist.json` und `permissions.json` prüfen
+- [ ] URL-Import-Check lehnt `.jar` / Java-Mods ab
+- [ ] URL-Import-Check blockiert localhost/private IPs
+- [ ] Direkter HTTPS-Bedrock-Pack-Download wird geprüft und installiert
+- [ ] Mobile Befehlshilfe ist sichtbar, scrollbar und übernimmt Vorschläge kontrolliert

@@ -21,9 +21,9 @@ WinoMC kann Welt-, Config-, Safety- und Komplettbackups unter `/config/backups` 
 
 Restore ist als sicherer Workflow umgesetzt: Backup auswählen, Modus `config`, `world` oder `complete` wählen, Safety-Backup vor Restore erstellen, ZIP-Pfade validieren und nur erlaubte Ziele unter `/config` wiederherstellen. Nach Restore sollte der Serverzustand in **Diagnose** und **Health** geprüft werden.
 
-## Diagnose
+## Diagnose und Reparatur
 
-Die Diagnose prüft Ordner, Weltpfad, Schreibrechte, Speicherplatz, `server.properties`, Ports, `allowlist.json`, `permissions.json`, Pack-Ordner, Konsole, Logs und Backup-Status. Fehler werden verständlich angezeigt.
+Die Diagnose prüft Ordner, Weltpfad, Schreibrechte, Speicherplatz, `server.properties`, Ports, `allowlist.json`, `permissions.json`, Pack-Ordner, Konsole, Logs und Backup-Status. Sichere Diagnose-Reparaturaktionen können Ordner anlegen und fehlende/ungültige JSON-Dateien als valide leere Listen neu erzeugen. Vor dem Ersetzen vorhandener Dateien erstellt WinoMC Sicherungskopien; destruktive Reparaturen ohne Schutz gibt es nicht.
 
 ## Packs
 
@@ -33,9 +33,11 @@ Resource Packs und Behavior Packs werden über `manifest.json` erkannt. WinoMC z
 
 WinoMC kann `allowlist.json` und `permissions.json` über eine UI/API speichern. Unterstützt werden Name, XUID, Allowlist-Status und Rollen `operator`, `member`, `visitor`. Vor Änderungen werden Sicherungskopien erzeugt. WinoMC warnt bei fehlender/ungültiger XUID, doppelten Einträgen, Operator ohne Allowlist, leerer aktiver Allowlist und deaktiviertem Online Mode.
 
-## Import / Export
+## Import / Export und URL-Import
 
 Der Dateimanager und die Import-/Export-Seite zeigen `/share/winomc/import` und `/share/winomc/export`. ZIP-Erstellung, ZIP-Entpacken und sicherer Welt-Export respektieren Webschutz und Pfadprüfungen. Bestehende Ziele werden nicht still überschrieben; Nutzer müssen Überschreiben bewusst erlauben oder eine Kopie wählen.
+
+Der URL-Import kann direkte Bedrock-Pack/Add-on-URLs prüfen und installieren. Unterstützt werden `.mcpack`, `.mcaddon`, `.mcworld`, `.mctemplate` und geeignete `.zip`-Dateien mit gültigem Bedrock-Manifest. Java-Mods (`.jar`, Forge/Fabric/NeoForge) werden abgelehnt. Lokale/private Ziele, localhost und nicht-HTTPS-URLs werden blockiert. CurseForge-Projektseiten können nicht garantiert automatisch installiert werden; bitte dort den direkten Bedrock-Dateidownload kopieren. Webschutz blockiert URL-Import, wenn aktiv.
 
 ## Update-Schutz
 
@@ -47,13 +49,18 @@ Profile wie Familienserver, Vanilla Survival, Kreativserver, Freunde und Test we
 
 ## Webschutz
 
-Webschutz blockiert gefährliche Backend-Aktionen serverseitig: Upload, Schreiben, ZIP/Export, Entpacken, Löschen, Verschieben, Restore, Pack-Aktivierung, Spielerrechte speichern, Profil vorbereiten und Update vorbereiten. Direkte API-Aufrufe dürfen den Schutz nicht umgehen.
+Webschutz ist serverseitig persistent unter `/config/.winomc/web_protection.json` gespeichert. Direkte API-Aufrufe werden blockiert, wenn Webschutz aktiv ist. Der UI-Schalter liest und setzt diesen Serverstatus; Cookies dienen höchstens noch als Komfort für ältere UI-Zustände.
+
+## Mobile Befehlshilfe
+
+Die Mobile Befehlshilfe ist touchfreundlich und scrollbar. Vorschläge werden sichtbar mit Befehl, Beschreibung und Einfügen-Aktion dargestellt. Scroll-Gesten sollen nicht versehentlich Befehle übernehmen; Desktop- und PC-Workbench-Logik bleiben getrennt.
 
 ## Troubleshooting
 
 - Server nicht sichtbar: UDP-Port 19132/19133, Firewall und LAN Visibility prüfen.
 - Spielerzahl unbekannt: in der Konsole `list` ausführen.
 - Pack wird nicht aktiv: `manifest.json` muss UUID und Version enthalten.
+- URL-Import scheitert: direkten HTTPS-Dateilink auf Bedrock-Datei verwenden; Java-Mods sind nicht unterstützt.
 - Restore unsicher: erst Diagnose lesen, Server stoppen und Safety-Backup prüfen.
 - Update nicht gestartet: Add-on nach vorbereiteten Update bewusst neu starten.
 

@@ -32,20 +32,25 @@ Dann im Add-on-Store installieren:
 
 - ein Server, keine Multi-Instanzen
 - Webkonsole mit Desktop-, klassischer und Mobile-Ansicht
-- sichere Dateioperationen mit Webschutz und Backend-Prüfung
-- Backup, Restore, Diagnose und Health-Übersicht
+- serverseitig persistenter Webschutz mit Backend-Prüfung
+- Backup, Restore, Diagnose-Reparatur und Health-Übersicht
 - Pack-Aktivierung für Welt-Pack-Dateien
+- URL-Import für direkte Bedrock-Pack/Add-on-Dateien
 - Allowlist-/Permissions-Verwaltung über UI/API
 - Update-Vorbereitung mit Backup statt riskanter Live-Fake-Automation
 - Erststart-Profile als vorbereitete Home-Assistant-Konfigurationsvorschläge
 
 ## Weboberfläche
 
-Die Weboberfläche bietet Konsole, Dateimanager, Backups, Diagnose, Packs, Spielerrechte, Import/Export, Updates und Profile. Desktop, klassische Ansicht und Mobile bleiben getrennte Bedienkonzepte. Mobile zeigt keine PC-Workbench.
+Die Weboberfläche bietet Konsole, Dateimanager, Backups, Diagnose, Packs, Spielerrechte, Import/Export, Updates und Profile. Desktop, klassische Ansicht und Mobile bleiben getrennte Bedienkonzepte. Mobile zeigt keine PC-Workbench. Die Mobile Befehlshilfe ist als scrollbares, touchfreundliches Panel ausgelegt; Einfügen passiert kontrolliert über Vorschlag oder Button.
 
 ## Sicherheit
 
-WinoMC begrenzt Dateioperationen auf erlaubte WinoMC-Verzeichnisse, prüft Pfade, blockiert Path Traversal und schützt ZIP-Entpacken vor ZIP Slip. Webschutz wird serverseitig für gefährliche Aktionen erzwungen, nicht nur über deaktivierte UI-Buttons.
+WinoMC begrenzt Dateioperationen auf erlaubte WinoMC-Verzeichnisse, prüft Pfade, blockiert Path Traversal und schützt ZIP-Entpacken vor ZIP Slip. Webschutz wird serverseitig persistent gespeichert und für gefährliche Aktionen erzwungen, nicht nur über Cookies oder deaktivierte UI-Buttons.
+
+## URL-Import
+
+WinoMC kann direkte Bedrock-Datei-URLs prüfen und installieren, wenn sie auf `.mcpack`, `.mcaddon`, `.mcworld`, `.mctemplate` oder eine geeignete `.zip` zeigen. Java-Mods (`.jar`, Forge/Fabric/NeoForge) werden freundlich abgelehnt. Lokale/private Ziele werden blockiert. CurseForge-Projektseiten werden nicht garantiert automatisch installiert; ein direkter Datei-Download ist zuverlässiger.
 
 ## Nicht-Ziele
 

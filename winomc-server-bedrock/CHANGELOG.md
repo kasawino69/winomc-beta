@@ -3,6 +3,11 @@
 ### 2.0.0
 
 #### Added
+* RC-Nacharbeit: serverseitig persistenter Webschutz mit `/api/web-protection` und Statusdatei unter `/config/.winomc/web_protection.json`.
+* RC-Nacharbeit: Diagnose-Reparaturaktionen über `POST /api/diagnostics/repair` für Ordnerstruktur und sichere JSON-Reparaturen.
+* RC-Nacharbeit: URL-Import für direkte Bedrock-Pack/Add-on-Dateien mit sicherer HTTPS-/Privat-IP-Prüfung, Bedrock-Manifestvalidierung und Java-Mod-Ablehnung.
+* RC-Nacharbeit: Mobile Befehlshilfe als scrollbareres, touchfreundliches Panel mit kontrollierter Einfügen-Aktion.
+* RC-Nacharbeit: bessere Statusmeldungen für längere UI-Aktionen wie URL-Import und Reparaturen.
 * Serverseitig erzwungener Webschutz für gefährliche Datei-, Backup-, Pack-, Player-, Profile- und Update-Aktionen.
 * Sicherer Restore-Workflow mit `POST /api/backups/restore`, Safety-Backup vor Restore und Modi `config`, `world`, `complete`.
 * Backup-Löschung über `POST /api/backups/delete` mit Webschutz.
