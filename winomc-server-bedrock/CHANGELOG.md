@@ -1,5 +1,20 @@
 # Changelog
 
+# 2.0.0.9b
+
+- Added a static in-body boot fallback so the HA ingress view always shows visible content immediately after `GET /`, even if later JavaScript fails.
+- Added visible boot diagnostics for HTML load, JavaScript start, base UI initialization, Status API reachability and render errors.
+- Hardened status rendering so API success followed by a render exception shows an in-page error instead of a white panel.
+- Kept Live-Log/EventSource delayed and non-blocking for initial rendering.
+- Bumped the beta add-on and web console version for the next stability build.
+
+# 2.0.0.8b
+
+- Fixed a critical web console startup blocker by wrapping bootstrap in visible error handling instead of allowing startup exceptions to leave an empty HA ingress panel.
+- Added timeouts to startup API calls and POST requests so slow or broken backend responses no longer freeze the UI.
+- Delayed and de-duplicated the live log EventSource, capped startup log rendering, and centralized the desktop clock interval to prevent duplicate startup work.
+- Bumped the beta add-on and web console version for the next stability build.
+
 # 2.0.0.7b
 
 - Stabilized mobile console startup by making the shell router single-initialization safe and coalescing resize, click, tab and mutation refreshes into one animation-frame tick.
