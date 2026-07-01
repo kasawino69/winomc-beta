@@ -1,4 +1,4 @@
-const VERSION = '2.1.13b';
+const VERSION = '2.1.14b';
 
 const state = {
   instances: [],
@@ -1023,9 +1023,3 @@ $('#createDrawerToggle').onclick = () => toggleCreatePanel();
 
 setAutoMode();
 loadInstances().then(() => startAutoRefresh()).catch(showError);
-
-
-const DASHBOARD_POLL_MS = 5000;
-setInterval(() => {
-  loadInstances(state.selectedId).catch(() => {});
-}, DASHBOARD_POLL_MS);

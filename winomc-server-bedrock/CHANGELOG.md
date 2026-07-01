@@ -1,3 +1,11 @@
+## 2.1.14b - Remove Legacy Dashboard Poller
+
+- Removes the old `DASHBOARD_POLL_MS` interval that still called `loadInstances(state.selectedId)` every 5 seconds.
+- Fixes console command input being cleared by the remaining full detail re-render path.
+- Keeps the clean targeted auto-refresh as the only recurring refresh mechanism.
+- Ensures auto-refresh no longer calls `loadInstances()`, `selectInstance()` or `renderDetail()`.
+- Keeps `config.yaml` changes strictly limited to `version` and `environment.WINOMC_VERSION`.
+
 ## 2.1.13b - Clean Targeted Auto-Refresh
 
 - Rebuilds Manager auto-refresh as object-based targeted updates instead of container or tab re-rendering.
