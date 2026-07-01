@@ -13,6 +13,8 @@ import stat
 import sys
 import tempfile
 import socket
+import subprocess
+import threading
 import time
 import zipfile
 from collections import deque
@@ -10789,6 +10791,11 @@ BEDROCK_PROFILES = {
 }
 
 INSTANCE_DIRS = ("worlds", "resource_packs", "behavior_packs", "logs", "backups", "runtime")
+BDS_SHARED_DIR = os.environ.get("WINOMC_BDS_SHARED_DIR", os.path.join(DATA_DIR, ".winomc", "bds", "shared"))
+BDS_CANDIDATE_DIRS = [BDS_SHARED_DIR, os.path.join(DATA_DIR, ".winomc", "bds"), DATA_DIR]
+BDS_SHARED_NAMES = ("bedrock_server", "bedrock_server_symbols.debug", "bedrock_server_how_to.html", "release-notes.txt", "valid_known_packs.json", "definitions", "premium_cache", "resource_packs", "behavior_packs")
+PROCESS_HANDLES = {}
+PROCESS_LOCK = threading.RLock()
 
 def manager_now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -10955,33 +10962,176 @@ def delete_instance(instance_id):
     return {"ok": True, "deleted": instance_id, "moved_to": trash}
 
 def runtime_state_path(instance_id): return instance_path(instance_id, "runtime", "state.json")
+def runtime_workdir(instance_id): return instance_path(instance_id, "runtime", "bedrock")
+def runtime_log_path_instance(instance_id): return instance_path(instance_id, "logs", "latest.log")
+def runtime_history_path(instance_id): return instance_path(instance_id, "logs", "commands.log")
+
+def detect_bds_runtime():
+    candidates = []
+    for directory in BDS_CANDIDATE_DIRS:
+        exe = os.path.join(directory, "bedrock_server")
+        candidates.append({"path": directory, "bedrock_server": exe, "exists": os.path.isfile(exe), "executable": os.path.isfile(exe) and os.access(exe, os.X_OK)})
+    for candidate in candidates:
+        if candidate["executable"]:
+            candidate["ok"] = True
+            return candidate
+    return {"ok": False, "error": "Keine ausführbare Bedrock Dedicated Server Runtime gefunden. Erwartet wird bedrock_server in WINOMC_BDS_SHARED_DIR oder im bestehenden /config-BDS-Bestand.", "candidates": candidates}
+
+def safe_symlink_or_copy(source, target):
+    if os.path.lexists(target):
+        return
+    if os.path.isdir(source):
+        try:
+            os.symlink(source, target, target_is_directory=True)
+        except OSError:
+            shutil.copytree(source, target, dirs_exist_ok=True)
+    else:
+        try:
+            os.symlink(source, target)
+        except OSError:
+            shutil.copy2(source, target)
+
+def prepare_instance_runtime(inst):
+    iid = validate_instance_id(inst["id"])
+    ensure_instance_layout(inst)
+    runtime = detect_bds_runtime()
+    if not runtime.get("ok"):
+        raise FileNotFoundError(runtime["error"])
+    workdir = runtime_workdir(iid)
+    os.makedirs(workdir, exist_ok=True)
+    # Writable instance-owned Bedrock data lives outside the shared runtime and is linked into the process cwd.
+    writable_links = {
+        "worlds": instance_path(iid, "worlds"),
+        "server.properties": instance_path(iid, "server.properties"),
+        "allowlist.json": instance_path(iid, "allowlist.json"),
+        "permissions.json": instance_path(iid, "permissions.json"),
+        "resource_packs": instance_path(iid, "resource_packs"),
+        "behavior_packs": instance_path(iid, "behavior_packs"),
+    }
+    for name, target in writable_links.items():
+        link = os.path.join(workdir, name)
+        if os.path.lexists(link):
+            continue
+        os.symlink(target, link, target_is_directory=os.path.isdir(target))
+    shared_dir = runtime["path"]
+    for name in os.listdir(shared_dir):
+        source = os.path.join(shared_dir, name)
+        if name in writable_links or name.startswith("world") or name in ("server.properties", "allowlist.json", "permissions.json"):
+            continue
+        if os.path.isfile(source) or os.path.isdir(source):
+            safe_symlink_or_copy(source, os.path.join(workdir, name))
+    return {"runtime": runtime, "workdir": workdir}
+
 def runtime_status(instance_id):
     state = read_json_file(runtime_state_path(instance_id), {"state": "stopped"})
     pid = state.get("pid")
+    with PROCESS_LOCK:
+        proc = PROCESS_HANDLES.get(validate_instance_id(instance_id))
+    if proc is not None:
+        rc = proc.poll()
+        if rc is None:
+            state["state"] = "running"
+        else:
+            state.update({"state": "stopped" if state.get("last_action") == "stop" else "crashed", "exit_code": rc, "pid": None, "exited_at": state.get("exited_at") or manager_now()})
+            write_runtime_state(instance_id, state)
+            with PROCESS_LOCK:
+                PROCESS_HANDLES.pop(validate_instance_id(instance_id), None)
+        return state
     if pid:
-        try: os.kill(int(pid), 0); state["state"] = "running"
-        except Exception: state["state"] = "crashed"; state["crashed_at"] = state.get("crashed_at") or manager_now()
+        try:
+            os.kill(int(pid), 0)
+            state["state"] = state.get("state") if state.get("state") in ("starting", "stopping") else "running"
+        except ProcessLookupError:
+            state.update({"state": "crashed" if state.get("state") not in ("stopping", "stopped") else "stopped", "pid": None, "crashed_at": state.get("crashed_at") or manager_now()})
+            write_runtime_state(instance_id, state)
+        except PermissionError:
+            state["state"] = "unknown"
     return state
 
 def write_runtime_state(instance_id, payload):
     payload["updated_at"] = manager_now(); write_json_file(runtime_state_path(instance_id), payload); return payload
 
+def monitor_instance_process(instance_id, proc):
+    rc = proc.wait()
+    with PROCESS_LOCK:
+        current = PROCESS_HANDLES.get(validate_instance_id(instance_id))
+        if current is proc:
+            PROCESS_HANDLES.pop(validate_instance_id(instance_id), None)
+    state = read_json_file(runtime_state_path(instance_id), {})
+    next_state = "stopped" if state.get("state") == "stopping" or state.get("last_action") == "stop" else "crashed"
+    state.update({"state": next_state, "pid": None, "exit_code": rc, "exited_at": manager_now()})
+    write_runtime_state(instance_id, state)
+
+def bedrock_environment(inst, prepared):
+    b = inst.get("bedrock", {})
+    env = os.environ.copy()
+    env.update({
+        "EULA": "TRUE",
+        "SERVER_DATA_DIR": prepared["workdir"],
+        "LD_LIBRARY_PATH": prepared["workdir"] + (":" + env.get("LD_LIBRARY_PATH", "") if env.get("LD_LIBRARY_PATH") else ""),
+        "VERSION": str(b.get("version", "LATEST")),
+        "SERVER_NAME": str(b.get("server_name", inst.get("name", inst["id"]))),
+        "LEVEL_NAME": str(b.get("level_name", "world")),
+        "SERVER_PORT": str(int(b.get("server_port", 19132))),
+        "SERVER_PORT_V6": str(int(b.get("server_port_v6", 19133))),
+        "ENABLE_BDS_V6BIND_FIX": str(bool(b.get("enable_v6bind_fix", False))).lower(),
+        "USE_BOX64": str(os.environ.get("USE_BOX64", "true")),
+    })
+    return env
+
 def start_instance(instance_id):
-    inst = load_instance(instance_id); health = inst.get("health") or validate_instance_config(inst)
+    iid = validate_instance_id(instance_id)
+    inst = load_instance(iid); health = validate_instance_config(inst)
     if not health.get("ok"): raise ValueError("Instanz ist ungültig: " + "; ".join(health.get("errors", [])))
-    status = runtime_status(instance_id)
-    if status.get("state") == "running": return {"ok": True, "status": status, "message": "Instanz läuft bereits."}
-    # 2.1b manager scaffold: process launcher is isolated here so the real bedrock binary can be wired without UI/API changes.
-    state = write_runtime_state(instance_id, {"state": "stopped", "pid": None, "last_action": "start-prepared", "message": "Start vorbereitet. Bedrock-Prozessadapter wird in dieser Rebuild-Schicht angebunden."})
-    return {"ok": True, "status": state, "message": state["message"]}
+    status = runtime_status(iid)
+    if status.get("state") in ("running", "starting"):
+        return {"ok": True, "status": status, "message": "Instanz läuft bereits oder startet."}
+    write_runtime_state(iid, {"state": "starting", "pid": None, "last_action": "start", "started_at": manager_now()})
+    prepared = prepare_instance_runtime(inst)
+    log_path = runtime_log_path_instance(iid)
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    log_handle = open(log_path, "ab", buffering=0)
+    log_handle.write(("\n[%s] WinoMC startet Bedrock-Instanz %s\n" % (manager_now(), iid)).encode("utf-8"))
+    command = [os.path.join(prepared["workdir"], "bedrock_server")]
+    runtime_arch = os.uname().machine
+    if runtime_arch in ("aarch64", "arm64") and str(os.environ.get("USE_BOX64", "true")).lower() in ("true", "1", "yes", "on") and shutil.which("box64"):
+        command = ["box64", command[0]]
+    proc = subprocess.Popen(command, cwd=prepared["workdir"], stdin=subprocess.PIPE, stdout=log_handle, stderr=subprocess.STDOUT, env=bedrock_environment(inst, prepared), start_new_session=True)
+    with PROCESS_LOCK:
+        PROCESS_HANDLES[iid] = proc
+    state = write_runtime_state(iid, {"state": "running", "pid": proc.pid, "last_action": "start", "started_at": manager_now(), "workdir": prepared["workdir"], "log": log_path, "runtime": prepared["runtime"]})
+    threading.Thread(target=monitor_instance_process, args=(iid, proc), daemon=True).start()
+    return {"ok": True, "status": state, "message": "Bedrock-Instanz wurde gestartet."}
 
 def stop_instance(instance_id):
-    status = runtime_status(instance_id)
+    iid = validate_instance_id(instance_id)
+    status = runtime_status(iid)
     pid = status.get("pid")
+    write_runtime_state(iid, dict(status, state="stopping", last_action="stop", stopping_at=manager_now()))
+    with PROCESS_LOCK:
+        proc = PROCESS_HANDLES.get(iid)
+    if proc is not None and proc.poll() is None:
+        try:
+            proc.stdin.write(b"stop\n"); proc.stdin.flush()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=25)
+        except subprocess.TimeoutExpired:
+            try: os.killpg(proc.pid, signal.SIGTERM)
+            except Exception: proc.terminate()
+            try: proc.wait(timeout=10)
+            except subprocess.TimeoutExpired: proc.kill()
+        return {"ok": True, "status": runtime_status(iid), "message": "Instanz wurde gestoppt."}
     if pid:
-        try: os.kill(int(pid), signal.SIGTERM)
-        except Exception: pass
-    state = write_runtime_state(instance_id, {"state": "stopped", "pid": None, "last_action": "stop"})
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+            time.sleep(2)
+        except ProcessLookupError:
+            pass
+        except Exception as exc:
+            raise RuntimeError("Instanz konnte nicht gestoppt werden: %s" % exc)
+    state = write_runtime_state(iid, {"state": "stopped", "pid": None, "last_action": "stop", "stopped_at": manager_now()})
     return {"ok": True, "status": state}
 
 def restart_instance(instance_id):
@@ -10995,11 +11145,20 @@ def instance_console(instance_id, limit=200):
     return {"ok": True, "instance_id": instance_id, "lines": [line.rstrip("\n") for line in lines]}
 
 def send_instance_command(instance_id, command):
+    iid = validate_instance_id(instance_id)
     command = sanitize_command(command)
-    log_path = instance_path(instance_id, "logs", "commands.log")
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    with open(log_path, "a", encoding="utf-8") as handle: handle.write("%s > %s\n" % (manager_now(), command))
-    return {"ok": True, "instance_id": instance_id, "command": command, "queued": runtime_status(instance_id).get("state") != "running"}
+    history_path = runtime_history_path(iid)
+    os.makedirs(os.path.dirname(history_path), exist_ok=True)
+    with open(history_path, "a", encoding="utf-8") as handle: handle.write("%s > %s\n" % (manager_now(), command))
+    with PROCESS_LOCK:
+        proc = PROCESS_HANDLES.get(iid)
+    if proc is None or proc.poll() is not None or proc.stdin is None:
+        raise RuntimeError("Instanzkonsole ist nicht verbunden. Starte die Instanz in diesem Manager-Prozess neu, bevor Befehle gesendet werden.")
+    try:
+        proc.stdin.write((command + "\n").encode("utf-8")); proc.stdin.flush()
+    except Exception as exc:
+        raise RuntimeError("Befehl konnte nicht an Instanz %s gesendet werden: %s" % (iid, exc))
+    return {"ok": True, "instance_id": iid, "command": command, "queued": False}
 
 def instance_backup(instance_id, backup_type="manual"):
     inst = load_instance(instance_id)
