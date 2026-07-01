@@ -73,9 +73,9 @@ function showError(error) {
           <p class="eyebrow">Fehler</p>
           <h2>${esc(message)}</h2>
         </div>
-        <button type="button" id="closeError">Schließen</button>
+        <button type="button" id="closeError">SchlieÃŸen</button>
       </div>
-      <p>Komponente: <strong>${esc(component)}</strong> · Instanz: <strong>${esc(instanceId)}</strong></p>
+      <p>Komponente: <strong>${esc(component)}</strong> Â· Instanz: <strong>${esc(instanceId)}</strong></p>
       ${suggested ? `<p class="suggested-action">${esc(suggested)}</p>` : ''}
       <details>
         <summary>Technische Details</summary>
@@ -125,12 +125,12 @@ function instanceStatus(instance) {
 }
 
 function renderDashboard() {
-  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager 2.1.3b · alle Aktionen instanzbezogen`;
+  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) Â· WinoMC Manager 2.1.5b Â· alle Aktionen instanzbezogen`;
   $('#instancesGrid').innerHTML = state.instances.map((instance) => {
     const b = instance.bedrock || {};
     const status = instanceStatus(instance);
     const health = instance.health || {};
-    const error = instance.error || (health.errors || []).join(' · ');
+    const error = instance.error || (health.errors || []).join(' Â· ');
     return `
       <article class="instance-card status-${esc(status)}">
         <div class="panel-heading">
@@ -147,7 +147,7 @@ function renderDashboard() {
           <div><dt>Start</dt><dd>${esc(instance.status?.started_at || '-')}</dd></div>
           <div><dt>Health</dt><dd>${health.ok === false ? 'Problem' : 'OK'}</dd></div>
         </dl>
-        ${instance.broken || health.ok === false ? `<p class="warn-box">${esc(error || 'Instanz prüfen')}</p>` : ''}
+        ${instance.broken || health.ok === false ? `<p class="warn-box">${esc(error || 'Instanz prÃ¼fen')}</p>` : ''}
         <div class="card-actions">
           <button type="button" data-action="start" data-id="${esc(instance.id)}">Start</button>
           <button type="button" data-action="stop" data-id="${esc(instance.id)}">Stop</button>
@@ -196,12 +196,12 @@ async function renderDetail() {
     const consoleData = await get(`/api/instances/${encodeURIComponent(inst.id)}/console`);
     const lines = consoleData.lines || consoleData.console || consoleData.logs || [];
     target.innerHTML = `
-      <pre class="console-log">${esc(Array.isArray(lines) ? lines.join('\n') : String(lines || 'Noch keine Logzeilen für diese Instanz.'))}</pre>
+      <pre class="console-log">${esc(Array.isArray(lines) ? lines.join('\n') : String(lines || 'Noch keine Logzeilen fÃ¼r diese Instanz.'))}</pre>
       <form id="commandForm" class="command-form">
         <input name="command" autocomplete="off" placeholder="say Hallo von WinoMC">
         <button type="submit">Senden</button>
       </form>
-      <p class="hint">Commands werden ausschließlich an <strong>${esc(inst.id)}</strong> gesendet.</p>`;
+      <p class="hint">Commands werden ausschlieÃŸlich an <strong>${esc(inst.id)}</strong> gesendet.</p>`;
     $('#commandForm').onsubmit = async (ev) => {
       ev.preventDefault();
       const command = ev.currentTarget.command.value.trim();
@@ -241,7 +241,7 @@ async function renderDetail() {
     };
   } else if (state.tab === 'files') {
     const files = await get(`/api/instances/${encodeURIComponent(inst.id)}/files`);
-    target.innerHTML = `<p>Instanzbezogene Dateiwurzeln. Vollständiger Dateimanager folgt in Phase 4.</p><pre>${esc(JSON.stringify(files.roots || files, null, 2))}</pre>`;
+    target.innerHTML = `<p>Instanzbezogene Dateiwurzeln. VollstÃ¤ndiger Dateimanager folgt in Phase 4.</p><pre>${esc(JSON.stringify(files.roots || files, null, 2))}</pre>`;
   } else if (state.tab === 'packs') {
     const packs = await get(`/api/instances/${encodeURIComponent(inst.id)}/packs`);
     target.innerHTML = `
@@ -249,7 +249,7 @@ async function renderDetail() {
       <h3>Behavior Packs</h3><p>${esc((packs.behavior_packs || []).join(', ') || 'Keine Nutzerpacks')}</p>`;
   } else if (state.tab === 'backups') {
     target.innerHTML = `
-      <p>Backups werden instanzbezogen über <code>/api/instances/${esc(inst.id)}/backup</code> erstellt.</p>
+      <p>Backups werden instanzbezogen Ã¼ber <code>/api/instances/${esc(inst.id)}/backup</code> erstellt.</p>
       <button type="button" data-action="backup" data-id="${esc(inst.id)}">Backup jetzt erstellen</button>`;
   } else {
     target.innerHTML = `<pre>${esc(JSON.stringify(inst.status || inst, null, 2))}</pre>`;

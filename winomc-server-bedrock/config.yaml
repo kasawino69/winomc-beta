@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: "[BETA] WinoMC 2.1b.1 Manager-only Rebuild"
-version: 2.1.3b
+version: 2.1.5b
 slug: winomc-beta
 init: false
 boot: auto
@@ -21,8 +21,8 @@ panel_admin: true
 
 ports_description:
   8099/tcp: WinoMC Manager Webpanel via Ingress
-  19132/udp: Beispiel-Port für eine Bedrock-Instanz, im Manager je Instanz konfigurierbar
-  19133/udp: Beispiel-Port für eine zweite Bedrock/IPv6-Instanz, im Manager je Instanz konfigurierbar
+  19132/udp: Beispiel-Port fÃ¼r eine Bedrock-Instanz, im Manager je Instanz konfigurierbar
+  19133/udp: Beispiel-Port fÃ¼r eine zweite Bedrock/IPv6-Instanz, im Manager je Instanz konfigurierbar
 
 options:
   WINOMC_MANAGER_PORT: 8099
@@ -74,7 +74,7 @@ map:
 
 environment:
   EULA: "TRUE"
-  WINOMC_VERSION: "2.1.3b"
+  WINOMC_VERSION: "2.1.5b"
   WINOMC_CONSOLE_PORT: "8099"
   WINOMC_MANAGER_UI_DIR: "/usr/local/share/winomc-manager"
   WINOMC_CONSOLE_ALLOWED_PROXIES: "172.30.32.2,127.0.0.1,::1"

@@ -1,3 +1,27 @@
+## WinoMC 2.1.5b - Bedrock Shared Pack Runtime Fix
+
+### Fixed
+- Fixed Bedrock instances failing with `Failed to load Vanilla Resource Pack`.
+- Fixed stale 2.1.3b/2.1.4b workdir pack links that hid Bedrock's shared Vanilla/system packs.
+- `resource_packs` and `behavior_packs` now use a merged runtime view:
+  - shared Bedrock Vanilla/system packs from the BDS runtime
+  - per-instance user packs from the selected WinoMC instance
+- Added pre-start validation that fails clearly if Vanilla resource packs are not visible in the effective instance workdir.
+
+### Improved
+- Instance state remains `starting` during the early Bedrock process window.
+- WinoMC only reports `running` after the process survives the early startup grace period.
+- Early Bedrock exits are reported as `crashed` instead of briefly looking healthy.
+- Runtime diagnostics now include `pack_links` so the effective shared/instance pack mapping is visible in Logs/Diagnose.
+
+### Changed
+- Bumped beta version to `2.1.5b`.
+
+### Notes
+- This is a runtime hotfix for the WinoMC 2.1b Manager-only rebuild.
+- Manager-only boot remains unchanged.
+- Bedrock remains the only active runtime in this release.
+
 # 2.0.0.12b
 
 - Begonnenen Ground Rebuild der Webconsole-Architektur eingeführt: eigene `core/`, `modes/`, `modules/` und `styles/`-Grenzen unter `/usr/local/share/winomc-console`.
