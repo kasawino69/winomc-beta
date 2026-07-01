@@ -1,0 +1,8 @@
+{
+  "version": "2.0.0.12b",
+  "architecture": "ground-rebuild",
+  "core": ["boot", "api", "state", "storage", "events", "errors", "dom", "router"],
+  "modes": ["mobile", "pc-classic", "desktop"],
+  "modules": ["overview", "live-console", "dashboard", "server", "files", "packs-addons", "backups", "diagnostics", "players", "firststart-profiles", "network", "updates", "expert", "web-protection"],
+  "goals": ["ingress-compatible relative routing", "isolated module startup", "visible error boundaries", "clear mode separation"]
+}

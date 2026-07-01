@@ -1,4 +1,4 @@
-/* WinoMC Mobile UI 1.6.14.23b
+/* WinoMC Mobile Mode 2.0.0.12b
    Mobile-only behaviour. This file must not touch PC editor/window logic. */
 (function WinoMCMobileUI() {
   if (window.WinoMCMobileUI?.initialized) return;

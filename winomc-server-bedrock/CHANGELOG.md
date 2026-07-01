@@ -1,3 +1,10 @@
+# 2.0.0.12b
+
+- Begonnenen Ground Rebuild der Webconsole-Architektur eingeführt: eigene `core/`, `modes/`, `modules/` und `styles/`-Grenzen unter `/usr/local/share/winomc-console`.
+- Mobile, PC Classic und Desktop als getrennte Mode-Module mit eigener State-Setzung und sichtbarer Safe-Mode-Fehlergrenze vorbereitet.
+- Ingress-kompatible statische Asset-Auslieferung unter `/assets/winomc-console/` ergänzt, damit neue Module ohne absolute Pfadannahmen geladen werden.
+- Webconsole-, Diagnose- und Server-Version auf `2.0.0.12b` angehoben.
+
 # 2.0.0.10b
 
 - Removed the preserved old web console HTML route so the rebuilt web console is the only served UI.

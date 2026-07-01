@@ -45,7 +45,8 @@ FILE_BACKUP_DIR = os.environ.get("WINOMC_FILE_BACKUP_DIR", os.path.join(DATA_DIR
 TRASH_DIR = os.environ.get("WINOMC_TRASH_DIR", os.path.join(DATA_DIR, ".winomc", "trash"))
 TRASH_RETENTION_DAYS = int(os.environ.get("WINOMC_TRASH_RETENTION_DAYS", "7"))
 CONSOLE_SETTINGS_FILE = os.environ.get("WINOMC_CONSOLE_SETTINGS_FILE", os.path.join(DATA_DIR, ".winomc", "web_console_settings.json"))
-WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.0.0.10b")
+WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.0.0.12b")
+STATIC_CONSOLE_DIR = os.environ.get("WINOMC_CONSOLE_STATIC_DIR", "/usr/local/share/winomc-console")
 BACKUP_DIR = os.environ.get("WINOMC_BACKUP_DIR", os.path.join(DATA_DIR, "backups"))
 BACKUP_KEEP = int(os.environ.get("WINOMC_BACKUP_KEEP", os.environ.get("PACKAGE_BACKUP_KEEP", "5")))
 SERVER_DIR = os.environ.get("WINOMC_SERVER_DIR", DATA_DIR)
@@ -87,7 +88,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC 2.0.0.8b Framework Workbench</title>
+  <title>WinoMC 2.0.0.12b Framework Workbench</title>
   <style>
     :root {
       color-scheme: dark;
@@ -298,7 +299,7 @@ INDEX_HTML = r"""<!doctype html>
     .console-inner { padding-top: 16px; }
     .mobile-quickbar { display: none; }
 
-    /* WinoMC 2.0.0.8b Framework Workbench */
+    /* WinoMC 2.0.0.12b Framework Workbench */
     body.desktop-mode {
       padding-bottom: 0;
       overflow: hidden;
@@ -4819,6 +4820,15 @@ body.winomc-mobile .editor-panel.editor-open {
 }
   </style>
 
+  <link rel="stylesheet" href="./assets/winomc-console/styles/tokens/index.css">
+  <link rel="stylesheet" href="./assets/winomc-console/styles/base/index.css">
+  <script defer src="./assets/winomc-console/core/boot.js"></script>
+  <script defer src="./assets/winomc-console/core/api.js"></script>
+  <script defer src="./assets/winomc-console/core/state.js"></script>
+  <script defer src="./assets/winomc-console/modes/mobile/index.js"></script>
+  <script defer src="./assets/winomc-console/modes/pc-classic/index.js"></script>
+  <script defer src="./assets/winomc-console/modes/desktop/index.js"></script>
+
 </head>
 <body>
   <section id="bootFallback" class="winomc-boot-fallback" aria-live="polite">
@@ -4854,7 +4864,7 @@ body.winomc-mobile .editor-panel.editor-open {
     })();
   </script>
   <header>
-    <h1 id="appTitle">WinoMC 2.0.0.8b Framework Workbench</h1>
+    <h1 id="appTitle">WinoMC 2.0.0.12b Framework Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
   </header>
 
@@ -8257,7 +8267,7 @@ body.winomc-mobile .editor-panel.editor-open {
 
 
 DIAG_HTML = r"""<!doctype html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="winomc-console-version" content="2.0.0.10b"><title>WinoMC Diagnose</title><style>body{margin:0;background:#0b1120;color:#e5e7eb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:980px;margin:0 auto;padding:16px}.card{background:#111827;border:1px solid #334155;border-radius:14px;padding:14px;margin:12px 0}.ok{color:#22c55e}.warn{color:#f59e0b}.bad{color:#ef4444}code,pre{background:#020617;border:1px solid #1e293b;border-radius:10px;padding:8px;display:block;white-space:pre-wrap}a{color:#93c5fd}</style></head><body><main><h1>WinoMC Diagnose</h1><section class="card"><h2>Statische Checks</h2><ul><li class="ok">HTML geladen</li><li class="ok">CSS geladen</li><li id="jsState" class="warn">JavaScript noch nicht bestätigt</li></ul></section><section class="card"><h2>Browser / Pfade</h2><pre id="info">Pfad wird ohne JavaScript nicht erweitert. Diese Seite liefert dennoch sichtbaren Inhalt per curl.</pre></section><section class="card"><h2>API-Testbereich</h2><div id="apiStatus">/api/status: noch nicht getestet</div><div id="apiLogs">/api/logs: Live-Log wird nicht blockierend getestet</div><pre id="errors"></pre></section><p><a href="./">Zur Webconsole</a> · <a href="./?safe=1">Safe Mode</a></p></main><script>(()=>{const $=s=>document.querySelector(s); const api=p=>'./'+p.replace(/^\/+/, ''); $('#jsState').textContent='JavaScript gestartet'; $('#jsState').className='ok'; $('#info').textContent=JSON.stringify({path:location.pathname+location.search, basePath:api('/api/status'), userAgent:navigator.userAgent, timestamp:new Date().toISOString()},null,2); const errors=[]; const timeout=(ms)=>new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout')),ms)); Promise.race([fetch(api('/api/status'),{cache:'no-store'}), timeout(8000)]).then(r=>r.text().then(t=>({r,t}))).then(({r,t})=>{$('#apiStatus').innerHTML='<span class="'+(r.ok?'ok':'bad')+'">/api/status HTTP '+r.status+'</span><pre>'+t.slice(0,1600).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+'</pre>';}).catch(e=>{$('#apiStatus').innerHTML='<span class="bad">/api/status Fehler: '+e.message+'</span>'; errors.push(e.message); $('#errors').textContent=errors.join('\n');}); $('#apiLogs').innerHTML='<span class="warn">/api/logs: SSE wird bewusst nicht dauerhaft geöffnet; Live-Log ist nicht startblockierend.</span>'; window.addEventListener('error',e=>{$('#errors').textContent += '\n'+(e.message||e.error);});})();</script></body></html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="winomc-console-version" content="2.0.0.12b"><title>WinoMC Diagnose</title><style>body{margin:0;background:#0b1120;color:#e5e7eb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:980px;margin:0 auto;padding:16px}.card{background:#111827;border:1px solid #334155;border-radius:14px;padding:14px;margin:12px 0}.ok{color:#22c55e}.warn{color:#f59e0b}.bad{color:#ef4444}code,pre{background:#020617;border:1px solid #1e293b;border-radius:10px;padding:8px;display:block;white-space:pre-wrap}a{color:#93c5fd}</style></head><body><main><h1>WinoMC Diagnose</h1><section class="card"><h2>Statische Checks</h2><ul><li class="ok">HTML geladen</li><li class="ok">CSS geladen</li><li id="jsState" class="warn">JavaScript noch nicht bestätigt</li></ul></section><section class="card"><h2>Browser / Pfade</h2><pre id="info">Pfad wird ohne JavaScript nicht erweitert. Diese Seite liefert dennoch sichtbaren Inhalt per curl.</pre></section><section class="card"><h2>API-Testbereich</h2><div id="apiStatus">/api/status: noch nicht getestet</div><div id="apiLogs">/api/logs: Live-Log wird nicht blockierend getestet</div><pre id="errors"></pre></section><p><a href="./">Zur Webconsole</a> · <a href="./?safe=1">Safe Mode</a></p></main><script>(()=>{const $=s=>document.querySelector(s); const api=p=>'./'+p.replace(/^\/+/, ''); $('#jsState').textContent='JavaScript gestartet'; $('#jsState').className='ok'; $('#info').textContent=JSON.stringify({path:location.pathname+location.search, basePath:api('/api/status'), userAgent:navigator.userAgent, timestamp:new Date().toISOString()},null,2); const errors=[]; const timeout=(ms)=>new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout')),ms)); Promise.race([fetch(api('/api/status'),{cache:'no-store'}), timeout(8000)]).then(r=>r.text().then(t=>({r,t}))).then(({r,t})=>{$('#apiStatus').innerHTML='<span class="'+(r.ok?'ok':'bad')+'">/api/status HTTP '+r.status+'</span><pre>'+t.slice(0,1600).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+'</pre>';}).catch(e=>{$('#apiStatus').innerHTML='<span class="bad">/api/status Fehler: '+e.message+'</span>'; errors.push(e.message); $('#errors').textContent=errors.join('\n');}); $('#apiLogs').innerHTML='<span class="warn">/api/logs: SSE wird bewusst nicht dauerhaft geöffnet; Live-Log ist nicht startblockierend.</span>'; window.addEventListener('error',e=>{$('#errors').textContent += '\n'+(e.message||e.error);});})();</script></body></html>
 """
 
 
@@ -10776,6 +10786,21 @@ def status_payload():
     }
     backups = list_backups(); return {"ok": True, "winomc_version": WINOMC_VERSION, "fifo_exists": runtime_path_exists(runtime_fifo_path()), "log_exists": runtime_path_exists(runtime_log_path()), "env": env, "roots": list_file_roots(), "metrics": metrics, "backup": {"latest": backups[0] if backups else None, "count": len(backups)}, "web_protection": read_web_protection_state(), "health": {"overall": diagnostics_payload().get("overall", "Nicht verfügbar")}, "world_safety": analyze_world_safety()}
 
+
+def safe_static_path(url_path):
+    raw = unquote(url_path.split("?", 1)[0])
+    prefix = "/assets/winomc-console/"
+    if not raw.startswith(prefix):
+        return None
+    rel = posixpath.normpath(raw[len(prefix):]).lstrip("/")
+    if rel.startswith("../") or rel == ".." or not rel:
+        return None
+    candidate = os.path.realpath(os.path.join(STATIC_CONSOLE_DIR, rel))
+    base = os.path.realpath(STATIC_CONSOLE_DIR)
+    if candidate != base and candidate.startswith(base + os.sep) and os.path.isfile(candidate):
+        return candidate
+    return None
+
 def safe_header_value(value, fallback="application/octet-stream"):
     value = str(value or fallback)
     value = value.replace("\r", "").replace("\n", "").strip()
@@ -10794,7 +10819,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCConsole/2.0.0.10b"
+    server_version = "WinoMCConsole/2.0.0.12b"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
@@ -10984,6 +11009,18 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
         blocked_name = "leg" + "acy"
+
+        static_path = safe_static_path(path)
+        if static_path:
+            with open(static_path, "rb") as handle:
+                data = handle.read()
+            self.send_response(200)
+            self.send_header("Content-Type", safe_content_type(mimetypes.guess_type(static_path)[0], "application/octet-stream"))
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path.rstrip("/").split("/")[-1] == blocked_name:
             self.send_error(404)
             return

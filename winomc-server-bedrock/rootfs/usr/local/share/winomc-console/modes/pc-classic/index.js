@@ -1,0 +1,1 @@
+(function(){'use strict'; window.WinoMC?.register?.('mode:pc-classic', () => { document.body.classList.add('winomc-pc-classic-mode'); document.body.classList.remove('winomc-mobile-mode','winomc-desktop-mode'); window.WinoMC.state?.set('mode','pc-classic'); });})();
