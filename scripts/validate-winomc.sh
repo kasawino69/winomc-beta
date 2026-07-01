@@ -13,8 +13,8 @@ server = root/'winomc-server-bedrock/rootfs/usr/local/bin/winomc-console-server'
 source = server.read_text()
 config = root/'winomc-server-bedrock/config.yaml'
 text = config.read_text()
-if 'version: 2.0.0' not in text:
-    raise SystemExit('config.yaml version is not 2.0.0')
+if 'version: 2.1b' not in text:
+    raise SystemExit('config.yaml version is not 2.1b')
 if yaml:
     yaml.safe_load(text)
 else:
@@ -24,6 +24,35 @@ for path in root.rglob('*.json'):
         continue
     json.loads(path.read_text())
 py_compile.compile(str(server), doraise=True)
+
+# WinoMC 2.1b manager/runtime smoke test with a fake Bedrock executable.
+import os, runpy, stat, tempfile, time, zipfile
+smoke_root = pathlib.Path(tempfile.mkdtemp(prefix='winomc-manager-smoke-'))
+shared = smoke_root/'.winomc'/'bds'/'shared'
+shared.mkdir(parents=True)
+fake_bds = shared/'bedrock_server'
+fake_bds.write_text('#!/bin/sh\necho "Fake Bedrock ready"\nwhile IFS= read -r line; do echo "CMD:$line"; [ "$line" = "stop" ] && exit 0; done\n', encoding='utf-8')
+fake_bds.chmod(fake_bds.stat().st_mode | stat.S_IXUSR)
+os.environ['WINOMC_DATA_DIR'] = str(smoke_root)
+os.environ['WINOMC_BDS_SHARED_DIR'] = str(shared)
+module = runpy.run_path(str(server))
+first = module['create_instance']({'id':'survival','name':'Survival','profile':'family-safe','bedrock':{'server_port':19132,'server_port_v6':19133}})
+assert (smoke_root/'instances'/'survival'/'server.properties').read_text(encoding='utf-8').count('server-port=19132') == 1
+try:
+    module['create_instance']({'id':'creative','name':'Creative','profile':'creative','bedrock':{'server_port':19132,'server_port_v6':19134}})
+    raise AssertionError('port conflict was not detected')
+except ValueError as exc:
+    assert 'Port 19132' in str(exc)
+started = module['start_instance']('survival')
+assert started['status']['state'] == 'running' and started['status']['pid']
+assert (smoke_root/'instances'/'survival'/'runtime'/'state.json').exists()
+module['send_instance_command']('survival', 'say smoke')
+stopped = module['stop_instance']('survival')
+assert stopped['status']['state'] in ('stopped', 'crashed')
+backup = module['instance_backup']('survival')['backup']
+with zipfile.ZipFile(backup['path']) as zf:
+    assert 'backup-metadata.json' in zf.namelist()
+print('WinoMC manager runtime smoke OK')
 required_symbols = [
     'def require_web_write_allowed', 'def read_web_protection_state', 'def set_web_protection_state',
     'WEB_PROTECTION_FILE', 'def repair_diagnostics', 'def validate_external_download_url',
@@ -34,7 +63,7 @@ required_symbols = [
     'def addons_overview_payload', 'def addons_catalog_payload', 'def build_addon_plan', 'def apply_addon_action',
     'def is_builtin_bedrock_pack', 'def is_system_pack_path',
     'def activate_pack', 'def deactivate_pack',
-    'def save_players', 'def prepare_update', 'def prepare_profile', 'winomc-mobile-assistant'
+    'def save_players', 'def prepare_update', 'def prepare_profile', 'winomc-mobile-assistant', 'def create_instance', 'def validate_instance_config', 'BEDROCK_PROFILES', 'INSTANCES_DIR', 'def detect_bds_runtime', 'def prepare_instance_runtime', 'PROCESS_HANDLES'
 ]
 for symbol in required_symbols:
     if symbol not in source:
@@ -46,6 +75,7 @@ required_routes = [
     '/api/import/url/check', '/api/import/url/install', '/api/backups/restore',
     '/api/backups/delete', '/api/backups/restore/plan', '/api/packs/activate', '/api/packs/deactivate',
     '/api/players/save', '/api/updates/prepare', '/api/profiles/prepare',
+    '/api/manager', '/api/instances',
     '/api/addons/overview', '/api/addons/catalog', '/api/addons/item', '/api/addons/scan', '/api/addons/plan', '/api/addons/apply'
 ]
 for route in required_routes:
