@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: "[BETA] WinoMC 2.1b.1 Manager-only Rebuild"
-version: 2.1.1b
+version: 2.1.2b
 slug: winomc-beta
 init: false
 boot: auto
@@ -74,7 +74,8 @@ map:
 
 environment:
   EULA: "TRUE"
-  WINOMC_VERSION: "2.1.1b"
+  WINOMC_VERSION: "2.1.2b"
   WINOMC_CONSOLE_PORT: "8099"
   WINOMC_MANAGER_UI_DIR: "/usr/local/share/winomc-manager"
   WINOMC_CONSOLE_ALLOWED_PROXIES: "172.30.32.2,127.0.0.1,::1"
+

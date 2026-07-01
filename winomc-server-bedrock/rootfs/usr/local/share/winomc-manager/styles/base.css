@@ -175,3 +175,30 @@ code { color: var(--accent); }
   padding: 10px;
 }
 .empty-state, .hint { color: var(--muted); }
+
+/* WinoMC 2.1.2b overlay hotfix
+   Ensure hidden panels cannot block the Manager UI. */
+[hidden],
+.error-panel[hidden],
+.manager-modal[hidden],
+.manager-overlay[hidden] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.error-panel:not([hidden]) {
+  position: fixed;
+  inset: 20px;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.66);
+  pointer-events: auto;
+}
+
+.manager-shell::before,
+.manager-shell::after {
+  pointer-events: none;
+}
