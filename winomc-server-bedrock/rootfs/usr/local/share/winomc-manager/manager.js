@@ -541,6 +541,17 @@ function roleLabel(role) {
   return ({ operator: 'Operator', member: 'Member', visitor: 'Visitor' }[role] || role || 'Member');
 }
 
+function identitySourceLabel(source) {
+  return ({
+    existing_player_store: 'WinoMC-Spielerdaten',
+    allowlist_file: 'allowlist.json',
+    permissions_file: 'permissions.json',
+    server_log: 'Serverlog',
+    xbox_live: 'Xbox Live',
+    manual: 'manuell',
+  }[source] || source || 'unbekannt');
+}
+
 function playerMatchesFilter(player) {
   const f = state.playerFilter || 'all';
   if (f === 'all') return true;
@@ -577,13 +588,21 @@ function renderPlayersModule(players, warnings = []) {
       <form id="playersForm" class="settings-form">
         <div class="file-table-wrap">
           <table class="file-table players-table">
-            <thead><tr><th>Name</th><th>XUID</th><th>Rolle</th><th>Allowlist</th><th>Limit ignorieren</th><th>Aktionen</th></tr></thead>
+            <thead><tr><th>Gamertag / Spielername</th><th>XUID</th><th>Rolle</th><th>Allowlist</th><th>Limit ignorieren</th><th>Aktionen</th></tr></thead>
             <tbody id="playersTableBody">
               ${filtered.map((p, index) => {
                 const realIndex = players.indexOf(p);
                 return `<tr data-player-row="${realIndex}">
-                  <td><input data-player-field="name" data-player-index="${realIndex}" value="${esc(p.name)}" required></td>
-                  <td><input data-player-field="xuid" data-player-index="${realIndex}" value="${esc(p.xuid)}" inputmode="numeric" pattern="[0-9]+" required></td>
+                  <td>
+                    <input data-player-field="name" data-player-index="${realIndex}" value="${esc(p.name)}" maxlength="64" required>
+                    <span class="hint player-identity-status" data-player-resolve-status="${realIndex}">${p.xuid_source ? `Quelle: ${esc(identitySourceLabel(p.xuid_source))}` : ''}</span>
+                  </td>
+                  <td>
+                    <div class="player-xuid-control">
+                      <input data-player-field="xuid" data-player-index="${realIndex}" value="${esc(p.xuid)}" inputmode="numeric" pattern="[0-9]+" required>
+                      <button type="button" class="soft" data-player-resolve="${realIndex}">XUID suchen</button>
+                    </div>
+                  </td>
                   <td><select data-player-field="role" data-player-index="${realIndex}">
                     ${['operator','member','visitor'].map((role) => `<option value="${role}" ${p.role === role ? 'selected' : ''}>${roleLabel(role)}</option>`).join('')}
                   </select></td>
@@ -616,6 +635,58 @@ function collectPlayersForm() {
   return state.players;
 }
 
+function setPlayerResolveStatus(index, message, tone = 'info') {
+  const status = document.querySelector(`[data-player-resolve-status="${index}"]`);
+  if (!status) return;
+  status.textContent = message || '';
+  status.dataset.tone = tone;
+}
+
+async function resolvePlayerXuid(inst, index, button) {
+  collectPlayersForm();
+  const player = state.players[index];
+  if (!player) return;
+  const name = String(player.name || '').trim();
+  if (!name) {
+    setPlayerResolveStatus(index, 'Bitte zuerst Gamertag/Spielername eintragen.', 'warning');
+    return;
+  }
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Suche...';
+  setPlayerResolveStatus(index, 'XUID wird gesucht...', 'info');
+
+  try {
+    const data = await post(`/api/instances/${encodeURIComponent(inst.id)}/players/resolve`, { name });
+    if (data.ok && data.xuid) {
+      player.name = data.name || name;
+      player.xuid = data.xuid;
+      player.xuid_source = data.source || 'unknown';
+      const row = document.querySelector(`[data-player-row="${index}"]`);
+      const nameInput = row?.querySelector('[data-player-field="name"]');
+      const xuidInput = row?.querySelector('[data-player-field="xuid"]');
+      if (nameInput) nameInput.value = player.name;
+      if (xuidInput) xuidInput.value = player.xuid;
+      const warning = (data.warnings || []).join(' ');
+      setPlayerResolveStatus(index, `XUID gefunden (${identitySourceLabel(data.source)}).${warning ? ` ${warning}` : ''}`, data.warnings?.length ? 'warning' : 'ok');
+      return;
+    }
+
+    const fallbacks = (data.fallbacks || []).map((item) => ({
+      manual: 'XUID manuell eintragen',
+      import_existing_files: 'bestehende Dateien importieren',
+      temporary_join_assistant: 'Join-Assistent vorbereitet, noch nicht aktiv',
+    }[item] || item)).join(', ');
+    setPlayerResolveStatus(index, `${data.message || 'XUID nicht gefunden.'} Fallbacks: ${fallbacks || 'manuell eintragen'}.`, 'warning');
+  } catch (err) {
+    setPlayerResolveStatus(index, err?.message || err?.error || String(err), 'warning');
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
 function bindPlayersModule(inst) {
   $('#playersModule')?.addEventListener('click', async (ev) => {
     const filter = ev.target.closest('[data-player-filter]');
@@ -623,6 +694,8 @@ function bindPlayersModule(inst) {
     const remove = ev.target.closest('[data-player-remove]');
     if (remove) { collectPlayersForm(); state.players.splice(Number(remove.dataset.playerRemove), 1); $('#detailContent').innerHTML = renderPlayersModule(state.players); bindPlayersModule(inst); return; }
     if (ev.target.closest('#addPlayer')) { collectPlayersForm(); state.players.push({ name: '', xuid: '', role: 'member', allowlisted: true, ignores_player_limit: false }); state.playerFilter = 'all'; $('#detailContent').innerHTML = renderPlayersModule(state.players); bindPlayersModule(inst); return; }
+    const resolver = ev.target.closest('[data-player-resolve]');
+    if (resolver) { await resolvePlayerXuid(inst, Number(resolver.dataset.playerResolve), resolver); return; }
     if (ev.target.closest('#importPlayers')) {
       try { const data = await post(`/api/instances/${encodeURIComponent(inst.id)}/players/import`, {}); state.players = data.players || []; $('#detailContent').innerHTML = renderPlayersModule(state.players, data.warnings || []); bindPlayersModule(inst); }
       catch (err) { showError(err); }

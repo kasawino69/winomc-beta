@@ -458,6 +458,31 @@ code {
   gap: 16px;
 }
 
+.player-xuid-control {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.player-xuid-control button {
+  white-space: nowrap;
+}
+
+.player-identity-status {
+  display: block;
+  margin-top: 6px;
+  max-width: 280px;
+}
+
+.player-identity-status[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.player-identity-status[data-tone="warning"] {
+  color: var(--warn);
+}
+
 .settings-group {
   border: 1px solid var(--border);
   border-radius: 16px;

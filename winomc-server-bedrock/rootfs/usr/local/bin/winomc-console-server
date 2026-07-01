@@ -9707,6 +9707,8 @@ def scan_packs(base_dir, pack_type):
 
 PLAYER_ROLES = ("operator", "member", "visitor")
 XUID_RE = re.compile(r"^[0-9]+$")
+PLAYER_NAME_MAX_LENGTH = 64
+IDENTITY_SOURCES = ("manual", "existing_player_store", "allowlist_file", "permissions_file", "server_log", "xbox_live")
 
 
 def normalize_role(role):
@@ -9722,13 +9724,25 @@ def validate_player_bool(value, field):
     return value
 
 
+def validate_player_name(value, component="instance-players"):
+    name = str(value or "").strip()
+    if not name:
+        raise WinoMCRuntimeError("invalid_player_name", "Spielername darf nicht leer sein.", component=component)
+    if len(name) > PLAYER_NAME_MAX_LENGTH:
+        raise WinoMCRuntimeError("invalid_player_name", "Spielername darf maximal %s Zeichen lang sein." % PLAYER_NAME_MAX_LENGTH, component=component, details={"max_length": PLAYER_NAME_MAX_LENGTH})
+    return name
+
+
+def normalize_identity_source(value):
+    source = str(value or "manual").strip()
+    return source if source in IDENTITY_SOURCES else "manual"
+
+
 def normalize_player_entry(item):
     if not isinstance(item, dict):
         raise WinoMCRuntimeError("invalid_player_entry", "Spieler-Eintrag ist ungültig.", component="instance-players")
-    name = str(item.get("name") or "").strip()
+    name = validate_player_name(item.get("name"), component="instance-players")
     xuid = str(item.get("xuid") or "").strip()
-    if not name:
-        raise WinoMCRuntimeError("invalid_player_name", "Spielername darf nicht leer sein.", component="instance-players")
     if not xuid or not XUID_RE.match(xuid):
         raise WinoMCRuntimeError("invalid_player_xuid", "XUID muss ein nicht-leerer Ziffernstring sein.", component="instance-players", details={"name": name})
     return {
@@ -9737,6 +9751,7 @@ def normalize_player_entry(item):
         "role": normalize_role(item.get("role", "member")),
         "allowlisted": validate_player_bool(item.get("allowlisted", False), "allowlisted"),
         "ignores_player_limit": validate_player_bool(item.get("ignores_player_limit", False), "ignores_player_limit"),
+        "xuid_source": normalize_identity_source(item.get("xuid_source") or item.get("source")),
     }
 
 
@@ -9764,6 +9779,49 @@ def read_instance_json_list(instance_id, filename):
     return data, None
 
 
+def instance_player_store_file(instance_id):
+    path = os.path.realpath(instance_path(instance_id, ".winomc", "players.json"))
+    base = os.path.realpath(instance_path(instance_id))
+    if not path.startswith(base + os.sep):
+        raise WinoMCRuntimeError("invalid_instance_player_store_path", "Spielerstore verlaesst den Instanzpfad.", instance_id=instance_id, component="instance-player-identity")
+    return path
+
+
+def read_instance_player_store(instance_id):
+    path = instance_player_store_file(instance_id)
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except FileNotFoundError:
+        return []
+    if isinstance(data, dict) and isinstance(data.get("players"), list):
+        return data.get("players")
+    if isinstance(data, list):
+        return data
+    return []
+
+
+def write_instance_player_store_atomic(instance_id, players):
+    path = instance_player_store_file(instance_id)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    backup = None
+    if os.path.exists(path):
+        backup = os.path.join(os.path.dirname(path), "players.json.%s.bak" % time.strftime("%Y%m%d-%H%M%S"))
+        shutil.copy2(path, backup)
+    payload = {"schema_version": 1, "updated_at": manager_now(), "players": players}
+    fd, tmp = tempfile.mkstemp(prefix=".players.json.", suffix=".tmp", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(tmp, path)
+    except Exception:
+        try: os.remove(tmp)
+        except OSError: pass
+        raise
+    return {"path": path, "backup_created": bool(backup), "backup_path": backup}
+
+
 def import_instance_players(instance_id):
     iid = validate_instance_id(instance_id)
     load_instance(iid, include_health=False)
@@ -9782,7 +9840,7 @@ def import_instance_players(instance_id):
         if xuid and not XUID_RE.match(xuid):
             warnings.append("allowlist.json enthält eine ungültige XUID für %s." % (name or "unbekannt"))
             continue
-        row = {"name": name, "xuid": xuid, "role": "member", "allowlisted": True, "ignores_player_limit": bool(item.get("ignoresPlayerLimit", item.get("ignores_player_limit", False)))}
+        row = {"name": name, "xuid": xuid, "role": "member", "allowlisted": True, "ignores_player_limit": bool(item.get("ignoresPlayerLimit", item.get("ignores_player_limit", False))), "xuid_source": "allowlist_file"}
         if xuid:
             by_xuid[xuid] = {**by_xuid.get(xuid, {}), **row}
         else:
@@ -9801,11 +9859,16 @@ def import_instance_players(instance_id):
         except WinoMCRuntimeError as exc:
             warnings.append(exc.message)
             continue
-        row = by_xuid.get(xuid, {"name": str(item.get("name") or xuid), "xuid": xuid, "allowlisted": False, "ignores_player_limit": False})
+        row = by_xuid.get(xuid, {"name": str(item.get("name") or xuid), "xuid": xuid, "allowlisted": False, "ignores_player_limit": False, "xuid_source": "permissions_file"})
         row["role"] = role
         by_xuid[xuid] = row
 
     players = nameless + [by_xuid[xuid] for xuid in sorted(by_xuid, key=lambda v: (by_xuid[v].get("name") or v).lower())]
+    store_by_xuid = {str(player.get("xuid") or ""): player for player in read_instance_player_store(iid) if isinstance(player, dict)}
+    for player in players:
+        stored = store_by_xuid.get(str(player.get("xuid") or ""))
+        if stored and stored.get("xuid_source"):
+            player["xuid_source"] = normalize_identity_source(stored.get("xuid_source"))
     if allow_error: warnings.append("allowlist.json: " + allow_error)
     if perm_error: warnings.append("permissions.json: " + perm_error)
     return {"ok": True, "instance_id": iid, "players": players, "warnings": warnings, "source": {"allowlist": "allowlist.json", "permissions": "permissions.json"}}
@@ -9858,9 +9921,199 @@ def save_instance_players(instance_id, players):
     permissions = [{"permission": p["role"], "xuid": p["xuid"]} for p in normalized]
     allow_result = write_instance_json_atomic(iid, "allowlist.json", allowlist)
     perm_result = write_instance_json_atomic(iid, "permissions.json", permissions)
+    store_result = write_instance_player_store_atomic(iid, normalized)
     payload = load_instance_players(iid)
     payload.update({"saved": True, "allowlist_result": allow_result, "permissions_result": perm_result, "message": "Spielerrechte wurden für diese Instanz gespeichert."})
+    payload["store_result"] = store_result
     return payload
+
+
+def player_identity_match(source, requested_name, name, xuid, confidence="validated"):
+    display_name = validate_player_name(name or requested_name, component="instance-player-identity")
+    xuid = str(xuid or "").strip()
+    if not xuid or not XUID_RE.match(xuid):
+        return None
+    return {"name": display_name, "xuid": xuid, "source": source, "confidence": confidence}
+
+
+class ExistingPlayerStoreResolver:
+    source = "existing_player_store"
+
+    def resolve(self, instance_id, name):
+        key = name.casefold()
+        for player in read_instance_player_store(instance_id):
+            if not isinstance(player, dict):
+                continue
+            player_name = str(player.get("name") or "").strip()
+            player_xuid = str(player.get("xuid") or "").strip()
+            if player_name.casefold() == key or (XUID_RE.match(name) and player_xuid == name):
+                return player_identity_match(self.source, name, player_name or name, player_xuid)
+        return None
+
+
+class AllowlistFileResolver:
+    source = "allowlist_file"
+
+    def resolve(self, instance_id, name):
+        key = name.casefold()
+        allowlist, _ = read_instance_json_list(instance_id, "allowlist.json")
+        for item in allowlist:
+            if not isinstance(item, dict):
+                continue
+            item_name = str(item.get("name") or "").strip()
+            if item_name and item_name.casefold() == key:
+                return player_identity_match(self.source, name, item_name, item.get("xuid"))
+        return None
+
+
+class PermissionsFileResolver:
+    source = "permissions_file"
+
+    def resolve(self, instance_id, name):
+        key = name.casefold()
+        permissions, _ = read_instance_json_list(instance_id, "permissions.json")
+        for item in permissions:
+            if not isinstance(item, dict):
+                continue
+            item_name = str(item.get("name") or "").strip()
+            item_xuid = str(item.get("xuid") or "").strip()
+            if item_name and item_name.casefold() == key:
+                return player_identity_match(self.source, name, item_name, item_xuid)
+            if XUID_RE.match(name) and item_xuid == name:
+                return player_identity_match(self.source, name, item_name or name, item_xuid)
+        return None
+
+
+class LogResolver:
+    source = "server_log"
+    patterns = (
+        re.compile(r"Player\s+connected:\s*(?P<name>[^,\r\n]+),\s*xuid:\s*(?P<xuid>[0-9]+)", re.IGNORECASE),
+        re.compile(r"Player\s+Spawned:\s*(?P<name>.*?)\s+xuid:\s*(?P<xuid>[0-9]+)", re.IGNORECASE),
+        re.compile(r"(?P<name>[A-Za-z0-9_ .-]{1,64}).{0,80}\bXUID\s*[:=]\s*(?P<xuid>[0-9]+)", re.IGNORECASE),
+    )
+
+    def log_candidates(self, instance_id):
+        candidates = []
+        logs_dir = os.path.realpath(instance_path(instance_id, "logs"))
+        latest = os.path.realpath(runtime_log_path_instance(instance_id))
+        if latest.startswith(logs_dir + os.sep):
+            candidates.append(latest)
+        if os.path.isdir(logs_dir):
+            for filename in sorted(os.listdir(logs_dir), reverse=True):
+                if not filename.lower().endswith((".log", ".txt")):
+                    continue
+                path = os.path.realpath(os.path.join(logs_dir, filename))
+                if path.startswith(logs_dir + os.sep) and path not in candidates:
+                    candidates.append(path)
+        return candidates[:10]
+
+    def read_tail(self, path, max_bytes=512 * 1024):
+        try:
+            size = os.path.getsize(path)
+            with open(path, "rb") as handle:
+                if size > max_bytes:
+                    handle.seek(size - max_bytes)
+                return handle.read(max_bytes).decode("utf-8", errors="replace")
+        except Exception:
+            return ""
+
+    def resolve(self, instance_id, name):
+        key = name.casefold()
+        matches = []
+        for path in self.log_candidates(instance_id):
+            text = self.read_tail(path)
+            for pattern in self.patterns:
+                for match in pattern.finditer(text):
+                    found_name = str(match.group("name") or "").strip()
+                    if found_name.casefold() == key:
+                        result = player_identity_match(self.source, name, found_name, match.group("xuid"), confidence="log")
+                        if result:
+                            matches.append(result)
+        return matches[-1] if matches else None
+
+
+class XboxLiveResolver:
+    source = "xbox_live"
+
+    def __init__(self):
+        self.enabled = str(os.environ.get("WINOMC_XBOX_RESOLVER_ENABLED", "")).strip().lower() in ("1", "true", "yes", "on")
+
+    def resolve(self, instance_id, name):
+        if not self.enabled:
+            return None
+        raise WinoMCRuntimeError(
+            "xbox_live_resolver_not_configured",
+            "Xbox-Live-XUID-Aufloesung ist vorbereitet, aber Microsoft/Xbox-Authentifizierung ist noch nicht konfiguriert.",
+            instance_id=instance_id,
+            component="instance-player-identity",
+            suggested_action="XUID manuell eintragen oder bestehende Dateien/Logs synchronisieren.",
+            details={"provider": self.source},
+        )
+
+
+class PlayerIdentityResolver:
+    fallbacks = ["manual", "import_existing_files", "temporary_join_assistant"]
+
+    def __init__(self):
+        self.resolvers = (
+            ExistingPlayerStoreResolver(),
+            AllowlistFileResolver(),
+            PermissionsFileResolver(),
+            LogResolver(),
+            XboxLiveResolver(),
+        )
+
+    def resolve(self, instance_id, name):
+        iid = validate_instance_id(instance_id)
+        load_instance(iid, include_health=False)
+        requested_name = validate_player_name(name, component="instance-player-identity")
+        matches = []
+        warnings = []
+        checked_sources = []
+
+        for resolver in self.resolvers:
+            checked_sources.append(resolver.source)
+            try:
+                match = resolver.resolve(iid, requested_name)
+            except WinoMCRuntimeError as exc:
+                warnings.append(exc.message)
+                continue
+            except Exception as exc:
+                warnings.append("%s konnte nicht genutzt werden: %s" % (resolver.source, exc))
+                continue
+            if match:
+                matches.append(match)
+
+        if matches:
+            selected = matches[0]
+            conflicts = [match for match in matches[1:] if match.get("xuid") != selected.get("xuid")]
+            if conflicts:
+                warnings.append("Widerspruechliche XUID-Quellen gefunden. WinoMC nutzt %s und ueberschreibt keine validierten Daten still." % selected.get("source"))
+            payload = {
+                "ok": True,
+                "name": selected["name"],
+                "xuid": selected["xuid"],
+                "source": selected["source"],
+                "confidence": selected.get("confidence", "validated"),
+                "checked_sources": checked_sources,
+            }
+            if warnings:
+                payload["warnings"] = warnings
+            if conflicts:
+                payload["conflicts"] = conflicts
+            return payload
+
+        return {
+            "ok": False,
+            "name": requested_name,
+            "message": "XUID konnte nicht automatisch gefunden werden.",
+            "fallbacks": self.fallbacks,
+            "checked_sources": checked_sources,
+        }
+
+
+def resolve_instance_player_identity(instance_id, name):
+    return PlayerIdentityResolver().resolve(instance_id, name)
 
 
 # Legacy global endpoint kept read-only-compatible for the older console shell.
@@ -12156,6 +12409,13 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith("/api/instances") or path == "/api/instances":
             self._send_json(200, {"ok": True, "instances": list_instances(), "profiles": list(BEDROCK_PROFILES.values()), "manager": {"version": MANAGER_VERSION, "winomc_version": WINOMC_VERSION, "log_level": LOG_LEVEL}})
             return
+        m = re.match(r"^/api/instances/([^/]+)/players/resolve$", path)
+        if m:
+            try:
+                self._send_json(200, resolve_instance_player_identity(m.group(1), query.get("name", [""])[0]))
+            except Exception as exc:
+                self._send_json(400, runtime_error_payload(exc, m.group(1) if m else None, component="instance-player-identity"))
+            return
         m = re.match(r"^/api/instances/([^/]+)(?:/(status|console|files|packs|players))?$", path)
         if m:
             try:
@@ -12326,6 +12586,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(200, {"ok": True, "instance": create_instance(self._read_json_payload())})
             except Exception as exc:
                 self._send_json(400, runtime_error_payload(exc, component="instance-manager"))
+            return
+        m = re.match(r"^/api/instances/([^/]+)/players/resolve$", path)
+        if m:
+            try:
+                payload = self._read_json_payload(max_bytes=4096)
+                self._send_json(200, resolve_instance_player_identity(m.group(1), payload.get("name", "")))
+            except Exception as exc:
+                self._send_json(400, runtime_error_payload(exc, m.group(1) if m else None, component="instance-player-identity"))
             return
         m = re.match(r"^/api/instances/([^/]+)/players/(import|sync)$", path)
         if m:

@@ -4,6 +4,9 @@
 - Adds structured reading and writing of `allowlist.json` and `permissions.json`.
 - Adds validation for player name, XUID, role and allowlist flags.
 - Supports importing/synchronizing existing Bedrock allowlist and permission files.
+- Adds a dedicated XUID resolver architecture with existing-player, allowlist, permissions, log and optional Xbox Live provider slots.
+- Adds a targeted `players/resolve` API so gamertags can populate XUID fields without guessing or creating fake IDs.
+- Shows XUID lookup source and fallback options in the Player & Permissions UI while keeping manual XUID entry available.
 - Keeps player management separate from generic server settings.
 - Preserves the clean targeted auto-refresh architecture without touching forms or input fields.
 
