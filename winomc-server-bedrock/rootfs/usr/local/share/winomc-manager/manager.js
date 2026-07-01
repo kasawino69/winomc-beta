@@ -1,4 +1,4 @@
-const VERSION = '2.1.11b';
+const VERSION = '2.1.12b';
 
 const state = {
   instances: [],
@@ -713,8 +713,8 @@ async function patchConsoleLog(instanceId) {
   const wasAtBottom = (log.scrollHeight - log.scrollTop - log.clientHeight) < 24;
   const consoleData = await get(`/api/instances/${encodeURIComponent(instanceId)}/console`);
   const lines = consoleData.lines || consoleData.console || consoleData.logs || [];
-  const nextText = Array.isArray(lines) ? lines.join('
-') : String(lines || 'Noch keine Logzeilen für diese Instanz.');
+  const lineBreak = String.fromCharCode(10);
+  const nextText = Array.isArray(lines) ? lines.join(lineBreak) : String(lines || 'Noch keine Logzeilen für diese Instanz.');
 
   if (log.textContent !== nextText) {
     log.textContent = nextText;

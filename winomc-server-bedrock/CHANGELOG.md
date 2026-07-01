@@ -1,3 +1,11 @@
+## 2.1.12b - Manager Loading Hotfix
+
+- Fixes a JavaScript syntax error in the targeted console log refresh introduced in 2.1.11b.
+- Replaces the fragile newline literal in `patchConsoleLog()` with `String.fromCharCode(10)`.
+- Restores Manager startup so the dashboard no longer stays stuck at “Manager wird geladen…”.
+- Keeps the targeted auto-refresh architecture: console log updates are allowed, command form and input remain untouched.
+- Keeps `config.yaml` changes strictly limited to `version` and `environment.WINOMC_VERSION`.
+
 ## 2.1.11b - Targeted Auto-Refresh
 
 - Reworks Manager auto-refresh to update only targeted runtime objects instead of re-rendering full tabs.
