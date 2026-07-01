@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Manager 2.1.8b</title>
+  <title>WinoMC Manager 2.1.9b</title>
   <link rel="stylesheet" href="./assets/winomc-manager/styles/base.css">
   <link rel="stylesheet" href="./assets/winomc-manager/styles/pc-classic.css">
   <link rel="stylesheet" href="./assets/winomc-manager/styles/mobile.css">
@@ -14,7 +14,7 @@
   <header class="manager-header">
     <div>
       <p class="eyebrow">Home Assistant Add-on · Bedrock Multiinstanz</p>
-      <h1>WinoMC Manager 2.1.8b</h1>
+      <h1>WinoMC Manager 2.1.9b</h1>
       <p id="managerSummary">Manager wird geladen…</p>
     </div>
   </header>
@@ -26,7 +26,6 @@
           <p class="eyebrow">Dashboard</p>
           <h2>Instanzen</h2>
         </div>
-        <button type="button" id="refreshInstances">Aktualisieren</button>
       </div>
       <div id="instancesGrid" class="instances-grid">
         <p class="empty-state">Manager wird geladen…</p>
@@ -123,7 +122,10 @@
       </div>
     </section>
   </main>
-
+  <script src="./assets/winomc-manager/data/bedrock-command-catalog.js"></script>
+  <script src="./assets/winomc-manager/data/bedrock-gamerules-catalog.js"></script>
+  <script src="./assets/winomc-manager/data/bedrock-settings-schema.js"></script>
+  <script src="./assets/winomc-manager/autocomplete-engine.js"></script>
   <script src="./assets/winomc-manager/manager.js"></script>
 </body>
 </html>

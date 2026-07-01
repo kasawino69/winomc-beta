@@ -451,3 +451,29 @@ code {
   display: grid;
   gap: 10px;
 }
+
+/* WinoMC 2.1.9b schema settings */
+.settings-form {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-group {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(2, 6, 23, .25);
+}
+
+.settings-group h3 {
+  margin-top: 0;
+}
+
+.autocomplete-box:not([hidden]) {
+  max-height: 420px;
+}
+
+.autocomplete-item .meta {
+  color: var(--muted);
+  font-size: 12px;
+}

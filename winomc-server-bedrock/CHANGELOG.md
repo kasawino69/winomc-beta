@@ -1,3 +1,37 @@
+## WinoMC 2.1.9b - Complete Bedrock Catalogs and Settings Schema
+
+### Added
+- Added external Bedrock command catalog under `winomc-manager/data/bedrock-command-catalog.js`.
+- Added external Bedrock gamerules catalog under `winomc-manager/data/bedrock-gamerules-catalog.js`.
+- Added external Bedrock server settings schema under `winomc-manager/data/bedrock-settings-schema.js`.
+- Added dedicated autocomplete engine under `winomc-manager/autocomplete-engine.js`.
+- Added complete Bedrock server.properties settings UI grouped by:
+  - Allgemein
+  - Zugang & Sicherheit
+  - Netzwerk
+  - Performance
+  - Packs & Logging
+  - Server Authoritative
+  - Script / Debug
+  - Script Watchdog
+  - Diagnostics
+- Added dashboard auto-polling without visible refresh button.
+
+### Improved
+- Command autocomplete now uses the local catalog files instead of a small inline list.
+- Gamerule autocomplete now uses a complete local gamerule catalog.
+- Settings tab now persists the expanded Bedrock settings into instance configuration.
+- `server.properties` rendering now writes the expanded Bedrock Dedicated Server property set.
+
+### Changed
+- Bumped beta version to `2.1.9b`.
+- Manager UI loads catalog/schema files before `manager.js`.
+
+### Notes
+- Command catalog is based on the current Microsoft Bedrock command reference plus legacy/archive compatibility entries.
+- Gamerule catalog is based on the current Bedrock GameRule enumeration.
+- Later versions can enrich command help from live `/help` and `/help <command>` output per running instance.
+
 ## WinoMC 2.1.8b - Bedrock Command Autocomplete and UX Cleanup
 
 ### Added

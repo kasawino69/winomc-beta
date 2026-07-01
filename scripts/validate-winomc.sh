@@ -31,8 +31,8 @@ for forbidden in ['/api/command', '/api/status?start', '/api/start', '/api/stop'
         raise SystemExit(f'manager UI must not use old global single-server API: {forbidden}')
 config = root/'winomc-server-bedrock/config.yaml'
 text = config.read_text()
-if 'version: 2.1.8b' not in text:
-    raise SystemExit('config.yaml version is not 2.1.8b')
+if 'version: 2.1.9b' not in text:
+    raise SystemExit('config.yaml version is not 2.1.9b')
 if yaml:
     yaml.safe_load(text)
 else:
@@ -183,13 +183,22 @@ PY
 bash -n winomc-server-bedrock/rootfs/usr/local/bin/winomc-bedrock-entrypoint
 bash -n winomc-server-bedrock/rootfs/usr/local/bin/winomc-native-start
 
-# 2.1.8b markers
+# 2.1.9b markers
 grep -q 'Watchdog' "${MANAGER_DIR}/manager.js" || fail "Watchdog UI fehlt"
 grep -q 'Autostart' "${MANAGER_DIR}/manager.js" || fail "Autostart UI fehlt"
 grep -q 'data-instance-card' "${MANAGER_DIR}/manager.js" || fail "Klickbare Instanzkarten fehlen"
 
-# 2.1.8b markers
+# 2.1.9b markers
 grep -q 'COMMAND_CATALOG' "${MANAGER_DIR}/manager.js" || fail "Command Autocomplete Katalog fehlt"
 grep -q 'autocompleteSuggestions' "${MANAGER_DIR}/manager.js" || fail "Command Autocomplete fehlt"
 grep -q 'data-instance-card' "${MANAGER_DIR}/manager.js" || fail "Klickbare Instanzkarten fehlen"
 grep -q 'WINOMC_LOG_LEVEL=debug' "${MANAGER_DIR}/manager.js" || fail "Debug-only Diagnose Hinweis fehlt"
+
+# 2.1.9b catalog/schema markers
+grep -q 'bedrock-command-catalog.js' "${MANAGER_DIR}/index.html" || fail "Command catalog wird nicht geladen"
+grep -q 'bedrock-gamerules-catalog.js' "${MANAGER_DIR}/index.html" || fail "Gamerule catalog wird nicht geladen"
+grep -q 'bedrock-settings-schema.js' "${MANAGER_DIR}/index.html" || fail "Settings schema wird nicht geladen"
+grep -q 'WINOMC_BEDROCK_COMMANDS' "${MANAGER_DIR}/data/bedrock-command-catalog.js" || fail "Command catalog fehlt"
+grep -q 'WINOMC_BEDROCK_GAMERULES' "${MANAGER_DIR}/data/bedrock-gamerules-catalog.js" || fail "Gamerule catalog fehlt"
+grep -q 'WINOMC_BEDROCK_SETTINGS_SCHEMA' "${MANAGER_DIR}/data/bedrock-settings-schema.js" || fail "Settings schema fehlt"
+grep -q 'WinoMCAutocomplete' "${MANAGER_DIR}/autocomplete-engine.js" || fail "Autocomplete engine fehlt"
