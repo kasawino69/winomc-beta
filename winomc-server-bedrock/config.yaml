@@ -1,8 +1,23 @@
 name: "[BETA] WinoMC Bedrock Server"
-description: "[BETA] WinoMC 2.1.10b Manager Settings Hotfix"
+description: "[BETA] WinoMC 2.1b.1 Manager-only Rebuild"
 version: 2.1.10b
+slug: winomc-beta
+init: false
+boot: auto
+startup: services
+stdin: false
+arch:
+  - amd64
+  - aarch64
 panel_title: "[BETA] WinoMC Manager"
 panel_admin: true
+
+host_network: true
+
+ingress: true
+ingress_port: 8099
+ingress_stream: true
+panel_icon: mdi:server-network
 
 ports_description:
   8099/tcp: WinoMC Manager Webpanel via Ingress
