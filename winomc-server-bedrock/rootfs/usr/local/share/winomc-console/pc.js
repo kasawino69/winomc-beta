@@ -1,4 +1,4 @@
-/* WinoMC PC UI 1.6.14.23b
+/* WinoMC PC Classic Mode 2.0.0.12b
    PC-only behaviour. Shared modules remain the existing API/file/console functions. */
 (function WinoMCPCUI() {
   if (window.WinoMCPCUI?.initialized) return;

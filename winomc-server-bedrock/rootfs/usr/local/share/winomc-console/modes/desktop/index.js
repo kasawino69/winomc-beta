@@ -1,0 +1,1 @@
+(function(){'use strict'; window.WinoMC?.register?.('mode:desktop', () => { if (window.WinoMC.state?.get('safe')) throw new Error('Desktop-Modus ist im Safe Mode deaktiviert.'); document.body.classList.add('winomc-desktop-mode'); document.body.classList.remove('winomc-mobile-mode','winomc-pc-classic-mode'); window.WinoMC.state?.set('mode','desktop'); });})();

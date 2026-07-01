@@ -1,3 +1,4 @@
+/* WinoMC Webconsole 2.0.0.12b compatibility layer */
 /* WinoMC shell router 1.6.14.23b
    The router is the only bridge between strict PC and Mobile UI modules.
    Shared application modules stay in the existing console server functions. */
