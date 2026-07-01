@@ -1,27 +1,31 @@
 name: "[BETA] WinoMC Bedrock Server"
-description: "[BETA] WinoMC 2.1b Manager Rebuild"
-version: 2.1b
+description: "[BETA] WinoMC 2.1b.1 Manager-only Rebuild"
+version: 2.1.1b
 slug: winomc-beta
 init: false
 boot: auto
 startup: services
-stdin: true
+stdin: false
 arch:
   - amd64
   - aarch64
+
 host_network: true
+
 ingress: true
 ingress_port: 8099
 ingress_stream: true
-panel_icon: mdi:console
+panel_icon: mdi:server-network
 panel_title: "[BETA] WinoMC Manager"
 panel_admin: true
+
 ports_description:
-  19132/udp: Minecraft Bedrock IPv4 Port
-  19133/udp: Minecraft Bedrock IPv6 Port
+  8099/tcp: WinoMC Manager Webpanel via Ingress
+  19132/udp: Beispiel-Port für eine Bedrock-Instanz, im Manager je Instanz konfigurierbar
+  19133/udp: Beispiel-Port für eine zweite Bedrock/IPv6-Instanz, im Manager je Instanz konfigurierbar
+
 options:
   WINOMC_MANAGER_PORT: 8099
-  ENABLE_WEB_CONSOLE: true
   WINOMC_SECURITY_MODE: protected
   WINOMC_LOG_LEVEL: info
   WINOMC_IMPORT_DIR: /share/winomc/import
@@ -33,12 +37,11 @@ options:
   WINOMC_FILE_UPLOAD_MAX_BYTES: 536870912
   WINOMC_FILE_JSON_UPLOAD_MAX_BYTES: 67108864
   WINOMC_ZIP_UNPACK_MAX_BYTES: 1073741824
-  WINOMC_EXPERIMENTAL_MANAGER_REBUILD: true
   WINOMC_DEBUG_DIAGNOSTICS: false
   TZ: Europe/Berlin
+
 schema:
   WINOMC_MANAGER_PORT: port
-  ENABLE_WEB_CONSOLE: bool?
   WINOMC_SECURITY_MODE: list(protected|local_only|open)?
   WINOMC_LOG_LEVEL: list(debug|info|warning|error)?
   WINOMC_IMPORT_DIR: str
@@ -50,9 +53,9 @@ schema:
   WINOMC_FILE_UPLOAD_MAX_BYTES: int?
   WINOMC_FILE_JSON_UPLOAD_MAX_BYTES: int?
   WINOMC_ZIP_UNPACK_MAX_BYTES: int?
-  WINOMC_EXPERIMENTAL_MANAGER_REBUILD: bool?
   WINOMC_DEBUG_DIAGNOSTICS: bool?
   TZ: str
+
 backup: cold
 backup_exclude:
   - "bedrock_server*"
@@ -62,12 +65,16 @@ backup_exclude:
   - "resource_packs/chemistry*"
   - ".winomc/bds/*"
   - ".winomc/file_backups/*"
+  - "instances/*/runtime/*"
+
 map:
   - addons:rw
   - addon_config:rw
   - share:rw
+
 environment:
   EULA: "TRUE"
-  WINOMC_VERSION: "2.1b"
+  WINOMC_VERSION: "2.1.1b"
   WINOMC_CONSOLE_PORT: "8099"
+  WINOMC_MANAGER_UI_DIR: "/usr/local/share/winomc-manager"
   WINOMC_CONSOLE_ALLOWED_PROXIES: "172.30.32.2,127.0.0.1,::1"

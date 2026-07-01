@@ -1,1 +1,12 @@
-body.mode-desktop{background:linear-gradient(135deg,#06101e,#0f2440)}body.mode-desktop .wm-layout{grid-template-columns:360px 360px minmax(420px,1fr)}body.mode-desktop .wm-panel{min-height:320px}body.mode-desktop .wm-detail{grid-column:auto;min-height:calc(100vh - 130px)}
+body.mode-desktop {
+  min-height: 100vh;
+  overflow: auto;
+}
+body.mode-desktop .manager-shell {
+  grid-template-columns: minmax(320px, .9fr) minmax(320px, .7fr) minmax(420px, 1.4fr);
+  grid-template-areas: "dashboard create details";
+  align-items: start;
+}
+body.mode-desktop .details-panel {
+  min-height: calc(100vh - 180px);
+}

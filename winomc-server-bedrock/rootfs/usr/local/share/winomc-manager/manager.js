@@ -1,8 +1,29 @@
-const state = { instances: [], profiles: [], selectedId: null, selected: null, tab: 'overview', mode: localStorage.getItem('winomc-manager-mode') || 'pc-classic' };
+const state = {
+  instances: [],
+  profiles: [],
+  selectedId: null,
+  selected: null,
+  tab: 'overview',
+  mode: localStorage.getItem('winomc-manager-mode') || 'pc-classic'
+};
+
 const $ = (selector, root = document) => root.querySelector(selector);
-const esc = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char]));
+}
+
+const esc = escapeHtml;
 const apiPath = (path) => './' + path.replace(/^\/+/, '');
+
 const MANAGER_INSTANCE_API_CONTRACT = [
+  '/api/instances',
   '/api/instances/${encodeURIComponent(id)}/start',
   '/api/instances/${encodeURIComponent(id)}/stop',
   '/api/instances/${encodeURIComponent(id)}/restart',
@@ -12,21 +33,56 @@ const MANAGER_INSTANCE_API_CONTRACT = [
 ];
 
 async function api(path, options = {}) {
-  const res = await fetch(apiPath(path), { cache: 'no-store', headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options });
-  const data = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }));
+  const res = await fetch(apiPath(path), {
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    },
+    ...options
+  });
+  const data = await res.json().catch(() => ({
+    ok: false,
+    code: `http_${res.status}`,
+    message: `HTTP ${res.status}`,
+    component: 'manager-api'
+  }));
   if (!res.ok || data.ok === false) throw data;
   return data;
 }
+
 const get = (path) => api(path);
 const post = (path, payload = {}) => api(path, { method: 'POST', body: JSON.stringify(payload) });
 const patch = (path, payload = {}) => api(path, { method: 'PATCH', body: JSON.stringify(payload) });
 
+function unwrapInstance(data) {
+  return data?.instance || data;
+}
+
 function showError(error) {
   const panel = $('#errorPanel');
   const message = error?.message || error?.error || String(error);
+  const component = error?.component || 'api';
+  const instanceId = error?.instance_id || state.selectedId || '-';
+  const suggested = error?.suggested_action;
   panel.hidden = false;
-  panel.innerHTML = `<strong>${esc(message)}</strong><p class="wm-muted">Komponente: ${esc(error?.component || 'api')} · Instanz: ${esc(error?.instance_id || state.selectedId || '-')}</p>${error?.suggested_action ? `<p>${esc(error.suggested_action)}</p>` : ''}<details><summary>Technische Details</summary><pre>${esc(JSON.stringify(error, null, 2))}</pre></details><button type="button" id="closeError">Schließen</button>`;
-  $('#closeError').onclick = () => panel.hidden = true;
+  panel.innerHTML = `
+    <div class="error-card">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Fehler</p>
+          <h2>${esc(message)}</h2>
+        </div>
+        <button type="button" id="closeError">Schließen</button>
+      </div>
+      <p>Komponente: <strong>${esc(component)}</strong> · Instanz: <strong>${esc(instanceId)}</strong></p>
+      ${suggested ? `<p class="suggested-action">${esc(suggested)}</p>` : ''}
+      <details>
+        <summary>Technische Details</summary>
+        <pre>${esc(JSON.stringify(error, null, 2))}</pre>
+      </details>
+    </div>`;
+  $('#closeError').onclick = () => { panel.hidden = true; };
 }
 
 function setMode(mode) {
@@ -42,40 +98,69 @@ async function loadInstances(selectId = state.selectedId) {
   state.profiles = data.profiles || [];
   renderProfiles();
   renderDashboard();
-  if (selectId && state.instances.some(i => i.id === selectId)) await selectInstance(selectId);
-  else if (!state.selectedId && state.instances[0]) await selectInstance(state.instances[0].id);
+  if (selectId && state.instances.some((i) => i.id === selectId)) {
+    await selectInstance(selectId);
+  } else if (!state.selectedId && state.instances[0]) {
+    await selectInstance(state.instances[0].id);
+  }
+}
+
+function profileKey(profile) {
+  return String(profile?.id || profile?.key || profile?.name || 'vanilla-survival')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'vanilla-survival';
 }
 
 function renderProfiles() {
   const select = $('#profileSelect');
-  select.innerHTML = state.profiles.map(p => `<option value="${esc(profileKey(p))}">${esc(p.name)}</option>`).join('') || '<option value="vanilla-survival">Vanilla Survival</option>';
+  const profiles = state.profiles.length ? state.profiles : [{ id: 'vanilla-survival', name: 'Vanilla Survival' }];
+  select.innerHTML = profiles
+    .map((profile) => `<option value="${esc(profileKey(profile))}">${esc(profile.name || profile.id || profile.key)}</option>`)
+    .join('');
 }
-function profileKey(profile) { return String(profile?.id || profile?.key || profile?.name || 'vanilla-survival').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'vanilla-survival'; }
-function instanceStatus(instance) { return instance?.status?.state || (instance?.broken ? 'broken' : 'stopped'); }
+
+function instanceStatus(instance) {
+  return instance?.status?.state || (instance?.broken ? 'broken' : 'stopped');
+}
 
 function renderDashboard() {
-  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · API: /api/instances · alle Aktionen instanzbezogen`;
-  $('#instancesGrid').innerHTML = state.instances.map(instance => {
+  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager 2.1b.1 · alle Aktionen instanzbezogen`;
+  $('#instancesGrid').innerHTML = state.instances.map((instance) => {
     const b = instance.bedrock || {};
     const status = instanceStatus(instance);
     const health = instance.health || {};
-    return `<article class="wm-instance-card ${state.selectedId === instance.id ? 'selected' : ''}">
-      <div class="wm-section-head"><div><h3>${esc(instance.name || instance.id)}</h3><p class="wm-muted">${esc(instance.id)} · ${esc(instance.profile || '-')}</p></div><span class="wm-status ${esc(status)}">${esc(status)}</span></div>
-      <div class="wm-meta"><span>IPv4: ${esc(b.server_port || '-')}</span><span>IPv6: ${esc(b.server_port_v6 || '-')}</span><span>Start: ${esc(instance.status?.started_at || '-')}</span><span>Health: ${health.ok === false ? 'Problem' : 'OK'}</span></div>
-      ${instance.broken || health.ok === false ? `<p class="wm-muted">${esc(instance.error || (health.errors || []).join(' · ') || 'Instanz prüfen')}</p>` : ''}
-      <div class="wm-card-actions">
-        <button data-action="start" data-id="${esc(instance.id)}">Start</button>
-        <button data-action="stop" data-id="${esc(instance.id)}">Stop</button>
-        <button data-action="restart" data-id="${esc(instance.id)}">Restart</button>
-        <button class="wm-primary" data-action="details" data-id="${esc(instance.id)}">Details</button>
-      </div>
-    </article>`;
-  }).join('') || '<div class="wm-placeholder">Noch keine Instanzen. Erstelle rechts eine neue Bedrock-Instanz.</div>';
+    const error = instance.error || (health.errors || []).join(' · ');
+    return `
+      <article class="instance-card status-${esc(status)}">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">${esc(instance.id)}</p>
+            <h3>${esc(instance.name || instance.id)}</h3>
+          </div>
+          <span class="status-pill">${esc(status)}</span>
+        </div>
+        <dl class="facts">
+          <div><dt>Profil</dt><dd>${esc(instance.profile || '-')}</dd></div>
+          <div><dt>IPv4</dt><dd>${esc(b.server_port || '-')}</dd></div>
+          <div><dt>IPv6</dt><dd>${esc(b.server_port_v6 || '-')}</dd></div>
+          <div><dt>Start</dt><dd>${esc(instance.status?.started_at || '-')}</dd></div>
+          <div><dt>Health</dt><dd>${health.ok === false ? 'Problem' : 'OK'}</dd></div>
+        </dl>
+        ${instance.broken || health.ok === false ? `<p class="warn-box">${esc(error || 'Instanz prüfen')}</p>` : ''}
+        <div class="card-actions">
+          <button type="button" data-action="start" data-id="${esc(instance.id)}">Start</button>
+          <button type="button" data-action="stop" data-id="${esc(instance.id)}">Stop</button>
+          <button type="button" data-action="restart" data-id="${esc(instance.id)}">Restart</button>
+          <button type="button" data-action="details" data-id="${esc(instance.id)}">Details</button>
+        </div>
+      </article>`;
+  }).join('') || '<p class="empty-state">Noch keine Instanzen. Erstelle rechts eine neue Bedrock-Instanz.</p>';
 }
 
 async function selectInstance(id) {
   state.selectedId = id;
-  state.selected = await get(`/api/instances/${encodeURIComponent(id)}`);
+  state.selected = unwrapInstance(await get(`/api/instances/${encodeURIComponent(id)}`));
   $('#detailTitle').textContent = `${state.selected.name || id} (${id})`;
   renderDetailActions();
   await renderDetail();
@@ -83,7 +168,12 @@ async function selectInstance(id) {
 }
 
 function renderDetailActions() {
-  $('#detailActions').innerHTML = ['start','stop','restart'].map(action => `<button data-action="${action}" data-id="${esc(state.selectedId)}">${action}</button>`).join('') + `<button class="wm-primary" data-action="backup" data-id="${esc(state.selectedId)}">Backup</button>`;
+  const id = esc(state.selectedId);
+  $('#detailActions').innerHTML = `
+    <button type="button" data-action="start" data-id="${id}">Start</button>
+    <button type="button" data-action="stop" data-id="${id}">Stop</button>
+    <button type="button" data-action="restart" data-id="${id}">Restart</button>
+    <button type="button" data-action="backup" data-id="${id}">Backup</button>`;
 }
 
 async function renderDetail() {
@@ -91,25 +181,77 @@ async function renderDetail() {
   const target = $('#detailContent');
   const inst = state.selected;
   const b = inst.bedrock || {};
+
   if (state.tab === 'overview') {
-    target.innerHTML = `<div class="wm-meta"><span>Status: ${esc(inst.status?.state || '-')}</span><span>Profil: ${esc(inst.profile || '-')}</span><span>IPv4: ${esc(b.server_port || '-')}</span><span>IPv6: ${esc(b.server_port_v6 || '-')}</span><span>Welt: ${esc(b.level_name || '-')}</span><span>Spielmodus: ${esc(b.gamemode || '-')}</span></div>`;
+    target.innerHTML = `
+      <dl class="facts large">
+        <div><dt>Status</dt><dd>${esc(inst.status?.state || '-')}</dd></div>
+        <div><dt>Profil</dt><dd>${esc(inst.profile || '-')}</dd></div>
+        <div><dt>IPv4</dt><dd>${esc(b.server_port || '-')}</dd></div>
+        <div><dt>IPv6</dt><dd>${esc(b.server_port_v6 || '-')}</dd></div>
+        <div><dt>Welt</dt><dd>${esc(b.level_name || '-')}</dd></div>
+        <div><dt>Spielmodus</dt><dd>${esc(b.gamemode || '-')}</dd></div>
+      </dl>`;
   } else if (state.tab === 'console') {
     const consoleData = await get(`/api/instances/${encodeURIComponent(inst.id)}/console`);
-    target.innerHTML = `<div class="wm-console-log" id="consoleLog">${esc((consoleData.lines || []).join('\n') || 'Noch keine Logzeilen für diese Instanz.')}</div><form id="commandForm" class="wm-console-input"><input name="command" placeholder="Command an ${esc(inst.id)} senden" ${inst.status?.state !== 'running' ? 'aria-describedby="consoleHint"' : ''}><button class="wm-primary">Senden</button></form><p id="consoleHint" class="wm-muted">Commands werden ausschließlich an ${esc(inst.id)} gesendet. Läuft die Instanz nicht oder wurde sie nach Manager-Neustart nicht neu gestartet, meldet die API einen Fehler.</p>`;
-    $('#commandForm').onsubmit = async (ev) => { ev.preventDefault(); const command = ev.currentTarget.command.value.trim(); if (!command) return; try { await post(`/api/instances/${encodeURIComponent(inst.id)}/command`, { command }); ev.currentTarget.command.value = ''; await renderDetail(); } catch (err) { showError(err); } };
+    const lines = consoleData.lines || consoleData.console || consoleData.logs || [];
+    target.innerHTML = `
+      <pre class="console-log">${esc(Array.isArray(lines) ? lines.join('\n') : String(lines || 'Noch keine Logzeilen für diese Instanz.'))}</pre>
+      <form id="commandForm" class="command-form">
+        <input name="command" autocomplete="off" placeholder="say Hallo von WinoMC">
+        <button type="submit">Senden</button>
+      </form>
+      <p class="hint">Commands werden ausschließlich an <strong>${esc(inst.id)}</strong> gesendet.</p>`;
+    $('#commandForm').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const command = ev.currentTarget.command.value.trim();
+      if (!command) return;
+      try {
+        await post(`/api/instances/${encodeURIComponent(inst.id)}/command`, { command });
+        ev.currentTarget.command.value = '';
+        await renderDetail();
+      } catch (err) {
+        showError(err);
+      }
+    };
   } else if (state.tab === 'settings') {
-    target.innerHTML = `<form id="settingsForm" class="wm-form"><label>Anzeigename <input name="name" value="${esc(inst.name || '')}"></label><label>Weltname <input name="level_name" value="${esc(b.level_name || 'world')}"></label><label>Max Players <input name="max_players" type="number" value="${esc(b.max_players || 10)}"></label><button class="wm-primary">Speichern</button></form>`;
-    $('#settingsForm').onsubmit = async (ev) => { ev.preventDefault(); const form = new FormData(ev.currentTarget); try { await patch(`/api/instances/${encodeURIComponent(inst.id)}`, { name: form.get('name'), bedrock: { level_name: form.get('level_name'), max_players: Number(form.get('max_players')) } }); await loadInstances(inst.id); } catch (err) { showError(err); } };
+    target.innerHTML = `
+      <form id="settingsForm" class="form-grid compact">
+        <label>Anzeigename<input name="name" value="${esc(inst.name || '')}"></label>
+        <label>Weltname<input name="level_name" value="${esc(b.level_name || 'world')}"></label>
+        <label>Max Players<input name="max_players" type="number" min="1" max="100" value="${esc(b.max_players || 10)}"></label>
+        <button type="submit" class="primary">Speichern</button>
+      </form>`;
+    $('#settingsForm').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const form = new FormData(ev.currentTarget);
+      try {
+        await patch(`/api/instances/${encodeURIComponent(inst.id)}`, {
+          name: form.get('name'),
+          bedrock: {
+            level_name: form.get('level_name'),
+            max_players: Number(form.get('max_players'))
+          }
+        });
+        await loadInstances(inst.id);
+      } catch (err) {
+        showError(err);
+      }
+    };
   } else if (state.tab === 'files') {
     const files = await get(`/api/instances/${encodeURIComponent(inst.id)}/files`);
-    target.innerHTML = `<p class="wm-muted">Instanzbezogene Dateiwurzeln. Vollständiger Dateimanager folgt in Phase 4.</p><pre>${esc(JSON.stringify(files.roots || {}, null, 2))}</pre>`;
+    target.innerHTML = `<p>Instanzbezogene Dateiwurzeln. Vollständiger Dateimanager folgt in Phase 4.</p><pre>${esc(JSON.stringify(files.roots || files, null, 2))}</pre>`;
   } else if (state.tab === 'packs') {
     const packs = await get(`/api/instances/${encodeURIComponent(inst.id)}/packs`);
-    target.innerHTML = `<h3>Resource Packs</h3><p>${esc((packs.resource_packs || []).join(', ') || 'Keine Nutzerpacks')}</p><h3>Behavior Packs</h3><p>${esc((packs.behavior_packs || []).join(', ') || 'Keine Nutzerpacks')}</p>`;
+    target.innerHTML = `
+      <h3>Resource Packs</h3><p>${esc((packs.resource_packs || []).join(', ') || 'Keine Nutzerpacks')}</p>
+      <h3>Behavior Packs</h3><p>${esc((packs.behavior_packs || []).join(', ') || 'Keine Nutzerpacks')}</p>`;
   } else if (state.tab === 'backups') {
-    target.innerHTML = `<p class="wm-muted">Backups werden instanzbezogen über /api/instances/${esc(inst.id)}/backup erstellt.</p><button class="wm-primary" data-action="backup" data-id="${esc(inst.id)}">Backup jetzt erstellen</button>`;
+    target.innerHTML = `
+      <p>Backups werden instanzbezogen über <code>/api/instances/${esc(inst.id)}/backup</code> erstellt.</p>
+      <button type="button" data-action="backup" data-id="${esc(inst.id)}">Backup jetzt erstellen</button>`;
   } else {
-    target.innerHTML = `<pre>${esc(JSON.stringify(inst.status || {}, null, 2))}</pre>`;
+    target.innerHTML = `<pre>${esc(JSON.stringify(inst.status || inst, null, 2))}</pre>`;
   }
 }
 
@@ -119,24 +261,50 @@ async function runAction(action, id) {
     if (action === 'backup') await post(`/api/instances/${encodeURIComponent(id)}/backup`, { type: 'manual-ui' });
     else await post(`/api/instances/${encodeURIComponent(id)}/${action}`);
     await loadInstances(id);
-  } catch (err) { showError(err); }
+  } catch (err) {
+    showError(err);
+  }
 }
 
 $('#createInstanceForm').onsubmit = async (ev) => {
   ev.preventDefault();
   const form = new FormData(ev.currentTarget);
-  const payload = { id: form.get('id'), name: form.get('name'), profile: form.get('profile'), bedrock: { server_port: Number(form.get('server_port')), server_port_v6: Number(form.get('server_port_v6')), level_name: form.get('level_name'), gamemode: form.get('gamemode'), difficulty: form.get('difficulty'), max_players: Number(form.get('max_players')), allowlist: Boolean(form.get('allowlist')) } };
-  try { await post('/api/instances', payload); ev.currentTarget.reset(); await loadInstances(payload.id); } catch (err) { showError(err); }
+  const payload = {
+    id: form.get('id'),
+    name: form.get('name'),
+    profile: form.get('profile'),
+    bedrock: {
+      server_port: Number(form.get('server_port')),
+      server_port_v6: Number(form.get('server_port_v6')),
+      level_name: form.get('level_name'),
+      gamemode: form.get('gamemode'),
+      difficulty: form.get('difficulty'),
+      max_players: Number(form.get('max_players')),
+      allowlist: Boolean(form.get('allowlist'))
+    }
+  };
+  try {
+    await post('/api/instances', payload);
+    ev.currentTarget.reset();
+    await loadInstances(payload.id);
+  } catch (err) {
+    showError(err);
+  }
 };
 
 document.addEventListener('click', (ev) => {
   const action = ev.target.closest('[data-action]');
   if (action) runAction(action.dataset.action, action.dataset.id);
   const tab = ev.target.closest('[data-tab]');
-  if (tab) { state.tab = tab.dataset.tab; document.querySelectorAll('[data-tab]').forEach(btn => btn.classList.toggle('active', btn === tab)); renderDetail().catch(showError); }
+  if (tab) {
+    state.tab = tab.dataset.tab;
+    document.querySelectorAll('[data-tab]').forEach((btn) => btn.classList.toggle('active', btn === tab));
+    renderDetail().catch(showError);
+  }
   const mode = ev.target.closest('[data-mode]');
   if (mode) setMode(mode.dataset.mode);
 });
+
 $('#refreshInstances').onclick = () => loadInstances().catch(showError);
 setMode(state.mode);
 loadInstances().catch(showError);

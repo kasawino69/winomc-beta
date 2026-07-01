@@ -32,31 +32,29 @@ RUN apt-get update \
         apt-get update; \
         apt-get install -y --no-install-recommends box64; \
       fi \
-    && python3 /usr/local/bin/winomc-runtime-ux-patch \
-    && python3 /usr/local/bin/winomc-runtime-ux-polish-2003 \
-    && echo "Restoring last known working WinoMC ingress console frontend" \
-    && curl -fsSL "https://raw.githubusercontent.com/kasawino69/winomc-beta/9ea674efee332dbb60c91ccdf6f572082fc2c1aa/winomc-server-bedrock/rootfs/usr/local/bin/winomc-console-server" \
-        -o /usr/local/bin/winomc-console-server \
+    && echo "Using current WinoMC 2.1b manager console server from rootfs" \
     && python3 -m py_compile /usr/local/bin/winomc-console-server \
-    && gcc -shared -fPIC -O2 -Wall -Wextra \
-        -o /opt/winomc-bds-ipv6fix.so \
-        /usr/local/src/winomc-bds-ipv6fix.c \
-        -ldl \
-    && chmod 0644 /opt/winomc-bds-ipv6fix.so \
-    && rm -rf /var/lib/apt/lists/* \
-    && chmod +x \
+    && if [ -f /usr/local/src/winomc-bds-ipv6fix.c ]; then \
+        gcc -shared -fPIC -O2 -Wall -Wextra \
+          -o /opt/winomc-bds-ipv6fix.so \
+          /usr/local/src/winomc-bds-ipv6fix.c \
+          -ldl; \
+        chmod 0644 /opt/winomc-bds-ipv6fix.so; \
+      fi \
+    && for f in \
         /usr/local/bin/winomc-bedrock-entrypoint \
         /usr/local/bin/winomc-console-server \
-        /usr/local/bin/winomc-runtime-ux-patch \
-        /usr/local/bin/winomc-runtime-ux-polish-2003 \
         /usr/local/bin/winomc-host-optimized-exec \
         /usr/local/bin/winomc-native-start \
         /usr/local/bin/winomc-native-content-import \
         /usr/local/bin/winomc-native-content-import-one \
-        /usr/local/bin/winomc-write-server-properties
+        /usr/local/bin/winomc-write-server-properties; \
+      do \
+        if [ -e "$f" ]; then chmod +x "$f"; fi; \
+      done \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /config
-
 ENTRYPOINT ["/usr/local/bin/winomc-bedrock-entrypoint"]
 
 ARG BUILD_ARCH

@@ -3,81 +3,92 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="winomc-manager-ui" content="phase3">
-  <title>WinoMC 2.1b Manager</title>
-  <link rel="stylesheet" href="./assets/winomc-manager/styles/base.css">
-  <link rel="stylesheet" href="./assets/winomc-manager/styles/pc-classic.css" media="(min-width: 821px)">
-  <link rel="stylesheet" href="./assets/winomc-manager/styles/mobile.css" media="(max-width: 820px)">
-  <link rel="stylesheet" href="./assets/winomc-manager/styles/desktop.css">
+  <title>WinoMC Manager 2.1b.1</title>
+  <link rel="stylesheet" href="assets/winomc-manager/styles/base.css">
+  <link rel="stylesheet" href="assets/winomc-manager/styles/pc-classic.css">
+  <link rel="stylesheet" href="assets/winomc-manager/styles/mobile.css">
+  <link rel="stylesheet" href="assets/winomc-manager/styles/desktop.css">
 </head>
-<body class="mode-pc-classic" data-supported-modes="mode-pc-classic mode-mobile mode-desktop">
-  <div id="app" class="wm-shell" data-manager-app>
-    <header class="wm-topbar">
-      <div>
-        <p class="wm-kicker">Home Assistant Add-on · Bedrock Multiinstanz</p>
-        <h1>WinoMC Manager</h1>
-      </div>
-      <div class="wm-mode-switch" aria-label="UI-Modus">
-        <button type="button" data-mode="pc-classic">PC Classic</button>
-        <button type="button" data-mode="mobile">Mobile</button>
-        <button type="button" data-mode="desktop">Desktop</button>
-      </div>
-    </header>
+<body class="mode-pc-classic">
+  <header class="manager-header">
+    <div>
+      <p class="eyebrow">Home Assistant Add-on · Bedrock Multiinstanz</p>
+      <h1>WinoMC Manager 2.1b.1</h1>
+      <p id="managerSummary">Manager wird geladen…</p>
+    </div>
+    <nav class="mode-switcher" aria-label="Ansichtsmodus">
+      <button type="button" data-mode="pc-classic">PC Classic</button>
+      <button type="button" data-mode="mobile">Mobile</button>
+      <button type="button" data-mode="desktop">Desktop</button>
+    </nav>
+  </header>
 
-    <main class="wm-layout">
-      <section class="wm-panel wm-dashboard" aria-labelledby="dashboardTitle">
-        <div class="wm-section-head">
-          <div>
-            <p class="wm-kicker">Dashboard</p>
-            <h2 id="dashboardTitle">Instanzen</h2>
-          </div>
-          <button class="wm-primary" type="button" id="refreshInstances">Aktualisieren</button>
+  <main class="manager-shell">
+    <section class="dashboard-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Dashboard</p>
+          <h2>Instanzen</h2>
         </div>
-        <div id="managerSummary" class="wm-summary">Manager wird geladen…</div>
-        <div id="instancesGrid" class="wm-instance-grid" aria-live="polite"></div>
-      </section>
+        <button type="button" id="refreshInstances">Aktualisieren</button>
+      </div>
+      <div id="instancesGrid" class="instances-grid" aria-live="polite">Manager wird geladen…</div>
+    </section>
 
-      <aside class="wm-panel wm-create" aria-labelledby="createTitle">
-        <p class="wm-kicker">Neue Instanz</p>
-        <h2 id="createTitle">Bedrock-Instanz erstellen</h2>
-        <form id="createInstanceForm" class="wm-form">
-          <label>Instanz-ID <input name="id" required pattern="[a-z0-9][a-z0-9_-]{1,31}" placeholder="survival"></label>
-          <label>Anzeigename <input name="name" required placeholder="Survival Server"></label>
-          <label>Profil <select name="profile" id="profileSelect"></select></label>
-          <label>IPv4-Port <input name="server_port" type="number" min="1" max="65535" value="19132"></label>
-          <label>IPv6-Port <input name="server_port_v6" type="number" min="1" max="65535" value="19133"></label>
-          <label>Weltname <input name="level_name" value="world"></label>
-          <label>Gamemode <select name="gamemode"><option>survival</option><option>creative</option><option>adventure</option></select></label>
-          <label>Difficulty <select name="difficulty"><option>peaceful</option><option>easy</option><option selected>normal</option><option>hard</option></select></label>
-          <label>Max Players <input name="max_players" type="number" min="1" max="100" value="10"></label>
-          <label class="wm-check"><input name="allowlist" type="checkbox"> Allowlist aktivieren</label>
-          <button class="wm-primary" type="submit">Instanz erstellen</button>
-        </form>
-      </aside>
+    <aside class="create-panel">
+      <p class="eyebrow">Neue Instanz</p>
+      <h2>Bedrock-Instanz erstellen</h2>
+      <form id="createInstanceForm" class="form-grid">
+        <label>Instanz-ID<input name="id" autocomplete="off" required placeholder="survival"></label>
+        <label>Anzeigename<input name="name" autocomplete="off" placeholder="Survival"></label>
+        <label>Profil<select id="profileSelect" name="profile"></select></label>
+        <label>IPv4-Port<input name="server_port" type="number" min="1024" max="65535" value="19132" required></label>
+        <label>IPv6-Port<input name="server_port_v6" type="number" min="1024" max="65535" value="19133" required></label>
+        <label>Weltname<input name="level_name" autocomplete="off" value="world"></label>
+        <label>Gamemode
+          <select name="gamemode">
+            <option value="survival">survival</option>
+            <option value="creative">creative</option>
+            <option value="adventure">adventure</option>
+          </select>
+        </label>
+        <label>Difficulty
+          <select name="difficulty">
+            <option value="peaceful">peaceful</option>
+            <option value="easy">easy</option>
+            <option value="normal" selected>normal</option>
+            <option value="hard">hard</option>
+          </select>
+        </label>
+        <label>Max Players<input name="max_players" type="number" min="1" max="100" value="10"></label>
+        <label class="checkbox-row"><input name="allowlist" type="checkbox"> Allowlist aktivieren</label>
+        <button type="submit" class="primary">Instanz erstellen</button>
+      </form>
+    </aside>
 
-      <section class="wm-panel wm-detail" aria-labelledby="detailTitle">
-        <div class="wm-section-head">
-          <div>
-            <p class="wm-kicker">Ausgewählte Instanz</p>
-            <h2 id="detailTitle">Noch keine Instanz ausgewählt</h2>
-          </div>
-          <div id="detailActions" class="wm-actions"></div>
+    <section class="details-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Ausgewählte Instanz</p>
+          <h2 id="detailTitle">Noch keine Instanz ausgewählt</h2>
         </div>
-        <nav class="wm-tabs" aria-label="Instanzbereiche">
-          <button data-tab="overview" class="active">Übersicht</button>
-          <button data-tab="console">Konsole</button>
-          <button data-tab="settings">Einstellungen</button>
-          <button data-tab="files">Dateien</button>
-          <button data-tab="packs">Packs</button>
-          <button data-tab="backups">Backups</button>
-          <button data-tab="diagnostics">Logs/Diagnose</button>
-        </nav>
-        <div id="detailContent" class="wm-detail-content">Wähle eine Instanz aus dem Dashboard.</div>
-      </section>
-    </main>
+        <div id="detailActions" class="detail-actions"></div>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Instanzbereiche">
+        <button type="button" data-tab="overview" class="active">Übersicht</button>
+        <button type="button" data-tab="console">Konsole</button>
+        <button type="button" data-tab="settings">Einstellungen</button>
+        <button type="button" data-tab="files">Dateien</button>
+        <button type="button" data-tab="packs">Packs</button>
+        <button type="button" data-tab="backups">Backups</button>
+        <button type="button" data-tab="diagnostics">Logs/Diagnose</button>
+      </div>
+      <div id="detailContent" class="detail-content">Wähle eine Instanz aus dem Dashboard.</div>
+    </section>
+  </main>
 
-    <section id="errorPanel" class="wm-error-panel" aria-live="assertive" hidden></section>
-  </div>
-  <script type="module" src="./assets/winomc-manager/manager.js"></script>
+  <section id="errorPanel" class="error-panel" hidden></section>
+
+  <script src="assets/winomc-manager/manager.js" defer></script>
 </body>
 </html>
