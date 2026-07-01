@@ -1,0 +1,1 @@
+body.mode-mobile .wm-topbar,body:not(.mode-desktop):not(.mode-pc-classic) .wm-topbar{align-items:flex-start;position:static}.wm-topbar{flex-wrap:wrap}@media(max-width:820px){.wm-layout{grid-template-columns:1fr}.wm-meta{grid-template-columns:1fr}.wm-console-input{grid-template-columns:1fr}.wm-mode-switch{width:100%}.wm-mode-switch button{flex:1}.wm-panel{border-radius:14px}}
