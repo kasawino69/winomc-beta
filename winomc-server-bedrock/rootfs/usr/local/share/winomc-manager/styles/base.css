@@ -477,3 +477,102 @@ code {
   color: var(--muted);
   font-size: 12px;
 }
+
+
+/* WinoMC 2.1.10b complete settings hotfix */
+#dashboardRefresh,
+#managerRefresh,
+#refreshDashboard,
+[data-dashboard-refresh],
+[data-action="refresh-dashboard"] {
+  display: none !important;
+}
+
+.settings-intro {
+  border: 1px solid rgba(34, 197, 94, .28);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 14px;
+  background: rgba(34, 197, 94, .08);
+}
+
+.settings-intro h3 {
+  margin: 0 0 6px;
+}
+
+.settings-intro p {
+  margin: 0;
+}
+
+.settings-group-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.settings-group-heading h3 {
+  margin-bottom: 4px;
+}
+
+.settings-group-description,
+.setting-help,
+.server-property-name {
+  display: block;
+  color: var(--muted, #94a3b8);
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.server-property-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  opacity: .92;
+}
+
+.settings-count {
+  flex: 0 0 auto;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
+  color: var(--muted, #94a3b8);
+}
+
+.setting-field {
+  min-width: 0;
+}
+
+.checkbox-row.setting-field span {
+  min-width: 0;
+}
+
+.server-settings-grid {
+  align-items: start;
+}
+
+.autocomplete-wrap {
+  position: relative !important;
+}
+
+.autocomplete-box.open-up {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: calc(100% + 8px) !important;
+  top: auto !important;
+  max-height: min(280px, 45vh) !important;
+  overflow-y: auto !important;
+  z-index: 200 !important;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .42) !important;
+}
+
+.autocomplete-box[hidden] {
+  display: none !important;
+}
+
+.command-form button[disabled] {
+  opacity: .72;
+  cursor: progress;
+}

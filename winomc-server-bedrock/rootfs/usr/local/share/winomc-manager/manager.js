@@ -1,4 +1,4 @@
-const VERSION = '2.1.9b';
+const VERSION = '2.1.10b';
 
 const state = {
   instances: [],
@@ -10,6 +10,9 @@ const state = {
   logLevel: 'info',
   dragId: null,
   order: loadInstanceOrder(),
+  autoRefreshTimer: null,
+  autoRefreshBusy: false,
+  lastAutoRefreshAt: null,
 };
 
 const BEDROCK_COMMAND_CATALOG_SOURCE = 'Microsoft Bedrock stable command reference + Bedrock archive compatibility list';
@@ -194,7 +197,8 @@ function automationView(instance) {
 }
 
 function renderDashboard() {
-  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager ${VERSION} · Autoerkennung PC/Mobile · alle Aktionen instanzbezogen`;
+  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager ${VERSION} · Auto-Refresh 10 s · vollständige Server-Einstellungen`;
+  removeManualDashboardRefreshButtons();
 
   $('#instancesGrid').innerHTML = state.instances.map((instance) => {
     const b = instance.bedrock || {};
@@ -323,11 +327,13 @@ function renderAutocomplete(input) {
 
   if (!suggestions.length) {
     box.hidden = true;
+    box.classList.remove('open-up');
     box.innerHTML = '';
     return;
   }
 
   box.hidden = false;
+  box.classList.add('open-up');
   box.innerHTML = suggestions.map((entry, index) => `
     <button type="button"
             class="autocomplete-item ${index === 0 ? 'active' : ''}"
@@ -337,6 +343,8 @@ function renderAutocomplete(input) {
       <code>${esc((entry.syntax || [entry.insert || entry.command])[0])}</code>
     </button>
   `).join('');
+
+  box.querySelector('.autocomplete-item.active')?.scrollIntoView({ block: 'nearest' });
 }
 
 function applyAutocomplete(value) {
@@ -350,17 +358,56 @@ function applyAutocomplete(value) {
 
 function settingInput(field, value) {
   const current = value ?? field.default ?? '';
+  const advancedClass = field.advanced ? ' advanced-setting' : '';
+  const description = field.description ? `<small class="setting-help">${esc(field.description)}</small>` : '';
+  const property = field.property ? `<small class="server-property-name">server.properties: ${esc(field.property)}</small>` : `<small class="server-property-name">WinoMC-Instanzwert</small>`;
+  const help = `${property}${description}`;
+
   if (field.type === 'boolean') {
-    return `<label class="checkbox-row"><input name="${esc(field.key)}" type="checkbox" ${current ? 'checked' : ''}><span>${esc(field.label)}</span></label>`;
+    const checked = current === true || String(current).toLowerCase() === 'true';
+    return `<label class="checkbox-row setting-field${advancedClass}">
+      <input name="${esc(field.key)}" type="checkbox" ${checked ? 'checked' : ''}>
+      <span><strong>${esc(field.label)}</strong>${help}</span>
+    </label>`;
   }
+
   if (field.type === 'select') {
-    return `<label>${esc(field.label)}<select name="${esc(field.key)}">${(field.options || []).map((opt) => `<option value="${esc(opt)}" ${String(current) === String(opt) ? 'selected' : ''}>${esc(opt)}</option>`).join('')}</select></label>`;
+    return `<label class="setting-field${advancedClass}">
+      <span>${esc(field.label)}</span>
+      <select name="${esc(field.key)}">
+        ${(field.options || []).map((opt) => `<option value="${esc(opt)}" ${String(current) === String(opt) ? 'selected' : ''}>${esc(opt)}</option>`).join('')}
+      </select>
+      ${help}
+    </label>`;
   }
+
   const type = field.type === 'number' ? 'number' : 'text';
-  const step = field.step ? ` step="${esc(field.step)}"` : '';
+  const step = field.step !== undefined ? ` step="${esc(field.step)}"` : '';
   const min = field.min !== undefined ? ` min="${esc(field.min)}"` : '';
   const max = field.max !== undefined ? ` max="${esc(field.max)}"` : '';
-  return `<label>${esc(field.label)}<input name="${esc(field.key)}" type="${type}" value="${esc(current)}"${step}${min}${max}></label>`;
+
+  return `<label class="setting-field${advancedClass}">
+    <span>${esc(field.label)}</span>
+    <input name="${esc(field.key)}" type="${type}" value="${esc(current)}"${step}${min}${max}>
+    ${help}
+  </label>`;
+}
+
+function settingGroupDescription(group) {
+  const descriptions = {
+    'Bedrock Runtime': 'BDS-Version und WinoMC-Runtime-Werte dieser Instanz.',
+    'Allgemein / Realm-nah': 'Die Werte, die man typischerweise aus Realm-/Welt-Einstellungen kennt.',
+    'Zugang & Sicherheit': 'Xbox-Auth, Allowlist, Rechte, Chat und Skin-/Interaktionsschutz.',
+    'Netzwerk': 'Ports, LAN-Sichtbarkeit und Paketkompression.',
+    'Performance': 'Sichtweite, Tick-Distanz, Threads und Chunk-/Build-Verhalten.',
+    'Packs & Logging': 'Texturepacks, Content-Logs, Telemetrie und visuelle Client-Optionen.',
+    'Server Authoritative / Movement': 'Bewegungs-, Block- und Interaktionsvalidierung des Servers.',
+    'Script / Debug': 'Script-Debugging und Debugger-Verbindungen.',
+    'Script Watchdog': 'Script-Watchdog-Grenzwerte gegen Hänger, Spikes und Speicherprobleme.',
+    'Diagnostics': 'BDS-Diagnoseaufzeichnungen und Limits.',
+  };
+
+  return descriptions[group] || 'Weitere Bedrock-Serveroptionen.';
 }
 
 function renderSettingsForm(inst) {
@@ -376,8 +423,14 @@ function renderSettingsForm(inst) {
 
   const sections = [...groups.entries()].map(([group, fields]) => `
     <section class="settings-group">
-      <h3>${esc(group)}</h3>
-      <div class="form-grid compact">
+      <div class="settings-group-heading">
+        <div>
+          <h3>${esc(group)}</h3>
+          <p class="settings-group-description">${esc(settingGroupDescription(group))}</p>
+        </div>
+        <span class="settings-count">${fields.length} Optionen</span>
+      </div>
+      <div class="form-grid compact server-settings-grid">
         ${fields.map((field) => settingInput(field, bedrock[field.key])).join('')}
       </div>
     </section>
@@ -385,14 +438,28 @@ function renderSettingsForm(inst) {
 
   return `
     <form id="settingsForm" class="settings-form">
+      <section class="settings-intro">
+        <p class="eyebrow">Vollständige Server-Einstellungen</p>
+        <h3>Bedrock server.properties + WinoMC-Instanzwerte</h3>
+        <p>Diese Ansicht enthält alle geplanten Serverwerte aus dem Manager-Schema. Werte mit server.properties-Hinweis werden direkt in die Instanzdatei geschrieben; WinoMC-Instanzwerte steuern die Runtime.</p>
+      </section>
+
       ${sections}
+
       <section class="settings-group">
-        <h3>Automation</h3>
+        <div class="settings-group-heading">
+          <div>
+            <h3>Automation</h3>
+            <p class="settings-group-description">WinoMC-Manager-Automation für diese Instanz.</p>
+          </div>
+          <span class="settings-count">2 Optionen</span>
+        </div>
         <div class="form-grid compact">
-          <label class="checkbox-row"><input name="autostart" type="checkbox" ${automation.autostart ? 'checked' : ''}><span>Autostart beim Add-on-Start</span></label>
-          <label class="checkbox-row"><input name="watchdog" type="checkbox" ${automation.watchdog ? 'checked' : ''}><span>Watchdog: bei Crash automatisch neu starten</span></label>
+          <label class="checkbox-row setting-field"><input name="autostart" type="checkbox" ${automation.autostart ? 'checked' : ''}><span><strong>Autostart beim Add-on-Start</strong><small class="server-property-name">WinoMC-Automation</small></span></label>
+          <label class="checkbox-row setting-field"><input name="watchdog" type="checkbox" ${automation.watchdog ? 'checked' : ''}><span><strong>Watchdog: bei Crash automatisch neu starten</strong><small class="server-property-name">WinoMC-Automation</small></span></label>
         </div>
       </section>
+
       <button type="submit" class="primary">Einstellungen speichern</button>
     </form>
     <p class="hint">Änderungen an server.properties werden beim Speichern in die Instanz geschrieben. Viele Werte benötigen einen Instanz-Neustart.</p>
@@ -487,17 +554,45 @@ async function renderDetail() {
 
     $('#commandForm').onsubmit = async (ev) => {
       ev.preventDefault();
+
       const formEl = ev.currentTarget;
-      const command = formEl.command.value.trim().replace(/^\//, '');
+      const inputEl = formEl.elements.command;
+      const sendButton = formEl.querySelector('button[type="submit"]');
+      const command = inputEl.value.trim().replace(/^\//, '');
 
       if (!command) return;
 
       try {
+        if (sendButton) {
+          sendButton.disabled = true;
+          sendButton.textContent = 'Sende…';
+        }
+
         await post(`/api/instances/${encodeURIComponent(inst.id)}/command`, { command });
-        formEl.command.value = '';
+
+        inputEl.value = '';
+        const autocomplete = $('#commandAutocomplete');
+        if (autocomplete) {
+          autocomplete.hidden = true;
+          autocomplete.innerHTML = '';
+        }
+
+        const log = $('#consoleLog');
+        if (log) {
+          log.textContent = `${log.textContent || ''}
+> ${command}`;
+          log.scrollTop = log.scrollHeight;
+        }
+
         await renderDetail();
       } catch (err) {
         showError(err);
+      } finally {
+        const nextButton = $('#commandForm button[type="submit"]');
+        if (nextButton) {
+          nextButton.disabled = false;
+          nextButton.textContent = 'Senden';
+        }
       }
     };
   } else if (state.tab === 'settings') {
@@ -582,6 +677,53 @@ function toggleCreatePanel(forceOpen) {
   panel.classList.toggle('collapsed', !open);
   button.setAttribute('aria-expanded', String(open));
 }
+
+
+function removeManualDashboardRefreshButtons() {
+  document.querySelectorAll('#dashboardRefresh, #managerRefresh, #refreshDashboard, [data-dashboard-refresh], [data-action="refresh-dashboard"]').forEach((el) => el.remove());
+}
+
+function shouldSkipAutoRefresh() {
+  const active = document.activeElement;
+  return Boolean(active && active.closest && active.closest('#commandForm, #settingsForm, #createInstanceForm, .autocomplete-box'));
+}
+
+async function autoRefreshTick(force = false) {
+  if (state.autoRefreshBusy) return;
+  if (!force && document.hidden) return;
+  if (!force && shouldSkipAutoRefresh()) return;
+
+  state.autoRefreshBusy = true;
+  const selectedId = state.selectedId;
+  const currentTab = state.tab;
+
+  try {
+    state.tab = currentTab;
+    await loadInstances(selectedId);
+    state.lastAutoRefreshAt = new Date().toISOString();
+  } catch (err) {
+    console.warn('[WinoMC] Auto-Refresh fehlgeschlagen', err);
+  } finally {
+    state.autoRefreshBusy = false;
+  }
+}
+
+function startAutoRefresh() {
+  if (state.autoRefreshTimer) {
+    clearInterval(state.autoRefreshTimer);
+  }
+
+  removeManualDashboardRefreshButtons();
+  state.autoRefreshTimer = setInterval(() => autoRefreshTick(false), 10000);
+
+  if (!window.__winomcAutoRefreshVisibilityBound) {
+    window.__winomcAutoRefreshVisibilityBound = true;
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) autoRefreshTick(true);
+    });
+  }
+}
+
 
 $('#createInstanceForm').onsubmit = async (ev) => {
   ev.preventDefault();
@@ -697,7 +839,7 @@ if ($('#refreshInstances')) $('#refreshInstances').remove();
 $('#createDrawerToggle').onclick = () => toggleCreatePanel();
 
 setAutoMode();
-loadInstances().catch(showError);
+loadInstances().then(() => startAutoRefresh()).catch(showError);
 
 
 const DASHBOARD_POLL_MS = 5000;

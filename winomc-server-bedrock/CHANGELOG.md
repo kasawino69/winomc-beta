@@ -1,5 +1,16 @@
 ## WinoMC 2.1.9b - Complete Bedrock Catalogs and Settings Schema
 
+
+## 2.1.10b - Vollständige Manager-Servereinstellungen
+
+- Ersetzt die kleine Realm-Kurzliste durch eine vollständige Einstellungsansicht für Bedrock `server.properties` plus WinoMC-Instanzwerte.
+- Synchronisiert das Manager-Frontend-Schema mit dem Backend-Renderer für `server.properties`.
+- Ergänzt fehlende Serverfelder wie `level-type`, `emit-server-telemetry`, `block-network-ids-are-hashes`, Movement-/Authoritative-Optionen, Script-Debugging, Script-Watchdog und Diagnostics.
+- Behebt die Konsoleingabe im Manager und zeigt gesendete Befehle direkt im Konsolenlog an.
+- Legacy `/api/command` routet automatisch auf eine laufende Manager-Instanz, wenn eine passende Instanz erkannt wird.
+- Entfernt/versteckt manuelle Dashboard-Aktualisierungselemente und aktiviert Auto-Refresh im 10-Sekunden-Takt.
+- Autovervollständigung der Konsole öffnet nach oben, damit sie nicht aus dem sichtbaren Bereich wandert.
+
 ### Added
 - Added external Bedrock command catalog under `winomc-manager/data/bedrock-command-catalog.js`.
 - Added external Bedrock gamerules catalog under `winomc-manager/data/bedrock-gamerules-catalog.js`.

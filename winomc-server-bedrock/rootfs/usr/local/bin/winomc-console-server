@@ -92,7 +92,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC 2.1b Manager Workbench</title>
+  <title>WinoMC 2.1.10b Manager Workbench</title>
   <style>
     :root {
       color-scheme: dark;
@@ -303,7 +303,7 @@ INDEX_HTML = r"""<!doctype html>
     .console-inner { padding-top: 16px; }
     .mobile-quickbar { display: none; }
 
-    /* WinoMC 2.1b Manager Workbench */
+    /* WinoMC 2.1.10b Manager Workbench */
     body.desktop-mode {
       padding-bottom: 0;
       overflow: hidden;
@@ -4868,7 +4868,7 @@ body.winomc-mobile .editor-panel.editor-open {
     })();
   </script>
   <header>
-    <h1 id="appTitle">WinoMC 2.1b Manager Workbench</h1>
+    <h1 id="appTitle">WinoMC 2.1.10b Manager Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
   </header>
 
@@ -10907,63 +10907,69 @@ def default_instance_config(instance_id, name=None, profile="vanilla-survival", 
 def render_server_properties(config):
     b = config.get("bedrock", {})
 
-    schema = [
-        ("server-name", "server_name", config.get("name", config.get("id", "WinoMC Server"))),
-        ("gamemode", "gamemode", "survival"),
-        ("force-gamemode", "force_gamemode", False),
-        ("difficulty", "difficulty", "easy"),
-        ("allow-cheats", "allow_cheats", False),
-        ("max-players", "max_players", 10),
-        ("online-mode", "online_mode", True),
-        ("allow-list", "allowlist", False),
-        ("server-port", "server_port", 19132),
-        ("server-portv6", "server_port_v6", 19133),
-        ("enable-lan-visibility", "enable_lan_visibility", True),
-        ("view-distance", "view_distance", 32),
-        ("tick-distance", "tick_distance", 4),
-        ("player-idle-timeout", "player_idle_timeout", 30),
-        ("max-threads", "max_threads", 8),
-        ("level-name", "level_name", "world"),
-        ("level-seed", "level_seed", ""),
-        ("default-player-permission-level", "default_player_permission_level", "member"),
-        ("texturepack-required", "texturepack_required", False),
-        ("content-log-file-enabled", "content_log_file_enabled", False),
-        ("compression-threshold", "compression_threshold", 1),
-        ("compression-algorithm", "compression_algorithm", "zlib"),
-        ("server-authoritative-movement-strict", "server_authoritative_movement_strict", False),
-        ("server-authoritative-dismount-strict", "server_authoritative_dismount_strict", False),
-        ("server-authoritative-entity-interactions-strict", "server_authoritative_entity_interactions_strict", False),
-        ("player-position-acceptance-threshold", "player_position_acceptance_threshold", 0.5),
-        ("player-movement-action-direction-threshold", "player_movement_action_direction_threshold", 0.85),
-        ("server-authoritative-block-breaking", "server_authoritative_block_breaking", False),
-        ("server-authoritative-block-breaking-range-scalar", "server_authoritative_block_breaking_range_scalar", 1.5),
-        ("chat-restriction", "chat_restriction", "None"),
-        ("disable-player-interaction", "disable_player_interaction", False),
-        ("client-side-chunk-generation-enabled", "client_side_chunk_generation_enabled", True),
-        ("block-network-ids-are-hashes", "block_network_ids_are_hashes", True),
-        ("disable-custom-skins", "disable_custom_skins", False),
-        ("server-build-radius-ratio", "server_build_radius_ratio", "Disabled"),
-        ("allow-outbound-script-debugging", "allow_outbound_script_debugging", False),
-        ("allow-inbound-script-debugging", "allow_inbound_script_debugging", False),
-        ("force-inbound-debug-port", "force_inbound_debug_port", 19144),
-        ("script-debugger-auto-attach", "script_debugger_auto_attach", "disabled"),
-        ("script-debugger-auto-attach-connect-address", "script_debugger_auto_attach_connect_address", "localhost:19144"),
-        ("script-debugger-auto-attach-timeout", "script_debugger_auto_attach_timeout", 0),
-        ("script-debugger-passcode", "script_debugger_passcode", ""),
-        ("script-watchdog-enable", "script_watchdog_enable", True),
-        ("script-watchdog-enable-exception-handling", "script_watchdog_enable_exception_handling", True),
-        ("script-watchdog-enable-shutdown", "script_watchdog_enable_shutdown", True),
-        ("script-watchdog-hang-exception", "script_watchdog_hang_exception", True),
-        ("script-watchdog-hang-threshold", "script_watchdog_hang_threshold", 10000),
-        ("script-watchdog-spike-threshold", "script_watchdog_spike_threshold", 100),
-        ("script-watchdog-slow-threshold", "script_watchdog_slow_threshold", 10),
-        ("script-watchdog-memory-warning", "script_watchdog_memory_warning", 100),
-        ("script-watchdog-memory-limit", "script_watchdog_memory_limit", 250),
-        ("diagnostics-capture-auto-start", "diagnostics_capture_auto_start", False),
-        ("diagnostics-capture-max-files", "diagnostics_capture_max_files", 5),
-        ("diagnostics-capture-max-file-size", "diagnostics_capture_max_file_size", 2097152),
-        ("disable-client-vibrant-visuals", "disable_client_vibrant_visuals", True),
-    ]
+    schema = [('server-name', 'server_name', 'Dedicated Server'),
+ ('level-name', 'level_name', 'world'),
+ ('level-seed', 'level_seed', ''),
+ ('level-type', 'level_type', 'DEFAULT'),
+ ('gamemode', 'gamemode', 'survival'),
+ ('force-gamemode', 'force_gamemode', False),
+ ('difficulty', 'difficulty', 'easy'),
+ ('allow-cheats', 'allow_cheats', False),
+ ('max-players', 'max_players', 10),
+ ('online-mode', 'online_mode', True),
+ ('allow-list', 'allowlist', False),
+ ('default-player-permission-level', 'default_player_permission_level', 'member'),
+ ('chat-restriction', 'chat_restriction', 'None'),
+ ('disable-custom-skins', 'disable_custom_skins', False),
+ ('disable-player-interaction', 'disable_player_interaction', False),
+ ('server-port', 'server_port', 19132),
+ ('server-portv6', 'server_port_v6', 19133),
+ ('enable-lan-visibility', 'enable_lan_visibility', True),
+ ('compression-threshold', 'compression_threshold', 1),
+ ('compression-algorithm', 'compression_algorithm', 'zlib'),
+ ('view-distance', 'view_distance', 32),
+ ('tick-distance', 'tick_distance', 4),
+ ('player-idle-timeout', 'player_idle_timeout', 30),
+ ('max-threads', 'max_threads', 8),
+ ('client-side-chunk-generation-enabled', 'client_side_chunk_generation_enabled', True),
+ ('server-build-radius-ratio', 'server_build_radius_ratio', 'Disabled'),
+ ('texturepack-required', 'texturepack_required', False),
+ ('content-log-file-enabled', 'content_log_file_enabled', False),
+ ('emit-server-telemetry', 'emit_server_telemetry', False),
+ ('block-network-ids-are-hashes', 'block_network_ids_are_hashes', True),
+ ('disable-client-vibrant-visuals', 'disable_client_vibrant_visuals', True),
+ ('server-authoritative-movement', 'server_authoritative_movement', 'server-auth'),
+ ('player-movement-score-threshold', 'player_movement_score_threshold', 20),
+ ('player-movement-distance-threshold', 'player_movement_distance_threshold', 0.3),
+ ('player-movement-duration-threshold-in-ms', 'player_movement_duration_threshold_in_ms', 500),
+ ('correct-player-movement', 'correct_player_movement', False),
+ ('server-authoritative-movement-strict', 'server_authoritative_movement_strict', False),
+ ('server-authoritative-dismount-strict', 'server_authoritative_dismount_strict', False),
+ ('server-authoritative-entity-interactions-strict', 'server_authoritative_entity_interactions_strict', False),
+ ('player-position-acceptance-threshold', 'player_position_acceptance_threshold', 0.5),
+ ('player-movement-action-direction-threshold', 'player_movement_action_direction_threshold', 0.85),
+ ('server-authoritative-block-breaking', 'server_authoritative_block_breaking', False),
+ ('server-authoritative-block-breaking-range-scalar', 'server_authoritative_block_breaking_range_scalar', 1.5),
+ ('server-authoritative-sound', 'server_authoritative_sound', False),
+ ('allow-outbound-script-debugging', 'allow_outbound_script_debugging', False),
+ ('allow-inbound-script-debugging', 'allow_inbound_script_debugging', False),
+ ('force-inbound-debug-port', 'force_inbound_debug_port', 19144),
+ ('script-debugger-auto-attach', 'script_debugger_auto_attach', 'disabled'),
+ ('script-debugger-auto-attach-connect-address', 'script_debugger_auto_attach_connect_address', 'localhost:19144'),
+ ('script-debugger-auto-attach-timeout', 'script_debugger_auto_attach_timeout', 0),
+ ('script-debugger-passcode', 'script_debugger_passcode', ''),
+ ('script-watchdog-enable', 'script_watchdog_enable', True),
+ ('script-watchdog-enable-exception-handling', 'script_watchdog_enable_exception_handling', True),
+ ('script-watchdog-enable-shutdown', 'script_watchdog_enable_shutdown', True),
+ ('script-watchdog-hang-exception', 'script_watchdog_hang_exception', True),
+ ('script-watchdog-hang-threshold', 'script_watchdog_hang_threshold', 10000),
+ ('script-watchdog-spike-threshold', 'script_watchdog_spike_threshold', 100),
+ ('script-watchdog-slow-threshold', 'script_watchdog_slow_threshold', 10),
+ ('script-watchdog-memory-warning', 'script_watchdog_memory_warning', 100),
+ ('script-watchdog-memory-limit', 'script_watchdog_memory_limit', 250),
+ ('diagnostics-capture-auto-start', 'diagnostics_capture_auto_start', False),
+ ('diagnostics-capture-max-files', 'diagnostics_capture_max_files', 5),
+ ('diagnostics-capture-max-file-size', 'diagnostics_capture_max_file_size', 2097152)]
 
     lines = []
 
@@ -10978,7 +10984,7 @@ def render_server_properties(config):
 
         lines.append("%s=%s" % (prop, value))
 
-    return "\n".join(lines) + "\n"
+    return chr(10).join(lines) + chr(10)
 
 def ensure_instance_layout(config):
     iid = validate_instance_id(config["id"])
@@ -11729,6 +11735,23 @@ def instance_backup(instance_id, backup_type="manual"):
 
 def manager_payload():
     return {"ok": True, "version": MANAGER_VERSION, "winomc_version": WINOMC_VERSION, "log_level": LOG_LEVEL, "instances_dir": INSTANCES_DIR, "import_dir": IMPORT_DIR, "export_dir": EXPORT_DIR, "profiles": list(BEDROCK_PROFILES.values()), "instances": list_instances()}
+
+def default_console_instance_id():
+    running = []
+    for inst in list_instances():
+        if inst.get("broken"):
+            continue
+        iid = inst.get("id")
+        if not iid:
+            continue
+        state = ((inst.get("status") or {}).get("state") or "").lower()
+        if state in ("running", "starting"):
+            running.append(iid)
+    if len(running) == 1:
+        return running[0]
+    if running:
+        return running[0]
+    return None
 # --- end WinoMC 2.1b Manager rebuild layer ---------------------------------------------
 
 def status_payload():
@@ -11798,7 +11821,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCManager/2.1b"
+    server_version = "WinoMCManager/2.1.10b"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
@@ -12204,8 +12227,13 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith("/api/command") or path == "/api/command":
             try:
                 command = sanitize_command(self._extract_command())
-                write_command(command)
-                self._send_json(200, {"ok": True, "command": command})
+                routed_iid = default_console_instance_id()
+                if routed_iid:
+                    result = send_instance_command(routed_iid, command)
+                    self._send_json(200, dict(result, routed_from="legacy-api-command", instance_id=routed_iid))
+                else:
+                    write_command(command)
+                    self._send_json(200, {"ok": True, "command": command, "routed_from": "legacy-api-command", "target": "legacy-fifo"})
             except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
             return

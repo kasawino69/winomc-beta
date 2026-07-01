@@ -1,33 +1,59 @@
 window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
   {
+    "key": "version",
+    "property": null,
+    "group": "Bedrock Runtime",
+    "label": "Bedrock Version",
+    "type": "text",
+    "default": "LATEST",
+    "description": "BDS-Version für diese Instanz. LATEST nutzt die aktuelle WinoMC-Runtime."
+  },
+  {
     "key": "server_name",
     "property": "server-name",
-    "group": "Allgemein",
+    "group": "Allgemein / Realm-nah",
     "label": "Servername",
     "type": "text",
-    "default": "Dedicated Server"
+    "default": "Dedicated Server",
+    "description": "Name, der Spielern in Bedrock angezeigt wird."
   },
   {
     "key": "level_name",
     "property": "level-name",
-    "group": "Allgemein",
+    "group": "Allgemein / Realm-nah",
     "label": "Weltname",
     "type": "text",
-    "default": "world"
+    "default": "world",
+    "description": "Ordnername der Welt."
   },
   {
     "key": "level_seed",
     "property": "level-seed",
-    "group": "Allgemein",
+    "group": "Allgemein / Realm-nah",
     "label": "Seed",
     "type": "text",
-    "default": ""
+    "default": "",
+    "description": "Seed für neue Welten. Bestehende Welten ändern dadurch nicht rückwirkend ihren Seed."
+  },
+  {
+    "key": "level_type",
+    "property": "level-type",
+    "group": "Allgemein / Realm-nah",
+    "label": "Level Type",
+    "type": "select",
+    "options": [
+      "DEFAULT",
+      "FLAT",
+      "LEGACY"
+    ],
+    "default": "DEFAULT",
+    "description": "Welt-Typ für neu erzeugte Welten."
   },
   {
     "key": "gamemode",
     "property": "gamemode",
-    "group": "Allgemein",
-    "label": "Gamemode",
+    "group": "Allgemein / Realm-nah",
+    "label": "Spielmodus",
     "type": "select",
     "options": [
       "survival",
@@ -39,16 +65,16 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
   {
     "key": "force_gamemode",
     "property": "force-gamemode",
-    "group": "Allgemein",
-    "label": "Gamemode erzwingen",
+    "group": "Allgemein / Realm-nah",
+    "label": "Spielmodus erzwingen",
     "type": "boolean",
     "default": false
   },
   {
     "key": "difficulty",
     "property": "difficulty",
-    "group": "Allgemein",
-    "label": "Difficulty",
+    "group": "Allgemein / Realm-nah",
+    "label": "Schwierigkeit",
     "type": "select",
     "options": [
       "peaceful",
@@ -61,7 +87,7 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
   {
     "key": "allow_cheats",
     "property": "allow-cheats",
-    "group": "Zugang & Sicherheit",
+    "group": "Allgemein / Realm-nah",
     "label": "Cheats erlauben",
     "type": "boolean",
     "default": false
@@ -70,10 +96,11 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
     "key": "max_players",
     "property": "max-players",
     "group": "Zugang & Sicherheit",
-    "label": "Max Players",
+    "label": "Maximale Spieler",
     "type": "number",
     "default": 10,
-    "min": 1
+    "min": 1,
+    "max": 100
   },
   {
     "key": "online_mode",
@@ -95,7 +122,7 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
     "key": "default_player_permission_level",
     "property": "default-player-permission-level",
     "group": "Zugang & Sicherheit",
-    "label": "Neue Spielerrechte",
+    "label": "Standard-Spielerrechte",
     "type": "select",
     "options": [
       "visitor",
@@ -108,7 +135,7 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
     "key": "chat_restriction",
     "property": "chat-restriction",
     "group": "Zugang & Sicherheit",
-    "label": "Chat Restriction",
+    "label": "Chat-Einschränkung",
     "type": "select",
     "options": [
       "None",
@@ -129,7 +156,7 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
     "key": "disable_player_interaction",
     "property": "disable-player-interaction",
     "group": "Zugang & Sicherheit",
-    "label": "Player Interaction deaktivieren",
+    "label": "Spielerinteraktion deaktivieren",
     "type": "boolean",
     "default": false
   },
@@ -137,7 +164,7 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
     "key": "server_port",
     "property": "server-port",
     "group": "Netzwerk",
-    "label": "IPv4 Port",
+    "label": "IPv4-Port",
     "type": "number",
     "default": 19132,
     "min": 1,
@@ -147,7 +174,7 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
     "key": "server_port_v6",
     "property": "server-portv6",
     "group": "Netzwerk",
-    "label": "IPv6 Port",
+    "label": "IPv6-Port",
     "type": "number",
     "default": 19133,
     "min": 1,
@@ -157,9 +184,18 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
     "key": "enable_lan_visibility",
     "property": "enable-lan-visibility",
     "group": "Netzwerk",
-    "label": "LAN Sichtbarkeit",
+    "label": "LAN-Sichtbarkeit",
     "type": "boolean",
     "default": true
+  },
+  {
+    "key": "enable_v6bind_fix",
+    "property": null,
+    "group": "Netzwerk",
+    "label": "WinoMC IPv6/V6Bind-Fix",
+    "type": "boolean",
+    "default": false,
+    "description": "WinoMC-Runtime-Option für Dual-Stack-/IPv6-Bind-Probleme."
   },
   {
     "key": "compression_threshold",
@@ -253,9 +289,81 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
     "default": false
   },
   {
+    "key": "emit_server_telemetry",
+    "property": "emit-server-telemetry",
+    "group": "Packs & Logging",
+    "label": "Server-Telemetrie senden",
+    "type": "boolean",
+    "default": false
+  },
+  {
+    "key": "block_network_ids_are_hashes",
+    "property": "block-network-ids-are-hashes",
+    "group": "Packs & Logging",
+    "label": "Block Network IDs als Hashes",
+    "type": "boolean",
+    "default": true
+  },
+  {
+    "key": "disable_client_vibrant_visuals",
+    "property": "disable-client-vibrant-visuals",
+    "group": "Packs & Logging",
+    "label": "Client Vibrant Visuals deaktivieren",
+    "type": "boolean",
+    "default": true
+  },
+  {
+    "key": "server_authoritative_movement",
+    "property": "server-authoritative-movement",
+    "group": "Server Authoritative / Movement",
+    "label": "Authoritative Movement",
+    "type": "select",
+    "options": [
+      "client-auth",
+      "server-auth",
+      "server-auth-with-rewind"
+    ],
+    "default": "server-auth"
+  },
+  {
+    "key": "player_movement_score_threshold",
+    "property": "player-movement-score-threshold",
+    "group": "Server Authoritative / Movement",
+    "label": "Movement Score Threshold",
+    "type": "number",
+    "default": 20,
+    "min": 0
+  },
+  {
+    "key": "player_movement_distance_threshold",
+    "property": "player-movement-distance-threshold",
+    "group": "Server Authoritative / Movement",
+    "label": "Movement Distance Threshold",
+    "type": "number",
+    "default": 0.3,
+    "step": 0.01
+  },
+  {
+    "key": "player_movement_duration_threshold_in_ms",
+    "property": "player-movement-duration-threshold-in-ms",
+    "group": "Server Authoritative / Movement",
+    "label": "Movement Duration Threshold ms",
+    "type": "number",
+    "default": 500,
+    "min": 0
+  },
+  {
+    "key": "correct_player_movement",
+    "property": "correct-player-movement",
+    "group": "Server Authoritative / Movement",
+    "label": "Spielerbewegung korrigieren",
+    "type": "boolean",
+    "default": false
+  },
+  {
     "key": "server_authoritative_movement_strict",
     "property": "server-authoritative-movement-strict",
-    "group": "Server Authoritative",
+    "group": "Server Authoritative / Movement",
     "label": "Movement Strict",
     "type": "boolean",
     "default": false
@@ -263,7 +371,7 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
   {
     "key": "server_authoritative_dismount_strict",
     "property": "server-authoritative-dismount-strict",
-    "group": "Server Authoritative",
+    "group": "Server Authoritative / Movement",
     "label": "Dismount Strict",
     "type": "boolean",
     "default": false
@@ -271,7 +379,7 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
   {
     "key": "server_authoritative_entity_interactions_strict",
     "property": "server-authoritative-entity-interactions-strict",
-    "group": "Server Authoritative",
+    "group": "Server Authoritative / Movement",
     "label": "Entity Interactions Strict",
     "type": "boolean",
     "default": false
@@ -279,7 +387,7 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
   {
     "key": "player_position_acceptance_threshold",
     "property": "player-position-acceptance-threshold",
-    "group": "Server Authoritative",
+    "group": "Server Authoritative / Movement",
     "label": "Position Acceptance Threshold",
     "type": "number",
     "default": 0.5,
@@ -288,7 +396,7 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
   {
     "key": "player_movement_action_direction_threshold",
     "property": "player-movement-action-direction-threshold",
-    "group": "Server Authoritative",
+    "group": "Server Authoritative / Movement",
     "label": "Movement Action Direction Threshold",
     "type": "number",
     "default": 0.85,
@@ -297,19 +405,27 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
   {
     "key": "server_authoritative_block_breaking",
     "property": "server-authoritative-block-breaking",
-    "group": "Server Authoritative",
-    "label": "Block Breaking Server-Authoritative",
+    "group": "Server Authoritative / Movement",
+    "label": "Block Breaking server-authoritative",
     "type": "boolean",
     "default": false
   },
   {
     "key": "server_authoritative_block_breaking_range_scalar",
     "property": "server-authoritative-block-breaking-range-scalar",
-    "group": "Server Authoritative",
+    "group": "Server Authoritative / Movement",
     "label": "Block Breaking Range Scalar",
     "type": "number",
     "default": 1.5,
     "step": 0.1
+  },
+  {
+    "key": "server_authoritative_sound",
+    "property": "server-authoritative-sound",
+    "group": "Server Authoritative / Movement",
+    "label": "Server Authoritative Sound",
+    "type": "boolean",
+    "default": false
   },
   {
     "key": "allow_outbound_script_debugging",
@@ -470,13 +586,5 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
     "label": "Diagnostics Max File Size",
     "type": "number",
     "default": 2097152
-  },
-  {
-    "key": "disable_client_vibrant_visuals",
-    "property": "disable-client-vibrant-visuals",
-    "group": "Diagnostics",
-    "label": "Client Vibrant Visuals deaktivieren",
-    "type": "boolean",
-    "default": true
   }
 ];
