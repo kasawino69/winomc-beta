@@ -1,4 +1,4 @@
-const VERSION = '2.1.12b';
+const VERSION = '2.1.13b';
 
 const state = {
   instances: [],
@@ -209,20 +209,20 @@ function renderInstanceCard(instance) {
              tabindex="0"
              role="button"
              aria-label="Instanz ${esc(instance.name || instance.id)} auswählen">
-      <p class="eyebrow">${esc(instance.id)}</p>
-      <h3>${esc(instance.name || instance.id)}</h3>
-      <span class="status-pill">${esc(status)}</span>
+      <p class="eyebrow" data-refresh="id">${esc(instance.id)}</p>
+      <h3 data-refresh="name">${esc(instance.name || instance.id)}</h3>
+      <span class="status-pill" data-refresh="status">${esc(status)}</span>
 
       <dl class="facts">
-        <div><dt>Profil</dt><dd>${esc(instance.profile || '-')}</dd></div>
-        <div><dt>IPv4</dt><dd>${esc(b.server_port || '-')}</dd></div>
-        <div><dt>IPv6</dt><dd>${esc(b.server_port_v6 || '-')}</dd></div>
-        <div><dt>Start</dt><dd>${esc(instance.status?.started_at || '-')}</dd></div>
-        <div><dt>Health</dt><dd>${esc(health.label)}</dd></div>
-        <div><dt>Automation</dt><dd>${esc(automationView(instance))}</dd></div>
+        <div><dt>Profil</dt><dd data-refresh="profile">${esc(instance.profile || '-')}</dd></div>
+        <div><dt>IPv4</dt><dd data-refresh="server_port">${esc(b.server_port || '-')}</dd></div>
+        <div><dt>IPv6</dt><dd data-refresh="server_port_v6">${esc(b.server_port_v6 || '-')}</dd></div>
+        <div><dt>Start</dt><dd data-refresh="started_at">${esc(instance.status?.started_at || '-')}</dd></div>
+        <div><dt>Health</dt><dd data-refresh="health">${esc(health.label)}</dd></div>
+        <div><dt>Automation</dt><dd data-refresh="automation">${esc(automationView(instance))}</dd></div>
       </dl>
 
-      ${!health.ok ? `<p class="warn-box">${esc(error || `Runtime-Status: ${status}`)}</p>` : ''}
+      <p class="warn-box" data-refresh="warning" ${health.ok ? 'hidden' : ''}>${esc(error || `Runtime-Status: ${status}`)}</p>
 
       <div class="card-actions">
         <button type="button" data-action="start" data-id="${esc(instance.id)}">Start</button>
@@ -233,8 +233,48 @@ function renderInstanceCard(instance) {
   `;
 }
 
+function patchText(root, selector, value) {
+  const node = root?.querySelector?.(selector);
+  if (!node) return;
+  const next = String(value ?? '-');
+  if (node.textContent !== next) {
+    node.textContent = next;
+  }
+}
+
+function patchInstanceCard(card, instance) {
+  if (!card || !instance) return;
+
+  const b = instance.bedrock || {};
+  const status = instanceStatus(instance);
+  const health = healthView(instance);
+  const error = instance.error || (instance.health?.errors || []).join(' · ');
+
+  card.className = `instance-card status-${status} ${health.ok ? 'health-ok' : 'health-bad'}`;
+  card.setAttribute('aria-label', `Instanz ${instance.name || instance.id} auswählen`);
+
+  patchText(card, '[data-refresh="id"]', instance.id);
+  patchText(card, '[data-refresh="name"]', instance.name || instance.id);
+  patchText(card, '[data-refresh="status"]', status);
+  patchText(card, '[data-refresh="profile"]', instance.profile || '-');
+  patchText(card, '[data-refresh="server_port"]', b.server_port || '-');
+  patchText(card, '[data-refresh="server_port_v6"]', b.server_port_v6 || '-');
+  patchText(card, '[data-refresh="started_at"]', instance.status?.started_at || '-');
+  patchText(card, '[data-refresh="health"]', health.label);
+  patchText(card, '[data-refresh="automation"]', automationView(instance));
+
+  const warning = card.querySelector('[data-refresh="warning"]');
+  if (warning) {
+    warning.hidden = Boolean(health.ok);
+    warning.textContent = health.ok ? '' : (error || `Runtime-Status: ${status}`);
+  }
+}
+
 function patchManagerSummary() {
-  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager ${VERSION} · Auto-Refresh 10 s · gezielte Statusaktualisierung`;
+  const summary = $('#managerSummary');
+  if (summary) {
+    summary.textContent = `${state.instances.length} Instanz(en) · WinoMC Manager ${VERSION} · Auto-Refresh 10 s · objektbasiert`;
+  }
   removeManualDashboardRefreshButtons();
 }
 
@@ -500,19 +540,39 @@ function renderOverviewFacts(inst) {
   const health = healthView(inst);
 
   return `
-    <dl class="facts large">
-      <div><dt>Status</dt><dd>${esc(inst.status?.state || '-')}</dd></div>
-      <div><dt>Health</dt><dd>${esc(health.label)}</dd></div>
-      <div><dt>Profil</dt><dd>${esc(inst.profile || '-')}</dd></div>
-      <div><dt>IPv4</dt><dd>${esc(b.server_port || '-')}</dd></div>
-      <div><dt>IPv6</dt><dd>${esc(b.server_port_v6 || '-')}</dd></div>
-      <div><dt>Welt</dt><dd>${esc(b.level_name || '-')}</dd></div>
-      <div><dt>Spielmodus</dt><dd>${esc(b.gamemode || '-')}</dd></div>
-      <div><dt>Autostart</dt><dd>${a.autostart ? 'Aktiv' : 'Aus'}</dd></div>
-      <div><dt>Watchdog</dt><dd>${a.watchdog ? 'Aktiv' : 'Aus'}</dd></div>
+    <dl class="facts large" data-refresh-scope="selected-overview">
+      <div><dt>Status</dt><dd data-overview-refresh="status">${esc(inst.status?.state || '-')}</dd></div>
+      <div><dt>Health</dt><dd data-overview-refresh="health">${esc(health.label)}</dd></div>
+      <div><dt>Profil</dt><dd data-overview-refresh="profile">${esc(inst.profile || '-')}</dd></div>
+      <div><dt>IPv4</dt><dd data-overview-refresh="server_port">${esc(b.server_port || '-')}</dd></div>
+      <div><dt>IPv6</dt><dd data-overview-refresh="server_port_v6">${esc(b.server_port_v6 || '-')}</dd></div>
+      <div><dt>Welt</dt><dd data-overview-refresh="level_name">${esc(b.level_name || '-')}</dd></div>
+      <div><dt>Spielmodus</dt><dd data-overview-refresh="gamemode">${esc(b.gamemode || '-')}</dd></div>
+      <div><dt>Autostart</dt><dd data-overview-refresh="autostart">${a.autostart ? 'Aktiv' : 'Aus'}</dd></div>
+      <div><dt>Watchdog</dt><dd data-overview-refresh="watchdog">${a.watchdog ? 'Aktiv' : 'Aus'}</dd></div>
     </dl>
   `;
 }
+
+function patchSelectedOverviewFacts(inst) {
+  const scope = $('[data-refresh-scope="selected-overview"]');
+  if (!scope || !inst) return;
+
+  const b = inst.bedrock || {};
+  const a = inst.automation || {};
+  const health = healthView(inst);
+
+  patchText(scope, '[data-overview-refresh="status"]', inst.status?.state || '-');
+  patchText(scope, '[data-overview-refresh="health"]', health.label);
+  patchText(scope, '[data-overview-refresh="profile"]', inst.profile || '-');
+  patchText(scope, '[data-overview-refresh="server_port"]', b.server_port || '-');
+  patchText(scope, '[data-overview-refresh="server_port_v6"]', b.server_port_v6 || '-');
+  patchText(scope, '[data-overview-refresh="level_name"]', b.level_name || '-');
+  patchText(scope, '[data-overview-refresh="gamemode"]', b.gamemode || '-');
+  patchText(scope, '[data-overview-refresh="autostart"]', a.autostart ? 'Aktiv' : 'Aus');
+  patchText(scope, '[data-overview-refresh="watchdog"]', a.watchdog ? 'Aktiv' : 'Aus');
+}
+
 
 async function renderDetail() {
   if (!state.selected) return;
@@ -736,18 +796,17 @@ function patchDashboardCards(instances) {
   const seen = new Set();
 
   for (const instance of instances) {
-    const current = [...grid.querySelectorAll('[data-instance-card]')]
-      .find((card) => card.dataset.instanceCard === instance.id);
+    let card = grid.querySelector(`[data-instance-card="${CSS.escape(instance.id)}"]`);
 
-    const html = renderInstanceCard(instance);
-
-    if (current) {
-      current.outerHTML = html;
-    } else {
-      grid.insertAdjacentHTML('beforeend', html);
+    if (!card) {
+      grid.insertAdjacentHTML('beforeend', renderInstanceCard(instance));
+      card = grid.querySelector(`[data-instance-card="${CSS.escape(instance.id)}"]`);
     }
 
-    seen.add(instance.id);
+    if (card) {
+      patchInstanceCard(card, instance);
+      seen.add(instance.id);
+    }
   }
 
   for (const card of [...grid.querySelectorAll('[data-instance-card]')]) {
@@ -781,10 +840,7 @@ async function patchSelectedRuntimeObjects(instanceSummary) {
   }
 
   if (state.tab === 'overview') {
-    const target = $('#detailContent');
-    if (target) {
-      target.innerHTML = renderOverviewFacts(state.selected);
-    }
+    patchSelectedOverviewFacts(state.selected);
     return;
   }
 

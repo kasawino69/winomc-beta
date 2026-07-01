@@ -1,3 +1,13 @@
+## 2.1.13b - Clean Targeted Auto-Refresh
+
+- Rebuilds Manager auto-refresh as object-based targeted updates instead of container or tab re-rendering.
+- Dashboard cards now expose stable `data-refresh` fields and refresh text/classes in place.
+- Selected overview exposes stable `data-overview-refresh` fields and updates only those values.
+- Console auto-refresh updates only `#consoleLog`; `#commandForm`, command input and autocomplete are never touched by refresh.
+- Removes card-level `outerHTML` replacement from refresh logic.
+- Avoids draft/sessionStorage workarounds; input stability comes from clean refresh boundaries.
+- Keeps `config.yaml` changes strictly limited to `version` and `environment.WINOMC_VERSION`.
+
 ## 2.1.12b - Manager Loading Hotfix
 
 - Fixes a JavaScript syntax error in the targeted console log refresh introduced in 2.1.11b.
