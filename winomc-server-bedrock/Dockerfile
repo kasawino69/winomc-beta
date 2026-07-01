@@ -34,6 +34,10 @@ RUN apt-get update \
       fi \
     && python3 /usr/local/bin/winomc-runtime-ux-patch \
     && python3 /usr/local/bin/winomc-runtime-ux-polish-2003 \
+    && echo "Restoring last known working WinoMC ingress console frontend" \
+    && curl -fsSL "https://raw.githubusercontent.com/kasawino69/winomc-beta/9ea674efee332dbb60c91ccdf6f572082fc2c1aa/winomc-server-bedrock/rootfs/usr/local/bin/winomc-console-server" \
+        -o /usr/local/bin/winomc-console-server \
+    && python3 -m py_compile /usr/local/bin/winomc-console-server \
     && gcc -shared -fPIC -O2 -Wall -Wextra \
         -o /opt/winomc-bds-ipv6fix.so \
         /usr/local/src/winomc-bds-ipv6fix.c \
