@@ -1,7 +1,9 @@
-/* WinoMC PC UI 1.6.14.22b
+/* WinoMC PC UI 1.6.14.23b
    PC-only behaviour. Shared modules remain the existing API/file/console functions. */
 (function WinoMCPCUI() {
-  const PC = {};
+  if (window.WinoMCPCUI?.initialized) return;
+
+  const PC = { initialized: true };
   const byId = (id) => document.getElementById(id);
 
   let originalEditorParent = null;

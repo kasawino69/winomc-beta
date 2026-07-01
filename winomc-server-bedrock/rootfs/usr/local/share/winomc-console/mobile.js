@@ -1,7 +1,9 @@
-/* WinoMC Mobile UI 1.6.14.22b
+/* WinoMC Mobile UI 1.6.14.23b
    Mobile-only behaviour. This file must not touch PC editor/window logic. */
 (function WinoMCMobileUI() {
-  const Mobile = {};
+  if (window.WinoMCMobileUI?.initialized) return;
+
+  const Mobile = { initialized: true };
 
   function hasFinePointer() {
     try {
@@ -28,7 +30,9 @@
     if (!Mobile.syncShell()) return;
     document.body.classList.remove('desktop-mode', 'winomc-pc-editor-open', 'winomc-pc-editor-fullscreen', 'has-maximized-card');
     document.querySelectorAll('.tab-panel').forEach((panel) => {
-      panel.classList.remove('desktop-open', 'desktop-minimized', 'desktop-maximized');
+      if (panel.classList.contains('desktop-open') || panel.classList.contains('desktop-minimized') || panel.classList.contains('desktop-maximized')) {
+        panel.classList.remove('desktop-open', 'desktop-minimized', 'desktop-maximized');
+      }
     });
     const activePanel = document.querySelector('.tab-panel.active') || document.querySelector('.tab-panel[data-panel="overview"]');
     const active = activePanel?.dataset?.panel || 'overview';

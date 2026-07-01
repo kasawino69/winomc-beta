@@ -1,5 +1,12 @@
 # Changelog
 
+# 2.0.0.7b
+
+- Stabilized mobile console startup by making the shell router single-initialization safe and coalescing resize, click, tab and mutation refreshes into one animation-frame tick.
+- Reduced mobile mode DOM churn so repeated router ticks no longer reprocess desktop window classes unnecessarily.
+- Kept Mobile, PC and Desktop behavior separated through guarded mode modules and scoped CSS.
+- Bumped the beta add-on and web console version for the next stability build.
+
 # 2.0.0.6b
 
 - Mobile web UI starts again after the 2.0.0.5b mode split.

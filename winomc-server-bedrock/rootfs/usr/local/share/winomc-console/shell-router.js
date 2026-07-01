@@ -1,39 +1,58 @@
-/* WinoMC shell router 1.6.14.22b
+/* WinoMC shell router 1.6.14.23b
    The router is the only bridge between strict PC and Mobile UI modules.
    Shared application modules stay in the existing console server functions. */
 (function WinoMCShellRouter() {
-  const Router = {};
+  if (window.WinoMCShellRouter?.initialized) return;
+
+  const Router = { initialized: true };
+  let tickScheduled = false;
+  let ticking = false;
+
+  function scheduleTick() {
+    if (tickScheduled) return;
+    tickScheduled = true;
+    window.requestAnimationFrame(() => {
+      tickScheduled = false;
+      Router.tick();
+    });
+  }
 
   Router.isPc = function isPc() {
     return Boolean(window.WinoMCPCUI?.isActive?.());
   };
 
   Router.tick = function tick() {
-    if (Router.isPc()) {
-      window.WinoMCPCUI?.tick?.();
-    } else {
-      window.WinoMCMobileUI?.tick?.();
+    if (ticking) return;
+    ticking = true;
+    try {
+      if (Router.isPc()) {
+        window.WinoMCPCUI?.tick?.();
+      } else {
+        window.WinoMCMobileUI?.tick?.();
+      }
+    } finally {
+      ticking = false;
     }
   };
 
-  const originalOpenEditorOverlay = openEditorOverlay;
-  const originalCloseEditorOverlay = closeEditorOverlay;
-  const originalToggleEditorFullscreen = toggleEditorFullscreen;
-  const originalActivateTab = activateTab;
-  const originalOpenDesktopWindow = openDesktopWindow;
+  const originalOpenEditorOverlay = window.openEditorOverlay;
+  const originalCloseEditorOverlay = window.closeEditorOverlay;
+  const originalToggleEditorFullscreen = window.toggleEditorFullscreen;
+  const originalActivateTab = window.activateTab;
+  const originalOpenDesktopWindow = window.openDesktopWindow;
 
-  openEditorOverlay = function routedOpenEditorOverlay() {
+  if (typeof originalOpenEditorOverlay === 'function') window.openEditorOverlay = function routedOpenEditorOverlay() {
     if (Router.isPc()) return window.WinoMCPCUI.openEditor({ fullscreen: false });
     window.WinoMCPCUI?.restoreEditorHome?.();
     return originalOpenEditorOverlay.apply(this, arguments);
   };
 
-  closeEditorOverlay = function routedCloseEditorOverlay() {
+  if (typeof originalCloseEditorOverlay === 'function') window.closeEditorOverlay = function routedCloseEditorOverlay() {
     if (Router.isPc()) return window.WinoMCPCUI.closeEditor();
     return originalCloseEditorOverlay.apply(this, arguments);
   };
 
-  toggleEditorFullscreen = function routedToggleEditorFullscreen(event) {
+  if (typeof originalToggleEditorFullscreen === 'function') window.toggleEditorFullscreen = function routedToggleEditorFullscreen(event) {
     if (Router.isPc()) {
       if (event) {
         event.preventDefault();
@@ -44,15 +63,15 @@
     return originalToggleEditorFullscreen.apply(this, arguments);
   };
 
-  activateTab = function routedActivateTab(tab) {
+  if (typeof originalActivateTab === 'function') window.activateTab = function routedActivateTab(tab) {
     const result = originalActivateTab.apply(this, arguments);
-    window.requestAnimationFrame(Router.tick);
+    scheduleTick();
     return result;
   };
 
-  openDesktopWindow = function routedOpenDesktopWindow(id) {
+  if (typeof originalOpenDesktopWindow === 'function') window.openDesktopWindow = function routedOpenDesktopWindow(id) {
     const result = originalOpenDesktopWindow.apply(this, arguments);
-    window.requestAnimationFrame(Router.tick);
+    scheduleTick();
     return result;
   };
 
@@ -81,14 +100,15 @@
     }
   }, true);
 
-  const observer = new MutationObserver(() => window.requestAnimationFrame(Router.tick));
+  const observer = new MutationObserver(scheduleTick);
   observer.observe(document.body, { attributes: true, childList: true, subtree: false, attributeFilter: ['class'] });
 
-  window.addEventListener('resize', () => window.requestAnimationFrame(Router.tick), { passive: true });
-  document.addEventListener('click', () => window.requestAnimationFrame(Router.tick), true);
+  window.addEventListener('resize', scheduleTick, { passive: true });
+  window.addEventListener('orientationchange', scheduleTick, { passive: true });
+  document.addEventListener('click', scheduleTick, true);
 
   window.WinoMCShellRouter = Router;
   Router.tick();
-  window.setTimeout(Router.tick, 100);
-  window.setTimeout(Router.tick, 350);
+  window.setTimeout(scheduleTick, 100);
+  window.setTimeout(scheduleTick, 350);
 })();
