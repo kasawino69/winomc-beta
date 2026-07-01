@@ -20,7 +20,7 @@ for ui_file in [manager_index, manager_js, manager_ui_dir/'styles/base.css', man
         raise SystemExit(f'manager UI file missing or empty: {ui_file}')
 ui_html = manager_index.read_text(encoding='utf-8')
 ui_js = manager_js.read_text(encoding='utf-8')
-for snippet in ['data-manager-app', 'instancesGrid', 'createInstanceForm', 'detailContent', 'errorPanel', 'mode-pc-classic', 'mode-mobile', 'mode-desktop']:
+for snippet in ['data-manager-app', 'instancesGrid', 'createInstanceForm', 'detailContent', 'errorPanel', 'mode-pc-classic', 'mode-mobile']:
     if snippet not in ui_html:
         raise SystemExit(f'manager UI missing required HTML marker: {snippet}')
 for snippet in ['/api/instances', '/api/instances/${encodeURIComponent(id)}/start', '/api/instances/${encodeURIComponent(id)}/stop', '/api/instances/${encodeURIComponent(id)}/restart', '/api/instances/${encodeURIComponent(inst.id)}/console', '/api/instances/${encodeURIComponent(inst.id)}/command', '/api/instances/${encodeURIComponent(id)}/backup', 'showError', 'suggested_action']:
@@ -31,8 +31,8 @@ for forbidden in ['/api/command', '/api/status?start', '/api/start', '/api/stop'
         raise SystemExit(f'manager UI must not use old global single-server API: {forbidden}')
 config = root/'winomc-server-bedrock/config.yaml'
 text = config.read_text()
-if 'version: 2.1b' not in text:
-    raise SystemExit('config.yaml version is not 2.1b')
+if 'version: 2.1.6b' not in text:
+    raise SystemExit('config.yaml version is not 2.1.6b')
 if yaml:
     yaml.safe_load(text)
 else:
@@ -47,7 +47,7 @@ py_compile.compile(str(server), doraise=True)
 import os, runpy, stat, tempfile, time, zipfile, json
 smoke_root = pathlib.Path(tempfile.mkdtemp(prefix='winomc-manager-smoke-'))
 shared = smoke_root/'.winomc'/'bds'/'shared'
-shared.mkdir(parents=True)
+shared.mkdir(parents=True); (shared/'resource_packs'/'vanilla').mkdir(parents=True, exist_ok=True); (shared/'behavior_packs'/'vanilla').mkdir(parents=True, exist_ok=True)
 fake_bds = shared/'bedrock_server'
 fake_bds.write_text('#!/bin/sh\necho "Fake Bedrock ready $$"\nwhile IFS= read -r line; do echo "CMD:$line"; [ "$line" = "stop" ] && exit 0; done\n', encoding='utf-8')
 fake_bds.chmod(fake_bds.stat().st_mode | stat.S_IXUSR)

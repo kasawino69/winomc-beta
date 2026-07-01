@@ -1,9 +1,14 @@
-body.mode-pc-classic .manager-shell {
-  max-width: 1480px;
-  margin: 0 auto;
-}
+body.mode-pc-classic .manager-shell,
 body.mode-pc-classic .manager-header {
   max-width: 1480px;
   margin-left: auto;
   margin-right: auto;
+}
+
+body.mode-pc-classic .details-panel {
+  min-height: 460px;
+}
+
+body.mode-pc-classic .console-log {
+  min-height: 320px;
 }

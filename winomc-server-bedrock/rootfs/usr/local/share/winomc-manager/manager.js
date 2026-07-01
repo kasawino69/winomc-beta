@@ -1,11 +1,53 @@
+const VERSION = '2.1.6b';
+
 const state = {
   instances: [],
   profiles: [],
   selectedId: null,
   selected: null,
   tab: 'overview',
-  mode: localStorage.getItem('winomc-manager-mode') || 'pc-classic'
+  modePreference: localStorage.getItem('winomc-manager-mode') || 'auto',
+  mode: 'pc-classic',
 };
+
+const COMMAND_HELPER = [
+  {
+    title: 'Server',
+    items: [
+      { label: 'Spieler auflisten', command: 'list' },
+      { label: 'Nachricht senden', command: 'say Hallo von WinoMC' },
+      { label: 'Tag setzen', command: 'time set day' },
+      { label: 'Wetter klar', command: 'weather clear' },
+    ],
+  },
+  {
+    title: 'Gamerules',
+    items: [
+      { label: 'Keep Inventory an', command: 'gamerule keepinventory true' },
+      { label: 'Keep Inventory aus', command: 'gamerule keepinventory false' },
+      { label: 'Phantome aus', command: 'gamerule doinsomnia false' },
+      { label: 'Mob Griefing aus', command: 'gamerule mobgriefing false' },
+    ],
+  },
+  {
+    title: 'Spielerrechte',
+    items: [
+      { label: 'OP setzen', command: 'op <spielername>' },
+      { label: 'OP entfernen', command: 'deop <spielername>' },
+      { label: 'Gamemode Survival', command: 'gamemode survival <spielername>' },
+      { label: 'Gamemode Creative', command: 'gamemode creative <spielername>' },
+    ],
+  },
+  {
+    title: 'Schwierigkeit',
+    items: [
+      { label: 'Peaceful', command: 'difficulty peaceful' },
+      { label: 'Easy', command: 'difficulty easy' },
+      { label: 'Normal', command: 'difficulty normal' },
+      { label: 'Hard', command: 'difficulty hard' },
+    ],
+  },
+];
 
 const $ = (selector, root = document) => root.querySelector(selector);
 
@@ -15,7 +57,7 @@ function escapeHtml(value) {
     '<': '&lt;',
     '>': '&gt;',
     '"': '&quot;',
-    "'": '&#39;'
+    "'": '&#39;',
   }[char]));
 }
 
@@ -29,7 +71,7 @@ const MANAGER_INSTANCE_API_CONTRACT = [
   '/api/instances/${encodeURIComponent(id)}/restart',
   '/api/instances/${encodeURIComponent(id)}/backup',
   '/api/instances/${encodeURIComponent(inst.id)}/console',
-  '/api/instances/${encodeURIComponent(inst.id)}/command'
+  '/api/instances/${encodeURIComponent(inst.id)}/command',
 ];
 
 async function api(path, options = {}) {
@@ -37,17 +79,22 @@ async function api(path, options = {}) {
     cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
-      ...(options.headers || {})
+      ...(options.headers || {}),
     },
-    ...options
+    ...options,
   });
+
   const data = await res.json().catch(() => ({
     ok: false,
     code: `http_${res.status}`,
     message: `HTTP ${res.status}`,
-    component: 'manager-api'
+    component: 'manager-api',
   }));
-  if (!res.ok || data.ok === false) throw data;
+
+  if (!res.ok || data.ok === false) {
+    throw data;
+  }
+
   return data;
 }
 
@@ -65,39 +112,68 @@ function showError(error) {
   const component = error?.component || 'api';
   const instanceId = error?.instance_id || state.selectedId || '-';
   const suggested = error?.suggested_action;
+
   panel.hidden = false;
   panel.innerHTML = `
-    <div class="error-card">
-      <div class="panel-heading">
-        <div>
-          <p class="eyebrow">Fehler</p>
-          <h2>${esc(message)}</h2>
-        </div>
-        <button type="button" id="closeError">SchlieÃŸen</button>
-      </div>
-      <p>Komponente: <strong>${esc(component)}</strong> Â· Instanz: <strong>${esc(instanceId)}</strong></p>
+    <article class="error-card">
+      <p class="eyebrow">Fehler</p>
+      <h2>${esc(message)}</h2>
+      <button type="button" id="closeError">Schließen</button>
+      <p class="hint">Komponente: ${esc(component)} · Instanz: ${esc(instanceId)}</p>
       ${suggested ? `<p class="suggested-action">${esc(suggested)}</p>` : ''}
       <details>
         <summary>Technische Details</summary>
         <pre>${esc(JSON.stringify(error, null, 2))}</pre>
       </details>
-    </div>`;
-  $('#closeError').onclick = () => { panel.hidden = true; };
+    </article>
+  `;
+
+  $('#closeError').onclick = () => {
+    panel.hidden = true;
+  };
 }
 
-function setMode(mode) {
-  state.mode = mode;
-  localStorage.setItem('winomc-manager-mode', mode);
-  document.body.classList.remove('mode-pc-classic', 'mode-mobile', 'mode-desktop');
-  document.body.classList.add(`mode-${mode}`);
+function resolveMode(preference = state.modePreference) {
+  if (preference === 'mobile') return 'mobile';
+  if (preference === 'pc-classic') return 'pc-classic';
+  return window.matchMedia('(max-width: 760px), (pointer: coarse)').matches ? 'mobile' : 'pc-classic';
 }
+
+function setMode(preference) {
+  if (!['auto', 'pc-classic', 'mobile'].includes(preference)) {
+    preference = 'auto';
+  }
+
+  state.modePreference = preference;
+  state.mode = resolveMode(preference);
+
+  localStorage.setItem('winomc-manager-mode', preference);
+
+  document.body.classList.remove('mode-pc-classic', 'mode-mobile', 'mode-desktop');
+  document.body.classList.add(`mode-${state.mode}`);
+  document.body.dataset.mode = state.mode;
+  document.body.dataset.modePreference = preference;
+
+  document.querySelectorAll('[data-mode]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.mode === preference);
+  });
+}
+
+window.matchMedia('(max-width: 760px), (pointer: coarse)').addEventListener('change', () => {
+  if (state.modePreference === 'auto') {
+    setMode('auto');
+  }
+});
 
 async function loadInstances(selectId = state.selectedId) {
   const data = await get('/api/instances');
+
   state.instances = data.instances || [];
   state.profiles = data.profiles || [];
+
   renderProfiles();
   renderDashboard();
+
   if (selectId && state.instances.some((i) => i.id === selectId)) {
     await selectInstance(selectId);
   } else if (!state.selectedId && state.instances[0]) {
@@ -114,9 +190,16 @@ function profileKey(profile) {
 
 function renderProfiles() {
   const select = $('#profileSelect');
-  const profiles = state.profiles.length ? state.profiles : [{ id: 'vanilla-survival', name: 'Vanilla Survival' }];
+  const profiles = state.profiles.length
+    ? state.profiles
+    : [{ id: 'vanilla-survival', name: 'Vanilla Survival' }];
+
   select.innerHTML = profiles
-    .map((profile) => `<option value="${esc(profileKey(profile))}">${esc(profile.name || profile.id || profile.key)}</option>`)
+    .map((profile) => {
+      const id = profileKey(profile);
+      const label = profile.name || profile.id || profile.key || id;
+      return `<option value="${esc(id)}">${esc(label)}</option>`;
+    })
     .join('');
 }
 
@@ -125,21 +208,20 @@ function instanceStatus(instance) {
 }
 
 function renderDashboard() {
-  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) Â· WinoMC Manager 2.1.5b Â· alle Aktionen instanzbezogen`;
+  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager ${VERSION} · Auto/PC/Mobile · alle Aktionen instanzbezogen`;
+
   $('#instancesGrid').innerHTML = state.instances.map((instance) => {
     const b = instance.bedrock || {};
     const status = instanceStatus(instance);
     const health = instance.health || {};
-    const error = instance.error || (health.errors || []).join(' Â· ');
+    const error = instance.error || (health.errors || []).join(' · ');
+
     return `
       <article class="instance-card status-${esc(status)}">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">${esc(instance.id)}</p>
-            <h3>${esc(instance.name || instance.id)}</h3>
-          </div>
-          <span class="status-pill">${esc(status)}</span>
-        </div>
+        <p class="eyebrow">${esc(instance.id)}</p>
+        <h3>${esc(instance.name || instance.id)}</h3>
+        <span class="status-pill">${esc(status)}</span>
+
         <dl class="facts">
           <div><dt>Profil</dt><dd>${esc(instance.profile || '-')}</dd></div>
           <div><dt>IPv4</dt><dd>${esc(b.server_port || '-')}</dd></div>
@@ -147,21 +229,26 @@ function renderDashboard() {
           <div><dt>Start</dt><dd>${esc(instance.status?.started_at || '-')}</dd></div>
           <div><dt>Health</dt><dd>${health.ok === false ? 'Problem' : 'OK'}</dd></div>
         </dl>
-        ${instance.broken || health.ok === false ? `<p class="warn-box">${esc(error || 'Instanz prÃ¼fen')}</p>` : ''}
+
+        ${instance.broken || health.ok === false ? `<p class="warn-box">${esc(error || 'Instanz prüfen')}</p>` : ''}
+
         <div class="card-actions">
           <button type="button" data-action="start" data-id="${esc(instance.id)}">Start</button>
           <button type="button" data-action="stop" data-id="${esc(instance.id)}">Stop</button>
           <button type="button" data-action="restart" data-id="${esc(instance.id)}">Restart</button>
           <button type="button" data-action="details" data-id="${esc(instance.id)}">Details</button>
         </div>
-      </article>`;
+      </article>
+    `;
   }).join('') || '<p class="empty-state">Noch keine Instanzen. Erstelle rechts eine neue Bedrock-Instanz.</p>';
 }
 
 async function selectInstance(id) {
   state.selectedId = id;
   state.selected = unwrapInstance(await get(`/api/instances/${encodeURIComponent(id)}`));
+
   $('#detailTitle').textContent = `${state.selected.name || id} (${id})`;
+
   renderDetailActions();
   await renderDetail();
   renderDashboard();
@@ -169,15 +256,48 @@ async function selectInstance(id) {
 
 function renderDetailActions() {
   const id = esc(state.selectedId);
+
   $('#detailActions').innerHTML = `
     <button type="button" data-action="start" data-id="${id}">Start</button>
     <button type="button" data-action="stop" data-id="${id}">Stop</button>
     <button type="button" data-action="restart" data-id="${id}">Restart</button>
-    <button type="button" data-action="backup" data-id="${id}">Backup</button>`;
+    <button type="button" data-action="backup" data-id="${id}">Backup</button>
+  `;
+}
+
+function renderCommandHelper() {
+  return `
+    <section class="command-helper" aria-label="Befehlshilfe">
+      <div class="command-helper-heading">
+        <div>
+          <p class="eyebrow">Befehlshilfe</p>
+          <h3>Command Helper</h3>
+        </div>
+        <p class="hint">Ein Klick übernimmt den Befehl in die Eingabe. Gesendet wird erst über „Senden“.</p>
+      </div>
+
+      <div class="command-helper-grid">
+        ${COMMAND_HELPER.map((group) => `
+          <article class="command-group">
+            <h4>${esc(group.title)}</h4>
+            <div class="command-chip-list">
+              ${group.items.map((item) => `
+                <button type="button" class="command-chip" data-helper-command="${esc(item.command)}">
+                  <span>${esc(item.label)}</span>
+                  <code>${esc(item.command)}</code>
+                </button>
+              `).join('')}
+            </div>
+          </article>
+        `).join('')}
+      </div>
+    </section>
+  `;
 }
 
 async function renderDetail() {
   if (!state.selected) return;
+
   const target = $('#detailContent');
   const inst = state.selected;
   const b = inst.bedrock || {};
@@ -191,24 +311,35 @@ async function renderDetail() {
         <div><dt>IPv6</dt><dd>${esc(b.server_port_v6 || '-')}</dd></div>
         <div><dt>Welt</dt><dd>${esc(b.level_name || '-')}</dd></div>
         <div><dt>Spielmodus</dt><dd>${esc(b.gamemode || '-')}</dd></div>
-      </dl>`;
+      </dl>
+    `;
   } else if (state.tab === 'console') {
     const consoleData = await get(`/api/instances/${encodeURIComponent(inst.id)}/console`);
     const lines = consoleData.lines || consoleData.console || consoleData.logs || [];
+
     target.innerHTML = `
-      <pre class="console-log">${esc(Array.isArray(lines) ? lines.join('\n') : String(lines || 'Noch keine Logzeilen fÃ¼r diese Instanz.'))}</pre>
+      <pre class="console-log">${esc(Array.isArray(lines) ? lines.join('\n') : String(lines || 'Noch keine Logzeilen für diese Instanz.'))}</pre>
+
+      ${renderCommandHelper()}
+
       <form id="commandForm" class="command-form">
         <input name="command" autocomplete="off" placeholder="say Hallo von WinoMC">
-        <button type="submit">Senden</button>
+        <button type="submit" class="primary">Senden</button>
       </form>
-      <p class="hint">Commands werden ausschlieÃŸlich an <strong>${esc(inst.id)}</strong> gesendet.</p>`;
+
+      <p class="hint">Commands werden ausschließlich an ${esc(inst.id)} gesendet.</p>
+    `;
+
     $('#commandForm').onsubmit = async (ev) => {
       ev.preventDefault();
-      const command = ev.currentTarget.command.value.trim();
+      const formEl = ev.currentTarget;
+      const command = formEl.command.value.trim();
+
       if (!command) return;
+
       try {
         await post(`/api/instances/${encodeURIComponent(inst.id)}/command`, { command });
-        ev.currentTarget.command.value = '';
+        formEl.command.value = '';
         await renderDetail();
       } catch (err) {
         showError(err);
@@ -217,23 +348,34 @@ async function renderDetail() {
   } else if (state.tab === 'settings') {
     target.innerHTML = `
       <form id="settingsForm" class="form-grid compact">
-        <label>Anzeigename<input name="name" value="${esc(inst.name || '')}"></label>
-        <label>Weltname<input name="level_name" value="${esc(b.level_name || 'world')}"></label>
-        <label>Max Players<input name="max_players" type="number" min="1" max="100" value="${esc(b.max_players || 10)}"></label>
+        <label>Anzeigename
+          <input name="name" value="${esc(inst.name || '')}">
+        </label>
+        <label>Weltname
+          <input name="level_name" value="${esc(b.level_name || '')}">
+        </label>
+        <label>Max Players
+          <input name="max_players" type="number" value="${esc(b.max_players || 10)}">
+        </label>
         <button type="submit" class="primary">Speichern</button>
-      </form>`;
+      </form>
+      <p class="hint">Profile auf bestehende Instanzen folgen in einem eigenen Schritt.</p>
+    `;
+
     $('#settingsForm').onsubmit = async (ev) => {
       ev.preventDefault();
-  const formEl = ev.currentTarget;
-  const form = new FormData(formEl);
+      const formEl = ev.currentTarget;
+      const form = new FormData(formEl);
+
       try {
         await patch(`/api/instances/${encodeURIComponent(inst.id)}`, {
           name: form.get('name'),
           bedrock: {
             level_name: form.get('level_name'),
-            max_players: Number(form.get('max_players'))
-          }
+            max_players: Number(form.get('max_players')),
+          },
         });
+
         await loadInstances(inst.id);
       } catch (err) {
         showError(err);
@@ -241,16 +383,25 @@ async function renderDetail() {
     };
   } else if (state.tab === 'files') {
     const files = await get(`/api/instances/${encodeURIComponent(inst.id)}/files`);
-    target.innerHTML = `<p>Instanzbezogene Dateiwurzeln. VollstÃ¤ndiger Dateimanager folgt in Phase 4.</p><pre>${esc(JSON.stringify(files.roots || files, null, 2))}</pre>`;
+
+    target.innerHTML = `
+      <p class="hint">Instanzbezogene Dateiwurzeln. Der vollständige Dateiexplorer folgt in 2.1.8b.</p>
+      <pre>${esc(JSON.stringify(files.roots || files, null, 2))}</pre>
+    `;
   } else if (state.tab === 'packs') {
     const packs = await get(`/api/instances/${encodeURIComponent(inst.id)}/packs`);
+
     target.innerHTML = `
-      <h3>Resource Packs</h3><p>${esc((packs.resource_packs || []).join(', ') || 'Keine Nutzerpacks')}</p>
-      <h3>Behavior Packs</h3><p>${esc((packs.behavior_packs || []).join(', ') || 'Keine Nutzerpacks')}</p>`;
+      <h3>Resource Packs</h3>
+      <p>${esc((packs.resource_packs || []).join(', ') || 'Keine Nutzerpacks')}</p>
+      <h3>Behavior Packs</h3>
+      <p>${esc((packs.behavior_packs || []).join(', ') || 'Keine Nutzerpacks')}</p>
+    `;
   } else if (state.tab === 'backups') {
     target.innerHTML = `
-      <p>Backups werden instanzbezogen Ã¼ber <code>/api/instances/${esc(inst.id)}/backup</code> erstellt.</p>
-      <button type="button" data-action="backup" data-id="${esc(inst.id)}">Backup jetzt erstellen</button>`;
+      <p>Backups werden instanzbezogen über <code>/api/instances/${esc(inst.id)}/backup</code> erstellt.</p>
+      <button type="button" class="primary" data-action="backup" data-id="${esc(inst.id)}">Backup jetzt erstellen</button>
+    `;
   } else {
     target.innerHTML = `<pre>${esc(JSON.stringify(inst.status || inst, null, 2))}</pre>`;
   }
@@ -258,9 +409,16 @@ async function renderDetail() {
 
 async function runAction(action, id) {
   try {
-    if (action === 'details') return selectInstance(id);
-    if (action === 'backup') await post(`/api/instances/${encodeURIComponent(id)}/backup`, { type: 'manual-ui' });
-    else await post(`/api/instances/${encodeURIComponent(id)}/${action}`);
+    if (action === 'details') {
+      return selectInstance(id);
+    }
+
+    if (action === 'backup') {
+      await post(`/api/instances/${encodeURIComponent(id)}/backup`, { type: 'manual-ui' });
+    } else {
+      await post(`/api/instances/${encodeURIComponent(id)}/${action}`);
+    }
+
     await loadInstances(id);
   } catch (err) {
     showError(err);
@@ -269,8 +427,10 @@ async function runAction(action, id) {
 
 $('#createInstanceForm').onsubmit = async (ev) => {
   ev.preventDefault();
+
   const formEl = ev.currentTarget;
   const form = new FormData(formEl);
+
   const payload = {
     id: form.get('id'),
     name: form.get('name'),
@@ -282,9 +442,10 @@ $('#createInstanceForm').onsubmit = async (ev) => {
       gamemode: form.get('gamemode'),
       difficulty: form.get('difficulty'),
       max_players: Number(form.get('max_players')),
-      allowlist: Boolean(form.get('allowlist'))
-    }
+      allowlist: Boolean(form.get('allowlist')),
+    },
   };
+
   try {
     await post('/api/instances', payload);
     formEl.reset();
@@ -295,18 +456,39 @@ $('#createInstanceForm').onsubmit = async (ev) => {
 };
 
 document.addEventListener('click', (ev) => {
+  const helper = ev.target.closest('[data-helper-command]');
+  if (helper) {
+    const input = $('#commandForm input[name="command"]');
+    if (input) {
+      input.value = helper.dataset.helperCommand || '';
+      input.focus();
+    }
+    return;
+  }
+
   const action = ev.target.closest('[data-action]');
-  if (action) runAction(action.dataset.action, action.dataset.id);
+  if (action) {
+    runAction(action.dataset.action, action.dataset.id);
+    return;
+  }
+
   const tab = ev.target.closest('[data-tab]');
   if (tab) {
     state.tab = tab.dataset.tab;
-    document.querySelectorAll('[data-tab]').forEach((btn) => btn.classList.toggle('active', btn === tab));
+    document.querySelectorAll('[data-tab]').forEach((btn) => {
+      btn.classList.toggle('active', btn === tab);
+    });
     renderDetail().catch(showError);
+    return;
   }
+
   const mode = ev.target.closest('[data-mode]');
-  if (mode) setMode(mode.dataset.mode);
+  if (mode) {
+    setMode(mode.dataset.mode);
+  }
 });
 
 $('#refreshInstances').onclick = () => loadInstances().catch(showError);
-setMode(state.mode);
+
+setMode(state.modePreference);
 loadInstances().catch(showError);

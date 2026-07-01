@@ -13,19 +13,30 @@
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-* { box-sizing: border-box; }
-html, body { min-height: 100%; margin: 0; }
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
 body {
   background: radial-gradient(circle at top left, rgba(56, 189, 248, .20), transparent 32rem), var(--bg);
   color: var(--text);
   padding: 20px;
 }
 
-button, input, select {
+button,
+input,
+select {
   font: inherit;
 }
 
-button, .primary {
+button,
+.primary {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: rgba(30, 41, 59, .92);
@@ -33,9 +44,21 @@ button, .primary {
   padding: 9px 12px;
   cursor: pointer;
 }
-button:hover { border-color: var(--accent); }
-button.primary, .primary { background: rgba(14, 165, 233, .24); border-color: rgba(56, 189, 248, .55); }
-input, select {
+
+button:hover,
+button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button.primary,
+.primary {
+  background: rgba(14, 165, 233, .24);
+  border-color: rgba(56, 189, 248, .55);
+}
+
+input,
+select {
   width: 100%;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -43,16 +66,40 @@ input, select {
   color: var(--text);
   padding: 10px;
 }
-label { display: grid; gap: 6px; color: var(--muted); }
-pre { white-space: pre-wrap; overflow: auto; }
-code { color: var(--accent); }
+
+label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+pre {
+  white-space: pre-wrap;
+  overflow: auto;
+}
+
+code {
+  color: var(--accent);
+}
+
+[hidden],
+.error-panel[hidden],
+.manager-modal[hidden],
+.manager-overlay[hidden] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
 
 .manager-header,
 .dashboard-panel,
 .create-panel,
 .details-panel,
 .error-card,
-.instance-card {
+.instance-card,
+.command-helper,
+.command-group {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 22px;
@@ -67,9 +114,15 @@ code { color: var(--accent); }
   padding: 20px;
   margin-bottom: 18px;
 }
+
 .manager-header h1,
 .panel-heading h2,
-.instance-card h3 { margin: 0; }
+.instance-card h3,
+.command-helper h3,
+.command-group h4 {
+  margin: 0;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: var(--accent);
@@ -78,8 +131,23 @@ code { color: var(--accent); }
   font-size: 12px;
   font-weight: 700;
 }
-.manager-header p { color: var(--muted); }
-.mode-switcher { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.manager-header p,
+.hint,
+.empty-state {
+  color: var(--muted);
+}
+
+.mode-switcher,
+.card-actions,
+.detail-actions,
+.tabs,
+.command-form,
+.command-chip-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
 .manager-shell {
   display: grid;
@@ -89,66 +157,117 @@ code { color: var(--accent); }
     "details details";
   gap: 18px;
 }
-.dashboard-panel { grid-area: dashboard; padding: 18px; }
-.create-panel { grid-area: create; padding: 18px; }
-.details-panel { grid-area: details; padding: 18px; }
-.panel-heading {
+
+.dashboard-panel {
+  grid-area: dashboard;
+  padding: 18px;
+}
+
+.create-panel {
+  grid-area: create;
+  padding: 18px;
+}
+
+.details-panel {
+  grid-area: details;
+  padding: 18px;
+}
+
+.panel-heading,
+.command-helper-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
 }
+
 .instances-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 14px;
 }
-.instance-card { padding: 16px; }
+
+.instance-card {
+  padding: 16px;
+}
+
 .status-pill {
+  display: inline-flex;
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 4px 10px;
   color: var(--muted);
+  margin-top: 8px;
 }
-.status-running .status-pill { color: var(--ok); border-color: rgba(52, 211, 153, .45); }
+
+.status-running .status-pill {
+  color: var(--ok);
+  border-color: rgba(52, 211, 153, .45);
+}
+
 .status-crashed .status-pill,
-.status-broken .status-pill { color: var(--danger); border-color: rgba(251, 113, 133, .45); }
+.status-broken .status-pill {
+  color: var(--danger);
+  border-color: rgba(251, 113, 133, .45);
+}
+
 .facts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin: 12px 0;
 }
+
 .facts div {
   background: var(--panel-soft);
   border-radius: 12px;
   padding: 10px;
 }
-.facts dt { color: var(--muted); font-size: 12px; }
-.facts dd { margin: 3px 0 0; }
-.facts.large { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-.card-actions,
-.detail-actions,
-.tabs,
-.command-form {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+
+.facts dt {
+  color: var(--muted);
+  font-size: 12px;
 }
+
+.facts dd {
+  margin: 3px 0 0;
+}
+
+.facts.large {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
 .form-grid {
   display: grid;
   gap: 12px;
 }
-.form-grid.compact { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.checkbox-row { display: flex; align-items: center; gap: 8px; }
-.checkbox-row input { width: auto; }
+
+.form-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
 .tabs {
   border-bottom: 1px solid var(--border);
   padding-bottom: 10px;
   margin-bottom: 14px;
 }
-.tabs button.active { border-color: var(--accent); color: var(--accent); }
+
+.tabs button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .console-log {
   min-height: 260px;
   max-height: 420px;
@@ -157,35 +276,38 @@ code { color: var(--accent); }
   border-radius: 14px;
   padding: 14px;
 }
-.command-form input { flex: 1 1 240px; width: auto; }
-.error-panel {
-  position: fixed;
-  inset: 20px;
-  z-index: 1000;
-  display: grid;
-  place-items: center;
-  background: rgba(2, 6, 23, .66);
-}
-.error-card { width: min(760px, 100%); padding: 18px; }
-.warn-box, .suggested-action {
-  border: 1px solid rgba(251, 191, 36, .35);
-  background: rgba(251, 191, 36, .10);
-  color: #fde68a;
-  border-radius: 12px;
-  padding: 10px;
-}
-.empty-state, .hint { color: var(--muted); }
 
-/* WinoMC 2.1.2b overlay hotfix
-   Ensure hidden panels cannot block the Manager UI. */
-[hidden],
-.error-panel[hidden],
-.manager-modal[hidden],
-.manager-overlay[hidden] {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
+.command-form input {
+  flex: 1 1 240px;
+  width: auto;
+}
+
+.command-helper {
+  margin: 16px 0;
+  padding: 16px;
+}
+
+.command-helper-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.command-group {
+  padding: 12px;
+  background: rgba(2, 6, 23, .35);
+}
+
+.command-chip {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  flex: 1 1 160px;
+}
+
+.command-chip code {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .error-panel:not([hidden]) {
@@ -196,6 +318,20 @@ code { color: var(--accent); }
   place-items: center;
   background: rgba(2, 6, 23, 0.66);
   pointer-events: auto;
+}
+
+.error-card {
+  width: min(760px, 100%);
+  padding: 18px;
+}
+
+.warn-box,
+.suggested-action {
+  border: 1px solid rgba(251, 191, 36, .35);
+  background: rgba(251, 191, 36, .10);
+  color: #fde68a;
+  border-radius: 12px;
+  padding: 10px;
 }
 
 .manager-shell::before,

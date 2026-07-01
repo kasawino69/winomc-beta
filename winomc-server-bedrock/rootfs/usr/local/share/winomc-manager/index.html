@@ -3,23 +3,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Manager 2.1.5b</title>
-  <link rel="stylesheet" href="assets/winomc-manager/styles/base.css">
-  <link rel="stylesheet" href="assets/winomc-manager/styles/pc-classic.css">
-  <link rel="stylesheet" href="assets/winomc-manager/styles/mobile.css">
-  <link rel="stylesheet" href="assets/winomc-manager/styles/desktop.css">
+  <title>WinoMC Manager 2.1.6b</title>
+  <link rel="stylesheet" href="./assets/winomc-manager/styles/base.css">
+  <link rel="stylesheet" href="./assets/winomc-manager/styles/pc-classic.css">
+  <link rel="stylesheet" href="./assets/winomc-manager/styles/mobile.css">
 </head>
-<body class="mode-pc-classic">
+<body class="mode-pc-classic" data-manager-app data-mode="pc-classic">
+  <div id="errorPanel" class="error-panel" hidden></div>
+
   <header class="manager-header">
     <div>
-      <p class="eyebrow">Home Assistant Add-on Â· Bedrock Multiinstanz</p>
-      <h1>WinoMC Manager 2.1.5b</h1>
-      <p id="managerSummary">Manager wird geladenâ€¦</p>
+      <p class="eyebrow">Home Assistant Add-on · Bedrock Multiinstanz</p>
+      <h1>WinoMC Manager 2.1.6b</h1>
+      <p id="managerSummary">Manager wird geladen…</p>
     </div>
-    <nav class="mode-switcher" aria-label="Ansichtsmodus">
-      <button type="button" data-mode="pc-classic">PC Classic</button>
+
+    <nav class="mode-switcher" aria-label="Ansicht">
+      <button type="button" data-mode="auto">Auto</button>
+      <button type="button" data-mode="pc-classic">PC</button>
       <button type="button" data-mode="mobile">Mobile</button>
-      <button type="button" data-mode="desktop">Desktop</button>
     </nav>
   </header>
 
@@ -32,63 +34,88 @@
         </div>
         <button type="button" id="refreshInstances">Aktualisieren</button>
       </div>
-      <div id="instancesGrid" class="instances-grid" aria-live="polite">Manager wird geladenâ€¦</div>
+      <div id="instancesGrid" class="instances-grid">
+        <p class="empty-state">Manager wird geladen…</p>
+      </div>
     </section>
 
-    <aside class="create-panel">
+    <section class="create-panel">
       <p class="eyebrow">Neue Instanz</p>
       <h2>Bedrock-Instanz erstellen</h2>
       <form id="createInstanceForm" class="form-grid">
-        <label>Instanz-ID<input name="id" autocomplete="off" required placeholder="survival"></label>
-        <label>Anzeigename<input name="name" autocomplete="off" placeholder="Survival"></label>
-        <label>Profil<select id="profileSelect" name="profile"></select></label>
-        <label>IPv4-Port<input name="server_port" type="number" min="1024" max="65535" value="19132" required></label>
-        <label>IPv6-Port<input name="server_port_v6" type="number" min="1024" max="65535" value="19133" required></label>
-        <label>Weltname<input name="level_name" autocomplete="off" value="world"></label>
-        <label>Gamemode
-          <select name="gamemode">
-            <option value="survival">survival</option>
-            <option value="creative">creative</option>
-            <option value="adventure">adventure</option>
-          </select>
+        <label>Instanz-ID
+          <input name="id" value="survival" autocomplete="off" required>
         </label>
-        <label>Difficulty
-          <select name="difficulty">
-            <option value="peaceful">peaceful</option>
-            <option value="easy">easy</option>
-            <option value="normal" selected>normal</option>
-            <option value="hard">hard</option>
-          </select>
+        <label>Anzeigename
+          <input name="name" value="Survival" autocomplete="off" required>
         </label>
-        <label>Max Players<input name="max_players" type="number" min="1" max="100" value="10"></label>
-        <label class="checkbox-row"><input name="allowlist" type="checkbox"> Allowlist aktivieren</label>
-        <button type="submit" class="primary">Instanz erstellen</button>
+        <label>Profil
+          <select id="profileSelect" name="profile"></select>
+        </label>
+        <div class="form-grid compact">
+          <label>IPv4-Port
+            <input name="server_port" type="number" min="1024" max="65535" value="19132" required>
+          </label>
+          <label>IPv6-Port
+            <input name="server_port_v6" type="number" min="1024" max="65535" value="19133" required>
+          </label>
+        </div>
+        <label>Weltname
+          <input name="level_name" value="world" autocomplete="off">
+        </label>
+        <div class="form-grid compact">
+          <label>Gamemode
+            <select name="gamemode">
+              <option value="survival">survival</option>
+              <option value="creative">creative</option>
+              <option value="adventure">adventure</option>
+            </select>
+          </label>
+          <label>Difficulty
+            <select name="difficulty">
+              <option value="peaceful">peaceful</option>
+              <option value="easy">easy</option>
+              <option value="normal" selected>normal</option>
+              <option value="hard">hard</option>
+            </select>
+          </label>
+        </div>
+        <label>Max Players
+          <input name="max_players" type="number" min="1" max="100" value="10">
+        </label>
+        <label class="checkbox-row">
+          <input name="allowlist" type="checkbox">
+          <span>Allowlist aktivieren</span>
+        </label>
+        <button class="primary" type="submit">Instanz erstellen</button>
       </form>
-    </aside>
+    </section>
 
     <section class="details-panel">
       <div class="panel-heading">
         <div>
-          <p class="eyebrow">AusgewÃ¤hlte Instanz</p>
-          <h2 id="detailTitle">Noch keine Instanz ausgewÃ¤hlt</h2>
+          <p class="eyebrow">Ausgewählte Instanz</p>
+          <h2 id="detailTitle">Noch keine Instanz ausgewählt</h2>
         </div>
         <div id="detailActions" class="detail-actions"></div>
       </div>
-      <div class="tabs" role="tablist" aria-label="Instanzbereiche">
-        <button type="button" data-tab="overview" class="active">Ãœbersicht</button>
+
+      <nav class="tabs" aria-label="Instanzbereiche">
+        <button type="button" class="active" data-tab="overview">Übersicht</button>
         <button type="button" data-tab="console">Konsole</button>
         <button type="button" data-tab="settings">Einstellungen</button>
         <button type="button" data-tab="files">Dateien</button>
         <button type="button" data-tab="packs">Packs</button>
         <button type="button" data-tab="backups">Backups</button>
         <button type="button" data-tab="diagnostics">Logs/Diagnose</button>
+      </nav>
+
+      <div id="detailContent">
+        <p class="empty-state">Wähle eine Instanz aus dem Dashboard.</p>
       </div>
-      <div id="detailContent" class="detail-content">WÃ¤hle eine Instanz aus dem Dashboard.</div>
     </section>
   </main>
 
-  <section id="errorPanel" class="error-panel" hidden></section>
-
-  <script src="assets/winomc-manager/manager.js" defer></script>
+  <script src="./assets/winomc-manager/manager.js"></script>
 </body>
 </html>

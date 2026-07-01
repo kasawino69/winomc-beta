@@ -1,3 +1,32 @@
+## WinoMC 2.1.6b - PC/Mobile UX and Command Helper Recovery
+
+### Fixed
+- Restored a structured command helper in the instance console tab.
+- Command helper buttons now only fill the command input; commands are still sent explicitly by the user.
+- Commands remain strictly instance-scoped through `/api/instances/<id>/command`.
+
+### Changed
+- Removed the Desktop Mode from the active WinoMC Manager UI.
+- Replaced the old three-mode switch with Auto, PC and Mobile.
+- Auto mode detects mobile/touch-style layouts and otherwise uses the PC layout.
+- The Manager now focuses on two maintained UX targets: PC and Mobile.
+- Bumped beta version to `2.1.6b`.
+
+### Improved
+- Rebuilt the Manager UI shell with cleaner PC/Mobile separation.
+- Simplified CSS mode ownership:
+  - `base.css` contains shared UI foundations.
+  - `pc-classic.css` contains PC layout adjustments.
+  - `mobile.css` contains mobile/touch layout adjustments.
+  - `desktop.css` is retired and no longer loaded by the UI.
+- Added clear placeholders for the next recovery steps: player rights, file explorer and profile application.
+
+### Notes
+- This keeps the confirmed 2.1.5b multi-instance runtime foundation intact.
+- Bedrock remains the only active runtime.
+- Java support remains planned for later, after Bedrock is complete.
+- Next planned recovery steps: player rights, file explorer and profile application for existing instances.
+
 ## WinoMC 2.1.5b - Bedrock Shared Pack Runtime Fix
 
 ### Fixed

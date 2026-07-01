@@ -2,10 +2,12 @@
   body {
     padding: 10px;
   }
+
   .manager-header {
     flex-direction: column;
     align-items: stretch;
   }
+
   .manager-shell {
     grid-template-columns: 1fr;
     grid-template-areas:
@@ -13,11 +15,14 @@
       "create"
       "details";
   }
+
   .instances-grid,
   .facts,
-  .facts.large {
+  .facts.large,
+  .command-helper-grid {
     grid-template-columns: 1fr;
   }
+
   .tabs {
     overflow-x: auto;
     flex-wrap: nowrap;
@@ -27,10 +32,12 @@
 body.mode-mobile {
   padding: 10px;
 }
+
 body.mode-mobile .manager-header {
   flex-direction: column;
   align-items: stretch;
 }
+
 body.mode-mobile .manager-shell {
   grid-template-columns: 1fr;
   grid-template-areas:
@@ -38,12 +45,25 @@ body.mode-mobile .manager-shell {
     "create"
     "details";
 }
+
 body.mode-mobile .instances-grid,
 body.mode-mobile .facts,
-body.mode-mobile .facts.large {
+body.mode-mobile .facts.large,
+body.mode-mobile .command-helper-grid {
   grid-template-columns: 1fr;
 }
+
 body.mode-mobile .tabs {
   overflow-x: auto;
   flex-wrap: nowrap;
+}
+
+body.mode-mobile .card-actions button,
+body.mode-mobile .detail-actions button,
+body.mode-mobile .mode-switcher button {
+  flex: 1 1 auto;
+}
+
+body.mode-mobile .console-log {
+  max-height: 340px;
 }
