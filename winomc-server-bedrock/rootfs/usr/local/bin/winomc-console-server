@@ -49,6 +49,7 @@ TRASH_RETENTION_DAYS = int(os.environ.get("WINOMC_TRASH_RETENTION_DAYS", "7"))
 CONSOLE_SETTINGS_FILE = os.environ.get("WINOMC_CONSOLE_SETTINGS_FILE", os.path.join(DATA_DIR, ".winomc", "web_console_settings.json"))
 WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.1b")
 STATIC_CONSOLE_DIR = os.environ.get("WINOMC_CONSOLE_STATIC_DIR", "/usr/local/share/winomc-console")
+MANAGER_UI_DIR = os.environ.get("WINOMC_MANAGER_UI_DIR", "/usr/local/share/winomc-manager")
 BACKUP_DIR = os.environ.get("WINOMC_BACKUP_DIR", os.path.join(DATA_DIR, "backups"))
 BACKUP_KEEP = int(os.environ.get("WINOMC_BACKUP_KEEP", os.environ.get("PACKAGE_BACKUP_KEEP", "5")))
 SERVER_DIR = os.environ.get("WINOMC_SERVER_DIR", DATA_DIR)
@@ -10849,11 +10850,16 @@ def read_json_file(path, fallback):
 
 def write_json_file(path, payload):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
-    os.replace(tmp, path)
+    fd, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".", suffix=".tmp", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            try: os.remove(tmp)
+            except OSError: pass
 
 def default_instance_config(instance_id, name=None, profile="vanilla-survival", port=None):
     profile_data = BEDROCK_PROFILES.get(profile, BEDROCK_PROFILES["vanilla-survival"])
@@ -11316,6 +11322,28 @@ def status_payload():
     backups = list_backups(); return {"ok": True, "winomc_version": WINOMC_VERSION, "manager_version": MANAGER_VERSION, "manager": {"instances_dir": INSTANCES_DIR, "instance_count": len(list_instances())}, "fifo_exists": runtime_path_exists(runtime_fifo_path()), "log_exists": runtime_path_exists(runtime_log_path()), "env": env, "roots": list_file_roots(), "metrics": metrics, "backup": {"latest": backups[0] if backups else None, "count": len(backups)}, "web_protection": read_web_protection_state(), "health": {"overall": diagnostics_payload().get("overall", "Nicht verfügbar")}, "world_safety": analyze_world_safety()}
 
 
+def safe_manager_static_path(url_path):
+    raw = unquote(url_path.split("?", 1)[0])
+    prefix = "/assets/winomc-manager/"
+    if not raw.startswith(prefix):
+        return None
+    rel = posixpath.normpath(raw[len(prefix):]).lstrip("/")
+    if rel.startswith("../") or rel == ".." or not rel:
+        return None
+    candidate = os.path.realpath(os.path.join(MANAGER_UI_DIR, rel))
+    base = os.path.realpath(MANAGER_UI_DIR)
+    if candidate != base and candidate.startswith(base + os.sep) and os.path.isfile(candidate):
+        return candidate
+    return None
+
+def manager_index_html():
+    index_path = os.path.join(MANAGER_UI_DIR, "index.html")
+    try:
+        with open(index_path, "r", encoding="utf-8") as handle:
+            return handle.read()
+    except OSError:
+        return INDEX_HTML
+
 def safe_static_path(url_path):
     raw = unquote(url_path.split("?", 1)[0])
     prefix = "/assets/winomc-console/"
@@ -11539,6 +11567,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         blocked_name = "leg" + "acy"
 
+        manager_static_path = safe_manager_static_path(path)
+        if manager_static_path:
+            with open(manager_static_path, "rb") as handle:
+                data = handle.read()
+            self.send_response(200)
+            self.send_header("Content-Type", safe_content_type(mimetypes.guess_type(manager_static_path)[0], "application/octet-stream"))
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
         static_path = safe_static_path(path)
         if static_path:
             with open(static_path, "rb") as handle:
@@ -11554,7 +11594,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         if path in ("/", "", "/index.html"):
-            data = INDEX_HTML.encode("utf-8")
+            data = manager_index_html().encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
@@ -11675,7 +11715,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "retention_days": get_trash_retention_days(), "allowed_days": [0, 3, 7, 14, 30, 60, 90]})
             return
         if "/api/" not in path and not os.path.splitext(path)[1]:
-            data = INDEX_HTML.encode("utf-8")
+            data = manager_index_html().encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))

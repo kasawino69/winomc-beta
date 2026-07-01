@@ -1,0 +1,1 @@
+body.mode-desktop{background:linear-gradient(135deg,#06101e,#0f2440)}body.mode-desktop .wm-layout{grid-template-columns:360px 360px minmax(420px,1fr)}body.mode-desktop .wm-panel{min-height:320px}body.mode-desktop .wm-detail{grid-column:auto;min-height:calc(100vh - 130px)}

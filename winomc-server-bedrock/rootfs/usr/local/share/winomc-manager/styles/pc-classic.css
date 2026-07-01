@@ -1,0 +1,1 @@
+body.mode-pc-classic .wm-layout{grid-template-columns:minmax(0,2fr) minmax(320px,.8fr);align-items:start}body.mode-pc-classic .wm-detail{grid-column:1/-1}body.mode-pc-classic .wm-create{position:sticky;top:88px}

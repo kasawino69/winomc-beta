@@ -11,6 +11,24 @@ except Exception:
 root = pathlib.Path('.')
 server = root/'winomc-server-bedrock/rootfs/usr/local/bin/winomc-console-server'
 source = server.read_text()
+
+manager_ui_dir = root/'winomc-server-bedrock/rootfs/usr/local/share/winomc-manager'
+manager_index = manager_ui_dir/'index.html'
+manager_js = manager_ui_dir/'manager.js'
+for ui_file in [manager_index, manager_js, manager_ui_dir/'styles/base.css', manager_ui_dir/'styles/pc-classic.css', manager_ui_dir/'styles/mobile.css', manager_ui_dir/'styles/desktop.css']:
+    if not ui_file.exists() or not ui_file.read_text(encoding='utf-8').strip():
+        raise SystemExit(f'manager UI file missing or empty: {ui_file}')
+ui_html = manager_index.read_text(encoding='utf-8')
+ui_js = manager_js.read_text(encoding='utf-8')
+for snippet in ['data-manager-app', 'instancesGrid', 'createInstanceForm', 'detailContent', 'errorPanel', 'mode-pc-classic', 'mode-mobile', 'mode-desktop']:
+    if snippet not in ui_html:
+        raise SystemExit(f'manager UI missing required HTML marker: {snippet}')
+for snippet in ['/api/instances', '/api/instances/${encodeURIComponent(id)}/start', '/api/instances/${encodeURIComponent(id)}/stop', '/api/instances/${encodeURIComponent(id)}/restart', '/api/instances/${encodeURIComponent(inst.id)}/console', '/api/instances/${encodeURIComponent(inst.id)}/command', '/api/instances/${encodeURIComponent(id)}/backup', 'showError', 'suggested_action']:
+    if snippet not in ui_js:
+        raise SystemExit(f'manager UI missing required API/UI snippet: {snippet}')
+for forbidden in ['/api/command', '/api/status?start', '/api/start', '/api/stop', 'WINOMC_CONSOLE_FIFO']:
+    if forbidden in ui_js:
+        raise SystemExit(f'manager UI must not use old global single-server API: {forbidden}')
 config = root/'winomc-server-bedrock/config.yaml'
 text = config.read_text()
 if 'version: 2.1b' not in text:
@@ -100,7 +118,7 @@ required_symbols = [
     'def addons_overview_payload', 'def addons_catalog_payload', 'def build_addon_plan', 'def apply_addon_action',
     'def is_builtin_bedrock_pack', 'def is_system_pack_path',
     'def activate_pack', 'def deactivate_pack',
-    'def save_players', 'def prepare_update', 'def prepare_profile', 'winomc-mobile-assistant', 'def create_instance', 'def validate_instance_config', 'BEDROCK_PROFILES', 'INSTANCES_DIR', 'def detect_bds_runtime', 'def prepare_instance_runtime', 'PROCESS_HANDLES'
+    'def save_players', 'def prepare_update', 'def prepare_profile', 'winomc-mobile-assistant', 'def create_instance', 'def validate_instance_config', 'BEDROCK_PROFILES', 'INSTANCES_DIR', 'def detect_bds_runtime', 'def prepare_instance_runtime', 'PROCESS_HANDLES', 'MANAGER_UI_DIR', 'def safe_manager_static_path'
 ]
 for symbol in required_symbols:
     if symbol not in source:
