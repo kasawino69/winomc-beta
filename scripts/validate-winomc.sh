@@ -13,8 +13,8 @@ server = root/'winomc-server-bedrock/rootfs/usr/local/bin/winomc-console-server'
 source = server.read_text()
 config = root/'winomc-server-bedrock/config.yaml'
 text = config.read_text()
-if 'version: 2.0.0' not in text:
-    raise SystemExit('config.yaml version is not 2.0.0')
+if 'version: 2.1b' not in text:
+    raise SystemExit('config.yaml version is not 2.1b')
 if yaml:
     yaml.safe_load(text)
 else:
@@ -34,7 +34,7 @@ required_symbols = [
     'def addons_overview_payload', 'def addons_catalog_payload', 'def build_addon_plan', 'def apply_addon_action',
     'def is_builtin_bedrock_pack', 'def is_system_pack_path',
     'def activate_pack', 'def deactivate_pack',
-    'def save_players', 'def prepare_update', 'def prepare_profile', 'winomc-mobile-assistant'
+    'def save_players', 'def prepare_update', 'def prepare_profile', 'winomc-mobile-assistant', 'def create_instance', 'def validate_instance_config', 'BEDROCK_PROFILES', 'INSTANCES_DIR'
 ]
 for symbol in required_symbols:
     if symbol not in source:
@@ -46,6 +46,7 @@ required_routes = [
     '/api/import/url/check', '/api/import/url/install', '/api/backups/restore',
     '/api/backups/delete', '/api/backups/restore/plan', '/api/packs/activate', '/api/packs/deactivate',
     '/api/players/save', '/api/updates/prepare', '/api/profiles/prepare',
+    '/api/manager', '/api/instances',
     '/api/addons/overview', '/api/addons/catalog', '/api/addons/item', '/api/addons/scan', '/api/addons/plan', '/api/addons/apply'
 ]
 for route in required_routes:
