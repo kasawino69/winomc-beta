@@ -1,3 +1,9 @@
+# 2.0.0.10b
+
+- Removed the preserved old web console HTML route so the rebuilt web console is the only served UI.
+- Completed the rebuilt console bindings for status, live logs with backoff, command sending, files with folder navigation/upload/download/export, profiles, add-ons, web protection, diagnostics, Safe Mode, and separated Mobile/PC/Desktop modes.
+- Kept the stable visible shell, `/diag`, `?safe=1`, ingress-friendly extensionless routing, and no-white-page startup behavior without old fallbacks.
+
 # 2.0.0.9b
 
 - Rebuilt the WinoMC web console around a new stable app shell that is visible immediately and does not depend on `/api/status`, live logs, Desktop mode, Explorer, Profiles, or the Add-on Manager during startup.
@@ -5,7 +11,7 @@
 - Added `?safe=1` Safe Mode that disables Desktop, Explorer, Profiles, Add-on Manager, Webschutz, Live-Log SSE, and automatic polling while keeping a visible shell and manual status test.
 - Added a robust ingress-compatible relative API client with per-request timeouts, JSON validation, visible module errors, and isolated module startup.
 - Reworked live-console initialization so the UI renders first, EventSource starts later, log lines are bounded, DOM updates are batched, and log failures never block the console.
-- Separated Mobile, PC classic, and Desktop mode initialization so one mode cannot hide or destroy the others; existing backend APIs and legacy frontend code remain available for later cleanup.
+- Separated Mobile, PC classic, and Desktop mode initialization so one mode cannot hide or destroy the others; existing backend APIs remain available while the rebuilt frontend is the only served console.
 
 # Changelog
 
@@ -504,7 +510,7 @@ WinoMC Console Fehlerbehebungen
 
 * PC-Workbench wieder als eigener Navigationspunkt in der PC-Ansicht ergänzt.
 * PC-Workbench bleibt auf Mobile bewusst ausgeblendet, da der Modus dort keinen sinnvollen Nutzen hat.
-* Alte Legacy-Einträge wie `Desktop-Modus` werden weiterhin bereinigt, ohne den neuen PC-Workbench-Eintrag zu entfernen.
+* Alte Einträge wie `Desktop-Modus` werden weiterhin bereinigt, ohne den neuen PC-Workbench-Eintrag zu entfernen.
 
 #### Konsole / Befehlshilfe
 
