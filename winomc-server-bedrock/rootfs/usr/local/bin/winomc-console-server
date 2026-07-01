@@ -155,6 +155,13 @@ INDEX_HTML = r"""<!doctype html>
     .status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
     .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 4px rgba(245, 158, 11, .12); }
     .dot.ok { background: var(--accent); box-shadow: 0 0 0 4px rgba(34, 197, 94, .14); }
+    .winomc-boot-fallback { margin: 14px auto 0; max-width: 1500px; padding: 0 14px; display: block !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 1000; }
+    .winomc-boot-box { border: 1px solid rgba(96, 165, 250, .35); border-radius: 14px; background: rgba(15, 23, 42, .96); color: #e5e7eb; padding: 12px 14px; box-shadow: 0 18px 45px rgba(0,0,0,.22); }
+    .winomc-boot-title { font-weight: 780; margin-bottom: 4px; }
+    .winomc-boot-steps { margin: 8px 0 0; padding-left: 18px; color: #cbd5e1; line-height: 1.5; }
+    .winomc-boot-error { margin-top: 8px; color: #fecaca; background: rgba(239, 68, 68, .14); border: 1px solid rgba(239, 68, 68, .28); border-radius: 10px; padding: 8px 10px; }
+    body.winomc-js-ready #bootFallback { position: static !important; }
+    body.winomc-app-rendered #bootFallback { display: none !important; }
     .layout { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); gap: 14px; max-width: 1500px; margin: 0 auto; padding: 14px; transition: grid-template-columns .18s ease; }
     nav { background: var(--panel); border: 1px solid var(--border-soft); border-radius: var(--workbench-radius); padding: 10px; height: calc(100vh - var(--console-height) - 92px); min-height: 320px; position: sticky; top: 74px; overflow: auto; transition: width .18s ease, padding .18s ease; }
     .nav-title { padding: 10px 10px 12px; color: var(--muted-2); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
@@ -4814,6 +4821,38 @@ body.winomc-mobile .editor-panel.editor-open {
 
 </head>
 <body>
+  <section id="bootFallback" class="winomc-boot-fallback" aria-live="polite">
+    <div class="winomc-boot-box">
+      <div class="winomc-boot-title">WinoMC Console wird geladen...</div>
+      <p>Wenn JavaScript oder ein Ingress-Pfad fehlschlägt, bleibt diese Diagnose sichtbar.</p>
+      <ol id="bootSteps" class="winomc-boot-steps">
+        <li>HTML geladen</li>
+      </ol>
+      <div id="bootError" class="winomc-boot-error" hidden></div>
+    </div>
+  </section>
+  <noscript><section class="winomc-boot-fallback"><div class="winomc-boot-box"><div class="winomc-boot-title">JavaScript ist deaktiviert.</div><p>Die WinoMC Console benötigt JavaScript. Der statische Fallback bestätigt, dass HTML sichtbar ausgeliefert wurde.</p></div></section></noscript>
+  <script>
+    (function () {
+      function step(text) {
+        var list = document.getElementById('bootSteps');
+        if (!list) return;
+        var item = document.createElement('li');
+        item.textContent = text;
+        list.appendChild(item);
+      }
+      function fail(message) {
+        var box = document.getElementById('bootError');
+        if (box) { box.hidden = false; box.textContent = 'Fehler: ' + message; }
+        step('Fehler abgefangen');
+      }
+      window.WinoMCBoot = { step: step, fail: fail };
+      document.documentElement.classList.add('winomc-html-loaded');
+      step('JavaScript gestartet');
+      window.addEventListener('error', function (event) { fail(event.message || 'Unbekannter JavaScript-Fehler'); });
+      window.addEventListener('unhandledrejection', function (event) { var reason = event.reason; fail((reason && (reason.message || reason.toString())) || 'Unbehandelte Promise-Ablehnung'); });
+    })();
+  </script>
   <header>
     <h1 id="appTitle">WinoMC 2.0.0.8b Framework Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
@@ -5403,7 +5442,7 @@ body.winomc-mobile .editor-panel.editor-open {
     let logSource = null;
     let renderedLogLines = 0;
     function setManagedInterval(key, fn, delay) { const existing = startupIntervals.get(key); if (existing) window.clearInterval(existing); const id = window.setInterval(fn, delay); startupIntervals.set(key, id); return id; }
-    function showStartupError(message) { const text = 'Startfehler: ' + message; statusEl.textContent = text; statusDot.classList.remove('ok'); const target = document.querySelector('[data-panel="overview"] .card') || document.querySelector('[data-panel="overview"]') || document.querySelector('main'); if (target && !document.getElementById('startupErrorBanner')) { const box = document.createElement('div'); box.id = 'startupErrorBanner'; box.className = 'info warn'; box.textContent = text + ' · Die Oberfläche bleibt bedienbar; bitte Backend-Logs prüfen.'; target.prepend(box); } }
+    function showStartupError(message) { window.WinoMCBoot?.fail(message); const text = 'Startfehler: ' + message; statusEl.textContent = text; statusDot.classList.remove('ok'); const target = document.querySelector('[data-panel="overview"] .card') || document.querySelector('[data-panel="overview"]') || document.querySelector('main'); if (target && !document.getElementById('startupErrorBanner')) { const box = document.createElement('div'); box.id = 'startupErrorBanner'; box.className = 'info warn'; box.textContent = text + ' · Die Oberfläche bleibt bedienbar; bitte Backend-Logs prüfen.'; target.prepend(box); } }
     async function fetchWithTimeout(url, options = {}, timeout = STARTUP_REQUEST_TIMEOUT_MS) { const controller = new AbortController(); const timer = window.setTimeout(() => controller.abort(), timeout); try { return await fetch(url, { ...options, signal: controller.signal }); } catch (err) { if (err.name === 'AbortError') throw new Error('Zeitüberschreitung beim Laden von ' + url); throw err; } finally { window.clearTimeout(timer); } }
     async function readJsonResponse(res) { let data = {}; try { data = await res.json(); } catch (_) { throw new Error('Ungültige API-Antwort (' + res.status + ')'); } if (!res.ok || !data.ok) throw new Error(data.error || res.statusText || ('HTTP ' + res.status)); return data; }
     async function fetchJson(path, params = {}) { return readJsonResponse(await fetchWithTimeout(apiUrl(path, params), { cache: 'no-store' })); }
@@ -5519,7 +5558,7 @@ body.winomc-mobile .editor-panel.editor-open {
     function activateTab(tab) { if (document.body.classList.contains('desktop-mode')) { openDesktopWindow(tab); return; } document.body.classList.toggle('hide-hero', tab !== 'overview'); document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (document.body.classList.contains('sidebar-collapsed')) requestAnimationFrame(scrollActiveSidebarIconIntoView); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); if (tab === 'backups') loadBackups2(); if (tab === 'diagnostics') loadDiagnostics2(); if (tab === 'players') loadPlayers2(); if (tab === 'packs') { loadTransfer2(); loadPacks2(); } if (tab === 'transfer') loadTransfer2(); if (tab === 'updates') loadUpdates2(); if (tab === 'firststart') loadProfiles2(); }
     function openRoot(root, path = '/') { activateTab('files'); setTimeout(async () => { await initFileManager(); currentFileRoot = root; fileRootSelect.value = root; await loadFileList(path); }, 0); }
 
-    async function loadStatus() { try { const data = await fetchJson('/api/status'); latestStatus = data; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v||'Nicht verfügbar'}; set('statPlayers', data.metrics?.players?.label); set('statMemory', data.metrics?.memory?.label); set('statDisk', data.metrics?.disk?.label); set('statWinoVersion', data.winomc_version || '2.0.0'); set('statHealth', 'Health: ' + (data.health?.overall || 'Nicht verfügbar')); set('statLastBackup', data.backup?.latest?.name || 'Kein Backup'); set('statProtection', 'Online: '+(data.env.ONLINE_MODE||'-')+' · Allowlist: '+(data.env.ALLOW_LIST||'-')); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
+    async function loadStatus() { try { window.WinoMCBoot?.step('Status API wird geladen'); const data = await fetchJson('/api/status'); window.WinoMCBoot?.step('Status API erreicht'); latestStatus = data; data.env = data.env || {}; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v||'Nicht verfügbar'}; set('statPlayers', data.metrics?.players?.label); set('statMemory', data.metrics?.memory?.label); set('statDisk', data.metrics?.disk?.label); set('statWinoVersion', data.winomc_version || '2.0.0'); set('statHealth', 'Health: ' + (data.health?.overall || 'Nicht verfügbar')); set('statLastBackup', data.backup?.latest?.name || 'Kein Backup'); set('statProtection', 'Online: '+(data.env.ONLINE_MODE||'-')+' · Allowlist: '+(data.env.ALLOW_LIST||'-')); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
 
     async function initFileManager() { if (filesInitialized) { await loadFileList(); return; } filesInitialized = true; try { setFilesStatus('Lade Bereiche...', 'warn'); const data = await fetchJson('/api/files/roots'); fileRootSelect.innerHTML = ''; data.roots.forEach(root => { const option = document.createElement('option'); option.value = root.key; option.textContent = root.label + (root.exists ? '' : ' (fehlt)'); option.disabled = !root.exists || !root.readable; fileRootSelect.appendChild(option); }); const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled); if (![...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) currentFileRoot = firstEnabled ? firstEnabled.value : 'config'; fileRootSelect.value = currentFileRoot; await loadTrashSettings(); await syncWebProtectionFromServer(); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
     async function loadFileList(path) { if (path !== undefined) currentFilePath = normalizeUiPath(path); currentFileRoot = fileRootSelect.value || currentFileRoot; try { setFilesStatus('Lade...', 'warn'); updatePathDisplay(); const data = await fetchJson('/api/files/list', { root: currentFileRoot, path: currentFilePath }); currentFilePath = data.path || '/'; fileParent.disabled = currentFilePath === '/'; updatePathDisplay(); renderFileEntries(data.entries || []); setFilesStatus('Bereit', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
@@ -6818,7 +6857,7 @@ body.winomc-mobile .editor-panel.editor-open {
       updateDesktopClock();
     }
 
-    function connectLogs() { if (logSource) { try { logSource.close(); } catch (_) {} } logSource = new EventSource('./api/logs'); logSource.onopen = () => { statusEl.textContent = 'Live verbunden'; statusDot.classList.add('ok'); }; logSource.onmessage = event => { try { const data = JSON.parse(event.data); if (data.line) { renderedLogLines += 1; if (renderedLogLines <= STARTUP_MAX_LOG_LINES || log.children.length < STARTUP_MAX_LOG_LINES) appendLine(data.line); } } catch (_) {} }; logSource.onerror = () => { statusEl.textContent = 'Log-Verbindung wartet auf Backend...'; statusDot.classList.remove('ok'); }; }
+    function connectLogs() { try { window.WinoMCBoot?.step('Live-Log wird verbunden'); if (!window.EventSource) { appendLine('[WinoMC Logs] EventSource wird von diesem Browser nicht unterstützt.', 'error'); return; } if (logSource) { try { logSource.close(); } catch (_) {} } logSource = new EventSource(apiUrl('/api/logs')); logSource.onopen = () => { statusEl.textContent = 'Live verbunden'; statusDot.classList.add('ok'); }; logSource.onmessage = event => { try { const data = JSON.parse(event.data); if (data.line) { renderedLogLines += 1; if (renderedLogLines <= STARTUP_MAX_LOG_LINES || log.children.length < STARTUP_MAX_LOG_LINES) appendLine(data.line); } } catch (_) {} }; logSource.onerror = () => { statusEl.textContent = 'Log-Verbindung wartet auf Backend...'; statusDot.classList.remove('ok'); window.WinoMCBoot?.step('Live-Log wartet'); }; } catch (err) { appendLine('[WinoMC Logs] ' + err.message, 'error'); window.WinoMCBoot?.fail('Live-Log: ' + err.message); } }
     applySidebarState(); applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal'); applyEditorPrefs(); initConsoleResize();
 
 
@@ -7467,7 +7506,7 @@ body.winomc-mobile .editor-panel.editor-open {
       } catch (err) { alert(err.message); appendLine('[WinoMC 2.0] '+err.message,'error'); }
     });
 
-    try { initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); initAdaptiveUx(); renderDashboard(); window.setTimeout(connectLogs, 250); loadStatus().catch(err => showStartupError(err.message)); } catch (err) { showStartupError(err.message); }
+    try { window.WinoMCBoot?.step('Basis-UI wird gerendert'); initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); initAdaptiveUx(); renderDashboard(); document.body.classList.add('winomc-js-ready'); window.WinoMCBoot?.step('Basis-UI sichtbar'); window.setTimeout(() => document.body.classList.add('winomc-app-rendered'), 1200); loadStatus().catch(err => showStartupError(err.message)); window.setTimeout(connectLogs, 900); } catch (err) { showStartupError(err.message); }
   
 
     /* v1.6.14 UX and metrics controllers */
