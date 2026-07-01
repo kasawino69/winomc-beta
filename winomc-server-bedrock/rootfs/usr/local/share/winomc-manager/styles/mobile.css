@@ -12,7 +12,6 @@
     grid-template-columns: 1fr;
     grid-template-areas:
       "dashboard"
-      "create"
       "details";
   }
 
@@ -26,6 +25,21 @@
   .tabs {
     overflow-x: auto;
     flex-wrap: nowrap;
+  }
+
+  .create-panel {
+    top: 96px;
+    bottom: 8px;
+    width: calc(100vw - 10px);
+    transform: translateX(calc(100% - 46px));
+  }
+
+  .create-panel-inner {
+    padding-left: 58px;
+  }
+
+  .create-drawer-spine {
+    width: 44px;
   }
 }
 
@@ -42,7 +56,6 @@ body.mode-mobile .manager-shell {
   grid-template-columns: 1fr;
   grid-template-areas:
     "dashboard"
-    "create"
     "details";
 }
 
@@ -59,8 +72,7 @@ body.mode-mobile .tabs {
 }
 
 body.mode-mobile .card-actions button,
-body.mode-mobile .detail-actions button,
-body.mode-mobile .mode-switcher button {
+body.mode-mobile .detail-actions button {
   flex: 1 1 auto;
 }
 

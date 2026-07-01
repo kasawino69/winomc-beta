@@ -10861,11 +10861,46 @@ def write_json_file(path, payload):
             try: os.remove(tmp)
             except OSError: pass
 
+
+def normalize_instance_automation(payload=None):
+    payload = payload or {}
+    return {
+        "autostart": bool(payload.get("autostart", False)),
+        "watchdog": bool(payload.get("watchdog", False)),
+    }
+
+def ensure_instance_automation(config):
+    config.setdefault("automation", normalize_instance_automation({}))
+    config["automation"] = normalize_instance_automation(config.get("automation", {}))
+    return config
+
+
 def default_instance_config(instance_id, name=None, profile="vanilla-survival", port=None):
     profile_data = BEDROCK_PROFILES.get(profile, BEDROCK_PROFILES["vanilla-survival"])
     defaults = dict(profile_data["defaults"])
     port = int(port or next_free_instance_port())
-    return {"schema_version": 1, "id": instance_id, "name": name or instance_id, "engine": "bedrock", "profile": profile, "created_at": manager_now(), "updated_at": manager_now(), "bedrock": {"version": "LATEST", "server_name": name or instance_id, "level_name": "world", "server_port": port, "server_port_v6": port + 1, **defaults}, "paths": {"root": instance_path(instance_id)}, "backup": {"keep": BACKUP_KEEP, "export_dir": EXPORT_DIR}, "schedule": {"restarts": [], "commands": []}}
+
+    return {
+        "schema_version": 1,
+        "id": instance_id,
+        "name": name or instance_id,
+        "engine": "bedrock",
+        "profile": profile,
+        "created_at": manager_now(),
+        "updated_at": manager_now(),
+        "bedrock": {
+            "version": "LATEST",
+            "server_name": name or instance_id,
+            "level_name": "world",
+            "server_port": port,
+            "server_port_v6": port + 1,
+            **defaults,
+        },
+        "automation": normalize_instance_automation({}),
+        "paths": {"root": instance_path(instance_id)},
+        "backup": {"keep": BACKUP_KEEP, "export_dir": EXPORT_DIR},
+        "schedule": {"restarts": [], "commands": []},
+    }
 
 def render_server_properties(config):
     b = config.get("bedrock", {})
@@ -10901,28 +10936,66 @@ def ensure_instance_layout(config):
     write_json_file(os.path.join(base, "instance.json"), config)
     return config
 
+
 def load_instance(instance_id, include_health=True):
     path = instance_path(instance_id, "instance.json")
     data = read_json_file(path, None)
+
     if not data:
         raise FileNotFoundError("Instanz nicht gefunden: %s" % instance_id)
+
     data.setdefault("id", validate_instance_id(instance_id))
+    ensure_instance_automation(data)
     data["status"] = runtime_status(data["id"])
+
     if include_health:
         data["health"] = validate_instance_config(data)
+
     return data
+
 
 def list_instances():
     os.makedirs(INSTANCES_DIR, exist_ok=True)
     items = []
+
     for name in sorted(os.listdir(INSTANCES_DIR)):
         try:
             path = instance_path(name, "instance.json")
+
             if os.path.isfile(path):
                 inst = load_instance(name, include_health=False)
-                items.append({k: inst.get(k) for k in ("id", "name", "engine", "profile", "created_at", "updated_at") } | {"bedrock": inst.get("bedrock", {}), "status": inst.get("status"), "health": inst.get("health")})
+                status = inst.get("status") or {}
+                state = status.get("state", "stopped")
+
+                health = {"ok": True, "errors": [], "warnings": []}
+
+                if state in ("crashed", "broken", "unknown"):
+                    health = {
+                        "ok": False,
+                        "errors": ["Runtime-Status: %s" % state],
+                        "warnings": [],
+                    }
+
+                items.append({
+                    k: inst.get(k)
+                    for k in ("id", "name", "engine", "profile", "created_at", "updated_at")
+                } | {
+                    "bedrock": inst.get("bedrock", {}),
+                    "automation": inst.get("automation", normalize_instance_automation({})),
+                    "status": status,
+                    "health": health,
+                })
+
         except Exception as exc:
-            items.append({"id": name, "name": name, "broken": True, "error": str(exc), "status": {"state": "broken"}})
+            items.append({
+                "id": name,
+                "name": name,
+                "broken": True,
+                "error": str(exc),
+                "status": {"state": "broken"},
+                "health": {"ok": False, "errors": [str(exc)], "warnings": []},
+            })
+
     return items
 
 def used_instance_ports(exclude=None):
@@ -10962,25 +11035,57 @@ def validate_instance_config(config):
         if port in conflicts: errors.append("Port %s wird bereits von einer anderen Instanz verwendet." % port)
     return {"ok": not errors, "errors": errors, "warnings": warnings}
 
+
 def create_instance(payload):
     payload = payload or {}
     iid = validate_instance_id(payload.get("id") or payload.get("name") or "server")
+
     if os.path.exists(instance_path(iid, "instance.json")):
         raise ValueError("Instanz existiert bereits: %s" % iid)
-    config = default_instance_config(iid, payload.get("name"), payload.get("profile", "vanilla-survival"), payload.get("server_port"))
+
+    config = default_instance_config(
+        iid,
+        payload.get("name"),
+        payload.get("profile", "vanilla-survival"),
+        payload.get("server_port"),
+    )
+
     config["bedrock"].update(payload.get("bedrock", {}))
+    config["automation"] = normalize_instance_automation(payload.get("automation", {}))
+
     health = validate_instance_config(config)
-    if not health["ok"]: raise ValueError("; ".join(health["errors"]))
+
+    if not health["ok"]:
+        raise ValueError("; ".join(health["errors"]))
+
     return ensure_instance_layout(config)
 
+
 def update_instance(instance_id, payload):
+    payload = payload or {}
     current = load_instance(instance_id)
-    if "name" in payload: current["name"] = str(payload["name"])
-    if "profile" in payload: current["profile"] = str(payload["profile"])
-    if "bedrock" in payload and isinstance(payload["bedrock"], dict): current.setdefault("bedrock", {}).update(payload["bedrock"])
+
+    if "name" in payload:
+        current["name"] = str(payload["name"])
+
+    if "profile" in payload:
+        current["profile"] = str(payload["profile"])
+
+    if "bedrock" in payload and isinstance(payload["bedrock"], dict):
+        current.setdefault("bedrock", {}).update(payload["bedrock"])
+
+    if "automation" in payload and isinstance(payload["automation"], dict):
+        current["automation"] = normalize_instance_automation(payload["automation"])
+    else:
+        ensure_instance_automation(current)
+
     current["updated_at"] = manager_now()
+
     health = validate_instance_config(current)
-    if not health["ok"]: raise ValueError("; ".join(health["errors"]))
+
+    if not health["ok"]:
+        raise ValueError("; ".join(health["errors"]))
+
     return ensure_instance_layout(current)
 
 def delete_instance(instance_id):
@@ -12353,6 +12458,85 @@ class Handler(BaseHTTPRequestHandler):
                 time.sleep(1)
 
 
+
+WATCHDOG_THREAD_STARTED = False
+WATCHDOG_LOCK = threading.Lock()
+
+def automation_enabled(config, key):
+    return bool((config.get("automation") or {}).get(key, False))
+
+def manager_instance_configs():
+    os.makedirs(INSTANCES_DIR, exist_ok=True)
+    configs = []
+
+    for name in sorted(os.listdir(INSTANCES_DIR)):
+        try:
+            path = instance_path(name, "instance.json")
+            if os.path.isfile(path):
+                configs.append(load_instance(name, include_health=False))
+        except Exception as exc:
+            print("[WinoMC Console] Automation scan skipped %s: %s" % (name, exc), flush=True)
+
+    return configs
+
+def autostart_instances():
+    results = []
+
+    for inst in manager_instance_configs():
+        iid = inst.get("id")
+
+        if not automation_enabled(inst, "autostart"):
+            continue
+
+        status = runtime_status(iid)
+        state = status.get("state", "stopped")
+
+        if state in ("running", "starting"):
+            continue
+
+        try:
+            result = start_instance(iid)
+            results.append({"id": iid, "action": "autostart", "ok": bool(result.get("ok")), "state": result.get("status", {}).get("state")})
+        except Exception as exc:
+            results.append({"id": iid, "action": "autostart", "ok": False, "error": str(exc)})
+
+    return results
+
+def watchdog_loop():
+    interval = int(os.environ.get("WINOMC_WATCHDOG_INTERVAL_SECONDS", "15"))
+
+    while True:
+        time.sleep(max(5, interval))
+
+        for inst in manager_instance_configs():
+            iid = inst.get("id")
+
+            if not automation_enabled(inst, "watchdog"):
+                continue
+
+            status = runtime_status(iid)
+            state = status.get("state", "stopped")
+
+            # Respect manual stop. Watchdog only repairs crashes/unknown states.
+            if state not in ("crashed", "unknown"):
+                continue
+
+            try:
+                print("[WinoMC Console] Watchdog startet Instanz %s nach Status %s neu." % (iid, state), flush=True)
+                start_instance(iid)
+            except Exception as exc:
+                print("[WinoMC Console] Watchdog konnte Instanz %s nicht starten: %s" % (iid, exc), flush=True)
+
+def start_watchdog_thread():
+    global WATCHDOG_THREAD_STARTED
+
+    with WATCHDOG_LOCK:
+        if WATCHDOG_THREAD_STARTED:
+            return
+
+        WATCHDOG_THREAD_STARTED = True
+        threading.Thread(target=watchdog_loop, daemon=True).start()
+
 def main():
     ensure_directories()
     log_path = runtime_log_path()
@@ -12362,6 +12546,10 @@ def main():
     reconciliation = reconcile_all_instances()
     if reconciliation:
         print("[WinoMC Console] Runtime reconciliation: %s" % json.dumps(reconciliation, ensure_ascii=False), flush=True)
+    autostart_results = autostart_instances()
+    if autostart_results:
+        print("[WinoMC Console] Autostart: %s" % json.dumps(autostart_results, ensure_ascii=False), flush=True)
+    start_watchdog_thread()
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
 
     def shutdown(_signum, _frame):

@@ -1,4 +1,4 @@
-const VERSION = '2.1.6b';
+const VERSION = '2.1.7b';
 
 const state = {
   instances: [],
@@ -6,7 +6,6 @@ const state = {
   selectedId: null,
   selected: null,
   tab: 'overview',
-  modePreference: localStorage.getItem('winomc-manager-mode') || 'auto',
   mode: 'pc-classic',
 };
 
@@ -63,16 +62,6 @@ function escapeHtml(value) {
 
 const esc = escapeHtml;
 const apiPath = (path) => './' + path.replace(/^\/+/, '');
-
-const MANAGER_INSTANCE_API_CONTRACT = [
-  '/api/instances',
-  '/api/instances/${encodeURIComponent(id)}/start',
-  '/api/instances/${encodeURIComponent(id)}/stop',
-  '/api/instances/${encodeURIComponent(id)}/restart',
-  '/api/instances/${encodeURIComponent(id)}/backup',
-  '/api/instances/${encodeURIComponent(inst.id)}/console',
-  '/api/instances/${encodeURIComponent(inst.id)}/command',
-];
 
 async function api(path, options = {}) {
   const res = await fetch(apiPath(path), {
@@ -133,37 +122,16 @@ function showError(error) {
   };
 }
 
-function resolveMode(preference = state.modePreference) {
-  if (preference === 'mobile') return 'mobile';
-  if (preference === 'pc-classic') return 'pc-classic';
-  return window.matchMedia('(max-width: 760px), (pointer: coarse)').matches ? 'mobile' : 'pc-classic';
-}
-
-function setMode(preference) {
-  if (!['auto', 'pc-classic', 'mobile'].includes(preference)) {
-    preference = 'auto';
-  }
-
-  state.modePreference = preference;
-  state.mode = resolveMode(preference);
-
-  localStorage.setItem('winomc-manager-mode', preference);
+function setAutoMode() {
+  const mobile = window.matchMedia('(max-width: 760px), (pointer: coarse)').matches;
+  state.mode = mobile ? 'mobile' : 'pc-classic';
 
   document.body.classList.remove('mode-pc-classic', 'mode-mobile', 'mode-desktop');
   document.body.classList.add(`mode-${state.mode}`);
   document.body.dataset.mode = state.mode;
-  document.body.dataset.modePreference = preference;
-
-  document.querySelectorAll('[data-mode]').forEach((button) => {
-    button.classList.toggle('active', button.dataset.mode === preference);
-  });
 }
 
-window.matchMedia('(max-width: 760px), (pointer: coarse)').addEventListener('change', () => {
-  if (state.modePreference === 'auto') {
-    setMode('auto');
-  }
-});
+window.matchMedia('(max-width: 760px), (pointer: coarse)').addEventListener('change', setAutoMode);
 
 async function loadInstances(selectId = state.selectedId) {
   const data = await get('/api/instances');
@@ -207,17 +175,40 @@ function instanceStatus(instance) {
   return instance?.status?.state || (instance?.broken ? 'broken' : 'stopped');
 }
 
+function healthView(instance) {
+  const status = instanceStatus(instance);
+  const health = instance.health || {};
+
+  if (['crashed', 'broken', 'unknown'].includes(status)) {
+    return { ok: false, label: status === 'crashed' ? 'Crashed' : 'Problem' };
+  }
+
+  if (health.ok === false) {
+    return { ok: false, label: 'Problem' };
+  }
+
+  return { ok: true, label: 'OK' };
+}
+
+function automationView(instance) {
+  const a = instance.automation || {};
+  const labels = [];
+  if (a.autostart) labels.push('Autostart');
+  if (a.watchdog) labels.push('Watchdog');
+  return labels.length ? labels.join(' · ') : 'Manuell';
+}
+
 function renderDashboard() {
-  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager ${VERSION} · Auto/PC/Mobile · alle Aktionen instanzbezogen`;
+  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager ${VERSION} · Autoerkennung PC/Mobile · alle Aktionen instanzbezogen`;
 
   $('#instancesGrid').innerHTML = state.instances.map((instance) => {
     const b = instance.bedrock || {};
     const status = instanceStatus(instance);
-    const health = instance.health || {};
-    const error = instance.error || (health.errors || []).join(' · ');
+    const health = healthView(instance);
+    const error = instance.error || (instance.health?.errors || []).join(' · ');
 
     return `
-      <article class="instance-card status-${esc(status)}">
+      <article class="instance-card status-${esc(status)} ${health.ok ? 'health-ok' : 'health-bad'}">
         <p class="eyebrow">${esc(instance.id)}</p>
         <h3>${esc(instance.name || instance.id)}</h3>
         <span class="status-pill">${esc(status)}</span>
@@ -227,20 +218,21 @@ function renderDashboard() {
           <div><dt>IPv4</dt><dd>${esc(b.server_port || '-')}</dd></div>
           <div><dt>IPv6</dt><dd>${esc(b.server_port_v6 || '-')}</dd></div>
           <div><dt>Start</dt><dd>${esc(instance.status?.started_at || '-')}</dd></div>
-          <div><dt>Health</dt><dd>${health.ok === false ? 'Problem' : 'OK'}</dd></div>
+          <div><dt>Health</dt><dd>${esc(health.label)}</dd></div>
+          <div><dt>Automation</dt><dd>${esc(automationView(instance))}</dd></div>
         </dl>
 
-        ${instance.broken || health.ok === false ? `<p class="warn-box">${esc(error || 'Instanz prüfen')}</p>` : ''}
+        ${!health.ok ? `<p class="warn-box">${esc(error || `Runtime-Status: ${status}`)}</p>` : ''}
 
         <div class="card-actions">
           <button type="button" data-action="start" data-id="${esc(instance.id)}">Start</button>
           <button type="button" data-action="stop" data-id="${esc(instance.id)}">Stop</button>
           <button type="button" data-action="restart" data-id="${esc(instance.id)}">Restart</button>
-          <button type="button" data-action="details" data-id="${esc(instance.id)}">Details</button>
+          <button type="button" data-action="details" data-id="${esc(instance.id)}">Auswählen</button>
         </div>
       </article>
     `;
-  }).join('') || '<p class="empty-state">Noch keine Instanzen. Erstelle rechts eine neue Bedrock-Instanz.</p>';
+  }).join('') || '<p class="empty-state">Noch keine Instanzen. Öffne rechts „Neue Instanz“.</p>';
 }
 
 async function selectInstance(id) {
@@ -301,16 +293,21 @@ async function renderDetail() {
   const target = $('#detailContent');
   const inst = state.selected;
   const b = inst.bedrock || {};
+  const a = inst.automation || {};
+  const health = healthView(inst);
 
   if (state.tab === 'overview') {
     target.innerHTML = `
       <dl class="facts large">
         <div><dt>Status</dt><dd>${esc(inst.status?.state || '-')}</dd></div>
+        <div><dt>Health</dt><dd>${esc(health.label)}</dd></div>
         <div><dt>Profil</dt><dd>${esc(inst.profile || '-')}</dd></div>
         <div><dt>IPv4</dt><dd>${esc(b.server_port || '-')}</dd></div>
         <div><dt>IPv6</dt><dd>${esc(b.server_port_v6 || '-')}</dd></div>
         <div><dt>Welt</dt><dd>${esc(b.level_name || '-')}</dd></div>
         <div><dt>Spielmodus</dt><dd>${esc(b.gamemode || '-')}</dd></div>
+        <div><dt>Autostart</dt><dd>${a.autostart ? 'Aktiv' : 'Aus'}</dd></div>
+        <div><dt>Watchdog</dt><dd>${a.watchdog ? 'Aktiv' : 'Aus'}</dd></div>
       </dl>
     `;
   } else if (state.tab === 'console') {
@@ -357,9 +354,17 @@ async function renderDetail() {
         <label>Max Players
           <input name="max_players" type="number" value="${esc(b.max_players || 10)}">
         </label>
+        <label class="checkbox-row">
+          <input name="autostart" type="checkbox" ${a.autostart ? 'checked' : ''}>
+          <span>Autostart beim Add-on-Start</span>
+        </label>
+        <label class="checkbox-row">
+          <input name="watchdog" type="checkbox" ${a.watchdog ? 'checked' : ''}>
+          <span>Watchdog: bei Crash automatisch neu starten</span>
+        </label>
         <button type="submit" class="primary">Speichern</button>
       </form>
-      <p class="hint">Profile auf bestehende Instanzen folgen in einem eigenen Schritt.</p>
+      <p class="hint">Watchdog startet nur nach Crash neu. Ein manueller Stop bleibt gestoppt.</p>
     `;
 
     $('#settingsForm').onsubmit = async (ev) => {
@@ -373,6 +378,10 @@ async function renderDetail() {
           bedrock: {
             level_name: form.get('level_name'),
             max_players: Number(form.get('max_players')),
+          },
+          automation: {
+            autostart: Boolean(form.get('autostart')),
+            watchdog: Boolean(form.get('watchdog')),
           },
         });
 
@@ -425,6 +434,16 @@ async function runAction(action, id) {
   }
 }
 
+function toggleCreatePanel(forceOpen) {
+  const panel = $('#createPanel');
+  const button = $('#createDrawerToggle');
+  const open = typeof forceOpen === 'boolean' ? forceOpen : !panel.classList.contains('open');
+
+  panel.classList.toggle('open', open);
+  panel.classList.toggle('collapsed', !open);
+  button.setAttribute('aria-expanded', String(open));
+}
+
 $('#createInstanceForm').onsubmit = async (ev) => {
   ev.preventDefault();
 
@@ -444,11 +463,16 @@ $('#createInstanceForm').onsubmit = async (ev) => {
       max_players: Number(form.get('max_players')),
       allowlist: Boolean(form.get('allowlist')),
     },
+    automation: {
+      autostart: Boolean(form.get('autostart')),
+      watchdog: Boolean(form.get('watchdog')),
+    },
   };
 
   try {
     await post('/api/instances', payload);
     formEl.reset();
+    toggleCreatePanel(false);
     await loadInstances(payload.id);
   } catch (err) {
     showError(err);
@@ -479,16 +503,11 @@ document.addEventListener('click', (ev) => {
       btn.classList.toggle('active', btn === tab);
     });
     renderDetail().catch(showError);
-    return;
-  }
-
-  const mode = ev.target.closest('[data-mode]');
-  if (mode) {
-    setMode(mode.dataset.mode);
   }
 });
 
 $('#refreshInstances').onclick = () => loadInstances().catch(showError);
+$('#createDrawerToggle').onclick = () => toggleCreatePanel();
 
-setMode(state.modePreference);
+setAutoMode();
 loadInstances().catch(showError);

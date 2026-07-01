@@ -31,8 +31,8 @@ for forbidden in ['/api/command', '/api/status?start', '/api/start', '/api/stop'
         raise SystemExit(f'manager UI must not use old global single-server API: {forbidden}')
 config = root/'winomc-server-bedrock/config.yaml'
 text = config.read_text()
-if 'version: 2.1.6b' not in text:
-    raise SystemExit('config.yaml version is not 2.1.6b')
+if 'version: 2.1.7b' not in text:
+    raise SystemExit('config.yaml version is not 2.1.7b')
 if yaml:
     yaml.safe_load(text)
 else:
@@ -182,3 +182,8 @@ print('WinoMC validation OK')
 PY
 bash -n winomc-server-bedrock/rootfs/usr/local/bin/winomc-bedrock-entrypoint
 bash -n winomc-server-bedrock/rootfs/usr/local/bin/winomc-native-start
+
+# 2.1.7b markers
+grep -q 'Watchdog' "${MANAGER_DIR}/manager.js" || fail "Watchdog UI fehlt"
+grep -q 'Autostart' "${MANAGER_DIR}/manager.js" || fail "Autostart UI fehlt"
+grep -q 'Auswählen' "${MANAGER_DIR}/manager.js" || fail "Auswählen Button fehlt"

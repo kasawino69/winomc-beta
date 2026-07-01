@@ -3,26 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC Manager 2.1.6b</title>
+  <title>WinoMC Manager 2.1.7b</title>
   <link rel="stylesheet" href="./assets/winomc-manager/styles/base.css">
   <link rel="stylesheet" href="./assets/winomc-manager/styles/pc-classic.css">
   <link rel="stylesheet" href="./assets/winomc-manager/styles/mobile.css">
 </head>
-<body class="mode-pc-classic" data-manager-app data-mode="pc-classic">
+<body class="mode-pc-classic" data-manager-app data-mode="auto">
   <div id="errorPanel" class="error-panel" hidden></div>
 
   <header class="manager-header">
     <div>
       <p class="eyebrow">Home Assistant Add-on · Bedrock Multiinstanz</p>
-      <h1>WinoMC Manager 2.1.6b</h1>
+      <h1>WinoMC Manager 2.1.7b</h1>
       <p id="managerSummary">Manager wird geladen…</p>
     </div>
-
-    <nav class="mode-switcher" aria-label="Ansicht">
-      <button type="button" data-mode="auto">Auto</button>
-      <button type="button" data-mode="pc-classic">PC</button>
-      <button type="button" data-mode="mobile">Mobile</button>
-    </nav>
   </header>
 
   <main class="manager-shell">
@@ -39,57 +33,71 @@
       </div>
     </section>
 
-    <section class="create-panel">
-      <p class="eyebrow">Neue Instanz</p>
-      <h2>Bedrock-Instanz erstellen</h2>
-      <form id="createInstanceForm" class="form-grid">
-        <label>Instanz-ID
-          <input name="id" value="survival" autocomplete="off" required>
-        </label>
-        <label>Anzeigename
-          <input name="name" value="Survival" autocomplete="off" required>
-        </label>
-        <label>Profil
-          <select id="profileSelect" name="profile"></select>
-        </label>
-        <div class="form-grid compact">
-          <label>IPv4-Port
-            <input name="server_port" type="number" min="1024" max="65535" value="19132" required>
+    <aside id="createPanel" class="create-panel collapsed">
+      <button type="button" id="createDrawerToggle" class="create-drawer-spine" aria-expanded="false">
+        <span>Neue Instanz</span>
+      </button>
+
+      <div class="create-panel-inner">
+        <p class="eyebrow">Neue Instanz</p>
+        <h2>Bedrock-Instanz erstellen</h2>
+        <form id="createInstanceForm" class="form-grid">
+          <label>Instanz-ID
+            <input name="id" value="survival" autocomplete="off" required>
           </label>
-          <label>IPv6-Port
-            <input name="server_port_v6" type="number" min="1024" max="65535" value="19133" required>
+          <label>Anzeigename
+            <input name="name" value="Survival" autocomplete="off" required>
           </label>
-        </div>
-        <label>Weltname
-          <input name="level_name" value="world" autocomplete="off">
-        </label>
-        <div class="form-grid compact">
-          <label>Gamemode
-            <select name="gamemode">
-              <option value="survival">survival</option>
-              <option value="creative">creative</option>
-              <option value="adventure">adventure</option>
-            </select>
+          <label>Profil
+            <select id="profileSelect" name="profile"></select>
           </label>
-          <label>Difficulty
-            <select name="difficulty">
-              <option value="peaceful">peaceful</option>
-              <option value="easy">easy</option>
-              <option value="normal" selected>normal</option>
-              <option value="hard">hard</option>
-            </select>
+          <div class="form-grid compact">
+            <label>IPv4-Port
+              <input name="server_port" type="number" min="1024" max="65535" value="19132" required>
+            </label>
+            <label>IPv6-Port
+              <input name="server_port_v6" type="number" min="1024" max="65535" value="19133" required>
+            </label>
+          </div>
+          <label>Weltname
+            <input name="level_name" value="world" autocomplete="off">
           </label>
-        </div>
-        <label>Max Players
-          <input name="max_players" type="number" min="1" max="100" value="10">
-        </label>
-        <label class="checkbox-row">
-          <input name="allowlist" type="checkbox">
-          <span>Allowlist aktivieren</span>
-        </label>
-        <button class="primary" type="submit">Instanz erstellen</button>
-      </form>
-    </section>
+          <div class="form-grid compact">
+            <label>Gamemode
+              <select name="gamemode">
+                <option value="survival">survival</option>
+                <option value="creative">creative</option>
+                <option value="adventure">adventure</option>
+              </select>
+            </label>
+            <label>Difficulty
+              <select name="difficulty">
+                <option value="peaceful">peaceful</option>
+                <option value="easy">easy</option>
+                <option value="normal" selected>normal</option>
+                <option value="hard">hard</option>
+              </select>
+            </label>
+          </div>
+          <label>Max Players
+            <input name="max_players" type="number" min="1" max="100" value="10">
+          </label>
+          <label class="checkbox-row">
+            <input name="allowlist" type="checkbox">
+            <span>Allowlist aktivieren</span>
+          </label>
+          <label class="checkbox-row">
+            <input name="autostart" type="checkbox">
+            <span>Autostart beim Add-on-Start</span>
+          </label>
+          <label class="checkbox-row">
+            <input name="watchdog" type="checkbox">
+            <span>Watchdog: bei Crash automatisch neu starten</span>
+          </label>
+          <button class="primary" type="submit">Instanz erstellen</button>
+        </form>
+      </div>
+    </aside>
 
     <section class="details-panel">
       <div class="panel-heading">

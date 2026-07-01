@@ -31,8 +31,8 @@ fail() {
 
 ! grep -q '^  ENABLE_WEB_CONSOLE:' "${CONFIG}" || fail "config.yaml enthält noch ENABLE_WEB_CONSOLE"
 ! grep -q '^  WINOMC_EXPERIMENTAL_MANAGER_REBUILD:' "${CONFIG}" || fail "config.yaml enthält noch experimentellen Manager-Schalter"
-grep -q 'version: 2.1.6b' "${CONFIG}" || fail "config.yaml Version ist nicht 2.1.6b"
-grep -q 'WINOMC_VERSION: "2.1.6b"' "${CONFIG}" || fail "WINOMC_VERSION ist nicht 2.1.6b"
+grep -q 'version: 2.1.7b' "${CONFIG}" || fail "config.yaml Version ist nicht 2.1.7b"
+grep -q 'WINOMC_VERSION: "2.1.7b"' "${CONFIG}" || fail "WINOMC_VERSION ist nicht 2.1.7b"
 grep -q 'WINOMC_MANAGER_PORT' "${CONFIG}" || fail "config.yaml enthält keinen WINOMC_MANAGER_PORT"
 
 ! grep -q 'winomc-native-start' "${ENTRYPOINT}" || fail "Entrypoint startet noch globale native Single-Server-Runtime"
@@ -40,7 +40,7 @@ grep -q 'WINOMC_MANAGER_PORT' "${CONFIG}" || fail "config.yaml enthält keinen W
 ! grep -q 'run_stdin_bridge' "${ENTRYPOINT}" || fail "Entrypoint enthält noch globale STDIN-Bridge"
 grep -q 'Manager-only boot' "${ENTRYPOINT}" || fail "Entrypoint kennzeichnet Manager-only Boot nicht"
 
-grep -q 'WinoMC Manager 2.1.6b' "${MANAGER_DIR}/index.html" || fail "Manager index enthält keine sichtbare 2.1.6b Kennzeichnung"
+grep -q 'WinoMC Manager 2.1.7b' "${MANAGER_DIR}/index.html" || fail "Manager index enthält keine sichtbare 2.1.7b Kennzeichnung"
 grep -q 'data-manager-app' "${MANAGER_DIR}/index.html" || fail "Manager index enthält keinen data-manager-app Marker"
 grep -q 'mode-pc-classic' "${MANAGER_DIR}/index.html" || fail "Manager index enthält keine PC Mode-Klasse"
 grep -q 'mode-mobile' "${MANAGER_DIR}/manager.js" || fail "Manager JS enthält keine Mobile Mode-Klasse"
@@ -62,4 +62,9 @@ if command -v git >/dev/null 2>&1 && [ -d "${ROOT}/.git" ]; then
   git -C "${ROOT}" diff --check
 fi
 
-echo "WinoMC 2.1.6b manager-only PC/Mobile validation OK"
+echo "WinoMC 2.1.7b manager-only PC/Mobile validation OK"
+
+# 2.1.7b markers
+grep -q 'Watchdog' "${MANAGER_DIR}/manager.js" || fail "Watchdog UI fehlt"
+grep -q 'Autostart' "${MANAGER_DIR}/manager.js" || fail "Autostart UI fehlt"
+grep -q 'Auswählen' "${MANAGER_DIR}/manager.js" || fail "Auswählen Button fehlt"

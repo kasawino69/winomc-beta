@@ -1,3 +1,29 @@
+## WinoMC 2.1.7b - Instance Lifecycle UX and Watchdog
+
+### Fixed
+- Fixed misleading dashboard health display where crashed instances could still show `Health OK`.
+- Crashed, broken and unknown runtime states are now shown as unhealthy in the Manager UI.
+- Renamed the dashboard action `Details` to `Auswählen`, because it selects the instance for the lower management tabs.
+
+### Added
+- Added per-instance `Autostart beim Add-on-Start`.
+- Added per-instance `Watchdog`, which restarts an instance after crash/unknown runtime state.
+- Added automation settings to new instance creation.
+- Added automation settings to the instance settings tab.
+- Runtime diagnostics and dashboard now expose automation state per instance.
+
+### Changed
+- Removed the visible Auto/PC/Mobile selector from the Manager UI.
+- PC/Mobile detection now runs automatically in the background.
+- Reworked the new-instance form into a collapsed right-side drawer.
+- The new-instance drawer opens from a narrow side spine instead of permanently occupying dashboard space.
+- Bumped beta version to `2.1.7b`.
+
+### Notes
+- Watchdog respects manual stop. It only repairs crashed/unknown states.
+- The confirmed 2.1.5b/2.1.6b multi-instance Bedrock runtime foundation remains intact.
+- Next planned recovery steps: player rights, full file explorer and profile application for existing instances.
+
 ## WinoMC 2.1.6b - PC/Mobile UX and Command Helper Recovery
 
 ### Fixed
