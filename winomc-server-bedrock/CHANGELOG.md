@@ -1,3 +1,12 @@
+## 2.1.15b - Spieler & Rechte
+- Adds a dedicated per-instance Player & Permissions tab.
+- Adds UI management for allowlisted players, operators, members and visitors.
+- Adds structured reading and writing of `allowlist.json` and `permissions.json`.
+- Adds validation for player name, XUID, role and allowlist flags.
+- Supports importing/synchronizing existing Bedrock allowlist and permission files.
+- Keeps player management separate from generic server settings.
+- Preserves the clean targeted auto-refresh architecture without touching forms or input fields.
+
 ## 2.1.14b - Remove Legacy Dashboard Poller
 
 - Removes the old `DASHBOARD_POLL_MS` interval that still called `loadInstances(state.selectedId)` every 5 seconds.

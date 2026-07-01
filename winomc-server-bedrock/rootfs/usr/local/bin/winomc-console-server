@@ -92,7 +92,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC 2.1.10b Manager Workbench</title>
+  <title>WinoMC 2.1.15b Manager Workbench</title>
   <style>
     :root {
       color-scheme: dark;
@@ -303,7 +303,7 @@ INDEX_HTML = r"""<!doctype html>
     .console-inner { padding-top: 16px; }
     .mobile-quickbar { display: none; }
 
-    /* WinoMC 2.1.10b Manager Workbench */
+    /* WinoMC 2.1.15b Manager Workbench */
     body.desktop-mode {
       padding-bottom: 0;
       overflow: hidden;
@@ -4868,7 +4868,7 @@ body.winomc-mobile .editor-panel.editor-open {
     })();
   </script>
   <header>
-    <h1 id="appTitle">WinoMC 2.1.10b Manager Workbench</h1>
+    <h1 id="appTitle">WinoMC 2.1.15b Manager Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
   </header>
 
@@ -9705,28 +9705,174 @@ def scan_packs(base_dir, pack_type):
     return packs
 
 
-def players_payload():
-    allow, ae = json_file(os.path.join(DATA_DIR,"allowlist.json"), [])
-    perms, pe = json_file(os.path.join(DATA_DIR,"permissions.json"), [])
-    allow = allow if isinstance(allow, list) else []
-    perms = perms if isinstance(perms, list) else []
-    by = {}
-    for a in allow:
-        key = str(a.get("xuid") or a.get("name") or "")
-        by.setdefault(key, {"name": a.get("name","-"), "xuid": a.get("xuid",""), "allowlisted": True, "role": "member", "issues": []})
-    for p in perms:
-        key = str(p.get("xuid") or p.get("permission") or len(by))
-        row = by.setdefault(key, {"name": p.get("name","-"), "xuid": p.get("xuid",""), "allowlisted": False, "role": "member", "issues": []})
-        row["role"] = p.get("permission", "member")
-        if row["role"] == "operator" and not row["allowlisted"]:
-            row["issues"].append("OP nicht auf Allowlist")
-    warnings=[]
-    if ae: warnings.append("allowlist.json: "+ae)
-    if pe: warnings.append("permissions.json: "+pe)
-    if parse_bool(os.environ.get("ALLOW_LIST"), False) and not allow: warnings.append("Allowlist ist aktiv, aber leer.")
-    if not parse_bool(os.environ.get("ONLINE_MODE"), True): warnings.append("Online Mode ist deaktiviert und sollte nur bewusst genutzt werden.")
-    return {"ok": True, "players": list(by.values()), "warnings": warnings}
+PLAYER_ROLES = ("operator", "member", "visitor")
+XUID_RE = re.compile(r"^[0-9]+$")
 
+
+def normalize_role(role):
+    role = str(role or "member").lower().strip()
+    if role not in PLAYER_ROLES:
+        raise WinoMCRuntimeError("invalid_player_role", "Rolle muss operator, member oder visitor sein.", component="instance-players", details={"role": role})
+    return role
+
+
+def validate_player_bool(value, field):
+    if not isinstance(value, bool):
+        raise WinoMCRuntimeError("invalid_player_boolean", "%s muss ein Boolean sein." % field, component="instance-players", details={"field": field})
+    return value
+
+
+def normalize_player_entry(item):
+    if not isinstance(item, dict):
+        raise WinoMCRuntimeError("invalid_player_entry", "Spieler-Eintrag ist ungültig.", component="instance-players")
+    name = str(item.get("name") or "").strip()
+    xuid = str(item.get("xuid") or "").strip()
+    if not name:
+        raise WinoMCRuntimeError("invalid_player_name", "Spielername darf nicht leer sein.", component="instance-players")
+    if not xuid or not XUID_RE.match(xuid):
+        raise WinoMCRuntimeError("invalid_player_xuid", "XUID muss ein nicht-leerer Ziffernstring sein.", component="instance-players", details={"name": name})
+    return {
+        "name": name,
+        "xuid": xuid,
+        "role": normalize_role(item.get("role", "member")),
+        "allowlisted": validate_player_bool(item.get("allowlisted", False), "allowlisted"),
+        "ignores_player_limit": validate_player_bool(item.get("ignores_player_limit", False), "ignores_player_limit"),
+    }
+
+
+def instance_player_file(instance_id, filename):
+    if filename not in ("allowlist.json", "permissions.json"):
+        raise ValueError("Ungültige Spielerdatei.")
+    path = os.path.realpath(instance_path(instance_id, filename))
+    base = os.path.realpath(instance_path(instance_id))
+    if not path.startswith(base + os.sep):
+        raise WinoMCRuntimeError("invalid_instance_player_path", "Spielerdatei verlässt den Instanzpfad.", instance_id=instance_id, component="instance-players")
+    return path
+
+
+def read_instance_json_list(instance_id, filename):
+    path = instance_player_file(instance_id, filename)
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except FileNotFoundError:
+        return [], None
+    except Exception as exc:
+        return [], str(exc)
+    if not isinstance(data, list):
+        return [], "%s muss eine JSON-Liste sein." % filename
+    return data, None
+
+
+def import_instance_players(instance_id):
+    iid = validate_instance_id(instance_id)
+    load_instance(iid, include_health=False)
+    allow, allow_error = read_instance_json_list(iid, "allowlist.json")
+    perms, perm_error = read_instance_json_list(iid, "permissions.json")
+    by_xuid = {}
+    nameless = []
+    warnings = []
+
+    for item in allow:
+        if not isinstance(item, dict):
+            warnings.append("allowlist.json enthält einen ungültigen Eintrag.")
+            continue
+        xuid = str(item.get("xuid") or "").strip()
+        name = str(item.get("name") or xuid or "").strip()
+        if xuid and not XUID_RE.match(xuid):
+            warnings.append("allowlist.json enthält eine ungültige XUID für %s." % (name or "unbekannt"))
+            continue
+        row = {"name": name, "xuid": xuid, "role": "member", "allowlisted": True, "ignores_player_limit": bool(item.get("ignoresPlayerLimit", item.get("ignores_player_limit", False)))}
+        if xuid:
+            by_xuid[xuid] = {**by_xuid.get(xuid, {}), **row}
+        else:
+            nameless.append(row)
+
+    for item in perms:
+        if not isinstance(item, dict):
+            warnings.append("permissions.json enthält einen ungültigen Eintrag.")
+            continue
+        xuid = str(item.get("xuid") or "").strip()
+        if not xuid or not XUID_RE.match(xuid):
+            warnings.append("permissions.json enthält eine ungültige oder leere XUID.")
+            continue
+        try:
+            role = normalize_role(item.get("permission", item.get("role", "member")))
+        except WinoMCRuntimeError as exc:
+            warnings.append(exc.message)
+            continue
+        row = by_xuid.get(xuid, {"name": str(item.get("name") or xuid), "xuid": xuid, "allowlisted": False, "ignores_player_limit": False})
+        row["role"] = role
+        by_xuid[xuid] = row
+
+    players = nameless + [by_xuid[xuid] for xuid in sorted(by_xuid, key=lambda v: (by_xuid[v].get("name") or v).lower())]
+    if allow_error: warnings.append("allowlist.json: " + allow_error)
+    if perm_error: warnings.append("permissions.json: " + perm_error)
+    return {"ok": True, "instance_id": iid, "players": players, "warnings": warnings, "source": {"allowlist": "allowlist.json", "permissions": "permissions.json"}}
+
+
+def load_instance_players(instance_id):
+    return import_instance_players(instance_id)
+
+
+def backup_instance_player_file(instance_id, filename):
+    path = instance_player_file(instance_id, filename)
+    if not os.path.exists(path):
+        return None
+    backup_dir = instance_path(instance_id, ".winomc", "file_backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    backup = os.path.join(backup_dir, "%s.%s.bak" % (filename, time.strftime("%Y%m%d-%H%M%S")))
+    shutil.copy2(path, backup)
+    return backup
+
+
+def write_instance_json_atomic(instance_id, filename, payload):
+    path = instance_player_file(instance_id, filename)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    backup = backup_instance_player_file(instance_id, filename)
+    fd, tmp = tempfile.mkstemp(prefix=".%s." % filename, suffix=".tmp", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(tmp, path)
+    except Exception:
+        try: os.remove(tmp)
+        except OSError: pass
+        raise
+    return {"path": path, "backup_created": bool(backup), "backup_path": backup}
+
+
+def save_instance_players(instance_id, players):
+    iid = validate_instance_id(instance_id)
+    load_instance(iid, include_health=False)
+    if not isinstance(players, list):
+        raise WinoMCRuntimeError("invalid_players_payload", "players muss eine Liste sein.", instance_id=iid, component="instance-players")
+    normalized = [normalize_player_entry(item) for item in players]
+    seen = set()
+    for player in normalized:
+        if player["xuid"] in seen:
+            raise WinoMCRuntimeError("duplicate_player_xuid", "Doppelte XUID: %s" % player["xuid"], instance_id=iid, component="instance-players")
+        seen.add(player["xuid"])
+    allowlist = [{"name": p["name"], "xuid": p["xuid"], "ignoresPlayerLimit": p["ignores_player_limit"]} for p in normalized if p["allowlisted"]]
+    permissions = [{"permission": p["role"], "xuid": p["xuid"]} for p in normalized]
+    allow_result = write_instance_json_atomic(iid, "allowlist.json", allowlist)
+    perm_result = write_instance_json_atomic(iid, "permissions.json", permissions)
+    payload = load_instance_players(iid)
+    payload.update({"saved": True, "allowlist_result": allow_result, "permissions_result": perm_result, "message": "Spielerrechte wurden für diese Instanz gespeichert."})
+    return payload
+
+
+# Legacy global endpoint kept read-only-compatible for the older console shell.
+def players_payload():
+    return import_instance_players(default_console_instance_id() or (list_instances()[0].get("id") if list_instances() else "server"))
+
+
+def save_players(players):
+    iid = default_console_instance_id() or (list_instances()[0].get("id") if list_instances() else None)
+    if not iid:
+        raise ValueError("Keine Instanz für Legacy-Spielerrechte gefunden.")
+    return save_instance_players(iid, players)
 
 def profiles_payload():
     return {"ok": True, "profiles": [
@@ -9878,52 +10024,6 @@ def packs_payload():
     for pack in behavior:
         pack["active"] = bool(pack.get("uuid") in active_ids["behavior"])
     return {"ok": True, "resource_packs": resource, "behavior_packs": behavior, "active": active, "texturepack_required": parse_bool(os.environ.get("TEXTUREPACK_REQUIRED"), False)}
-
-
-def normalize_role(role):
-    role = str(role or "member").lower().strip()
-    if role not in ("operator", "member", "visitor"):
-        raise ValueError("Rolle muss operator, member oder visitor sein.")
-    return role
-
-
-def normalize_player_entry(item):
-    if not isinstance(item, dict):
-        raise ValueError("Spieler-Eintrag ist ungÃ¼ltig.")
-    name = str(item.get("name") or "").strip()
-    xuid = str(item.get("xuid") or "").strip()
-    if not name and not xuid:
-        raise ValueError("Spieler braucht mindestens Name oder XUID.")
-    if xuid and not re.match(r"^[0-9]{5,32}$", xuid):
-        raise ValueError("XUID sieht ungÃ¼ltig aus: %s" % xuid)
-    return {"name": name, "xuid": xuid, "allowlisted": bool(item.get("allowlisted", True)), "role": normalize_role(item.get("role", "member"))}
-
-
-def save_players(players):
-    if not isinstance(players, list):
-        raise ValueError("players muss eine Liste sein.")
-    normalized = [normalize_player_entry(item) for item in players]
-    seen = set()
-    for player in normalized:
-        key = player.get("xuid") or player.get("name")
-        if key in seen:
-            raise ValueError("Doppelter Spieler/XUID: %s" % key)
-        seen.add(key)
-    allowlist = []
-    permissions = []
-    for player in normalized:
-        if player["allowlisted"]:
-            entry = {"name": player["name"] or player["xuid"], "ignoresPlayerLimit": False}
-            if player["xuid"]:
-                entry["xuid"] = player["xuid"]
-            allowlist.append(entry)
-        if player["xuid"]:
-            permissions.append({"permission": player["role"], "xuid": player["xuid"]})
-    allow_result = atomic_write_json_root("config", "/allowlist.json", allowlist, backup=True)
-    perm_result = atomic_write_json_root("config", "/permissions.json", permissions, backup=True)
-    payload = players_payload()
-    payload.update({"saved": True, "allowlist_result": allow_result, "permissions_result": perm_result, "message": "Spielerrechte wurden gespeichert."})
-    return payload
 
 
 def find_backup_meta(backup_name):
@@ -11821,7 +11921,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCManager/2.1.10b"
+    server_version = "WinoMCManager/2.1.15b"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
@@ -12056,7 +12156,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith("/api/instances") or path == "/api/instances":
             self._send_json(200, {"ok": True, "instances": list_instances(), "profiles": list(BEDROCK_PROFILES.values()), "manager": {"version": MANAGER_VERSION, "winomc_version": WINOMC_VERSION, "log_level": LOG_LEVEL}})
             return
-        m = re.match(r"^/api/instances/([^/]+)(?:/(status|console|files|packs))?$", path)
+        m = re.match(r"^/api/instances/([^/]+)(?:/(status|console|files|packs|players))?$", path)
         if m:
             try:
                 iid, action = m.group(1), m.group(2)
@@ -12068,6 +12168,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json(200, {"ok": True, "instance_id": iid, "roots": {name: instance_path(iid, name) for name in INSTANCE_DIRS}})
                 elif action == "packs":
                     self._send_json(200, {"ok": True, "instance_id": iid, "resource_packs": os.listdir(instance_path(iid, "resource_packs")) if os.path.isdir(instance_path(iid, "resource_packs")) else [], "behavior_packs": os.listdir(instance_path(iid, "behavior_packs")) if os.path.isdir(instance_path(iid, "behavior_packs")) else []})
+                elif action == "players":
+                    self._send_json(200, load_instance_players(iid))
                 else:
                     self._send_json(200, load_instance(iid))
             except Exception as exc:
@@ -12170,6 +12272,21 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_error(404)
 
+    def do_PUT(self):
+        if self._forbidden_if_needed():
+            return
+        path = urlparse(self.path).path
+        m = re.match(r"^/api/instances/([^/]+)/players$", path)
+        if m:
+            try:
+                self.require_web_write_allowed("Spielerrechte speichern")
+                payload = self._read_json_payload(max_bytes=1024 * 1024)
+                self._send_json(200, save_instance_players(m.group(1), payload.get("players", [])))
+            except Exception as exc:
+                self._send_json(400, runtime_error_payload(exc, m.group(1) if m else None, component="instance-players"))
+            return
+        self.send_error(404)
+
     def do_PATCH(self):
         if self._forbidden_if_needed():
             return
@@ -12209,6 +12326,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(200, {"ok": True, "instance": create_instance(self._read_json_payload())})
             except Exception as exc:
                 self._send_json(400, runtime_error_payload(exc, component="instance-manager"))
+            return
+        m = re.match(r"^/api/instances/([^/]+)/players/(import|sync)$", path)
+        if m:
+            try:
+                self.require_web_write_allowed("Spielerrechte synchronisieren")
+                self._send_json(200, import_instance_players(m.group(1)))
+            except Exception as exc:
+                self._send_json(400, runtime_error_payload(exc, m.group(1) if m else None, component="instance-players"))
             return
         m = re.match(r"^/api/instances/([^/]+)/(start|stop|restart|command|backup)$", path)
         if m:
