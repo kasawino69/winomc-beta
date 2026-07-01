@@ -125,7 +125,7 @@ function instanceStatus(instance) {
 }
 
 function renderDashboard() {
-  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager 2.1b.1 · alle Aktionen instanzbezogen`;
+  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager 2.1.3b · alle Aktionen instanzbezogen`;
   $('#instancesGrid').innerHTML = state.instances.map((instance) => {
     const b = instance.bedrock || {};
     const status = instanceStatus(instance);
@@ -224,7 +224,8 @@ async function renderDetail() {
       </form>`;
     $('#settingsForm').onsubmit = async (ev) => {
       ev.preventDefault();
-      const form = new FormData(ev.currentTarget);
+  const formEl = ev.currentTarget;
+  const form = new FormData(formEl);
       try {
         await patch(`/api/instances/${encodeURIComponent(inst.id)}`, {
           name: form.get('name'),
@@ -268,7 +269,8 @@ async function runAction(action, id) {
 
 $('#createInstanceForm').onsubmit = async (ev) => {
   ev.preventDefault();
-  const form = new FormData(ev.currentTarget);
+  const formEl = ev.currentTarget;
+  const form = new FormData(formEl);
   const payload = {
     id: form.get('id'),
     name: form.get('name'),
@@ -285,7 +287,7 @@ $('#createInstanceForm').onsubmit = async (ev) => {
   };
   try {
     await post('/api/instances', payload);
-    ev.currentTarget.reset();
+    formEl.reset();
     await loadInstances(payload.id);
   } catch (err) {
     showError(err);
