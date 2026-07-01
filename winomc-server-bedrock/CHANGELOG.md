@@ -1,3 +1,29 @@
+## WinoMC 2.1.8b - Bedrock Command Autocomplete and UX Cleanup
+
+### Added
+- Added a local Bedrock command autocomplete for the instance console.
+- Suggestions appear while typing and include command names, syntax hints and descriptions.
+- Added Bedrock-focused syntax suggestions for targets, players, booleans, gamemodes, difficulty, weather, time and common gamerules.
+- Added keyboard support for autocomplete suggestions using arrow keys and Tab.
+- Added click-to-select instance cards.
+- Added basic drag-and-drop ordering for instance cards, stored locally in the browser.
+
+### Fixed
+- Console log now automatically scrolls to the bottom when opening the console tab.
+- Removed technical backup API text from the user-facing backup tab.
+- Logs/Diagnose tab is now only visible when `WINOMC_LOG_LEVEL=debug`.
+- Instance cards can now be selected directly without needing a separate details button.
+
+### Changed
+- Bumped beta version to `2.1.8b`.
+- The old button-style command helper is removed in favor of real command autocomplete.
+- The Manager keeps Auto PC/Mobile detection in the background without exposing mode buttons.
+
+### Notes
+- Command autocomplete is local and Bedrock-focused.
+- A later version can enrich suggestions from live `/help` output per running instance.
+- Bedrock remains the only active runtime in this release.
+
 ## WinoMC 2.1.7b - Instance Lifecycle UX and Watchdog
 
 ### Fixed

@@ -378,3 +378,76 @@ code {
 .manager-shell::after {
   pointer-events: none;
 }
+
+/* WinoMC 2.1.8b command autocomplete and clickable instance cards */
+.instance-card[data-instance-card] {
+  cursor: pointer;
+}
+
+.instance-card[data-instance-card]:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.autocomplete-form {
+  align-items: flex-start;
+}
+
+.autocomplete-wrap {
+  position: relative;
+  flex: 1 1 320px;
+}
+
+.autocomplete-wrap input {
+  width: 100%;
+}
+
+.autocomplete-box:not([hidden]) {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 60;
+  display: grid;
+  gap: 6px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.98);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .35);
+}
+
+.autocomplete-item {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  border-radius: 10px;
+}
+
+.autocomplete-item.active,
+.autocomplete-item:hover {
+  border-color: var(--accent);
+  background: rgba(14, 165, 233, .18);
+}
+
+.autocomplete-command {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.autocomplete-description {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.autocomplete-item code {
+  color: var(--accent);
+  white-space: normal;
+}
+
+.backup-panel {
+  display: grid;
+  gap: 10px;
+}

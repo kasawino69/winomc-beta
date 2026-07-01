@@ -48,6 +48,7 @@ TRASH_DIR = os.environ.get("WINOMC_TRASH_DIR", os.path.join(DATA_DIR, ".winomc",
 TRASH_RETENTION_DAYS = int(os.environ.get("WINOMC_TRASH_RETENTION_DAYS", "7"))
 CONSOLE_SETTINGS_FILE = os.environ.get("WINOMC_CONSOLE_SETTINGS_FILE", os.path.join(DATA_DIR, ".winomc", "web_console_settings.json"))
 WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.1b")
+LOG_LEVEL = os.environ.get("WINOMC_LOG_LEVEL", "info").strip().lower()
 STATIC_CONSOLE_DIR = os.environ.get("WINOMC_CONSOLE_STATIC_DIR", "/usr/local/share/winomc-console")
 MANAGER_UI_DIR = os.environ.get("WINOMC_MANAGER_UI_DIR", "/usr/local/share/winomc-manager")
 BACKUP_DIR = os.environ.get("WINOMC_BACKUP_DIR", os.path.join(DATA_DIR, "backups"))
@@ -11669,7 +11670,7 @@ def instance_backup(instance_id, backup_type="manual"):
     return {"ok": True, "backup": {"name": name, "path": target, "metadata": metadata, "size": os.path.getsize(target)}}
 
 def manager_payload():
-    return {"ok": True, "version": MANAGER_VERSION, "instances_dir": INSTANCES_DIR, "import_dir": IMPORT_DIR, "export_dir": EXPORT_DIR, "profiles": list(BEDROCK_PROFILES.values()), "instances": list_instances()}
+    return {"ok": True, "version": MANAGER_VERSION, "winomc_version": WINOMC_VERSION, "log_level": LOG_LEVEL, "instances_dir": INSTANCES_DIR, "import_dir": IMPORT_DIR, "export_dir": EXPORT_DIR, "profiles": list(BEDROCK_PROFILES.values()), "instances": list_instances()}
 # --- end WinoMC 2.1b Manager rebuild layer ---------------------------------------------
 
 def status_payload():
@@ -11972,7 +11973,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, manager_payload())
             return
         if path.endswith("/api/instances") or path == "/api/instances":
-            self._send_json(200, {"ok": True, "instances": list_instances(), "profiles": list(BEDROCK_PROFILES.values())})
+            self._send_json(200, {"ok": True, "instances": list_instances(), "profiles": list(BEDROCK_PROFILES.values()), "manager": {"version": MANAGER_VERSION, "winomc_version": WINOMC_VERSION, "log_level": LOG_LEVEL}})
             return
         m = re.match(r"^/api/instances/([^/]+)(?:/(status|console|files|packs))?$", path)
         if m:
