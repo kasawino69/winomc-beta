@@ -2,4 +2,4 @@
 
 ## Credits und Lizenz
 
-Minecraft und Bedrock Dedicated Server gehören Mojang/Microsoft. WinoMC liefert keine eigenen Gameplay-Add-ons. Lizenz siehe `LICENSE`.
+siehe `LICENSE`.
