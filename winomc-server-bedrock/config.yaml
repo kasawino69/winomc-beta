@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: "[BETA] WinoMC 2.0 Framework"
-version: 2.0.0.7b
+version: 2.0.0.8b
 slug: winomc-beta
 init: false
 boot: auto

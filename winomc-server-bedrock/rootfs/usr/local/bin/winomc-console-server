@@ -45,7 +45,7 @@ FILE_BACKUP_DIR = os.environ.get("WINOMC_FILE_BACKUP_DIR", os.path.join(DATA_DIR
 TRASH_DIR = os.environ.get("WINOMC_TRASH_DIR", os.path.join(DATA_DIR, ".winomc", "trash"))
 TRASH_RETENTION_DAYS = int(os.environ.get("WINOMC_TRASH_RETENTION_DAYS", "7"))
 CONSOLE_SETTINGS_FILE = os.environ.get("WINOMC_CONSOLE_SETTINGS_FILE", os.path.join(DATA_DIR, ".winomc", "web_console_settings.json"))
-WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.0.0.7b")
+WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.0.0.8b")
 BACKUP_DIR = os.environ.get("WINOMC_BACKUP_DIR", os.path.join(DATA_DIR, "backups"))
 BACKUP_KEEP = int(os.environ.get("WINOMC_BACKUP_KEEP", os.environ.get("PACKAGE_BACKUP_KEEP", "5")))
 SERVER_DIR = os.environ.get("WINOMC_SERVER_DIR", DATA_DIR)
@@ -87,7 +87,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC 2.0.0.7b Framework Workbench</title>
+  <title>WinoMC 2.0.0.8b Framework Workbench</title>
   <style>
     :root {
       color-scheme: dark;
@@ -291,7 +291,7 @@ INDEX_HTML = r"""<!doctype html>
     .console-inner { padding-top: 16px; }
     .mobile-quickbar { display: none; }
 
-    /* WinoMC 2.0.0.7b Framework Workbench */
+    /* WinoMC 2.0.0.8b Framework Workbench */
     body.desktop-mode {
       padding-bottom: 0;
       overflow: hidden;
@@ -4815,7 +4815,7 @@ body.winomc-mobile .editor-panel.editor-open {
 </head>
 <body>
   <header>
-    <h1 id="appTitle">WinoMC 2.0.0.7b Framework Workbench</h1>
+    <h1 id="appTitle">WinoMC 2.0.0.8b Framework Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
   </header>
 
@@ -5397,9 +5397,18 @@ body.winomc-mobile .editor-panel.editor-open {
     function moveDashboardAction(index, direction) { const next = index + direction; if (next < 0 || next >= dashboardActions.length) return; [dashboardActions[index], dashboardActions[next]] = [dashboardActions[next], dashboardActions[index]]; saveDashboard(); renderDashboard(); }
 
     function apiUrl(path, params = {}) { const query = new URLSearchParams(params); const suffix = query.toString() ? '?' + query.toString() : ''; return './' + path.replace(/^\/+/, '') + suffix; }
-    async function fetchJson(path, params = {}) { const res = await fetch(apiUrl(path, params), { cache: 'no-store' }); const data = await res.json(); if (!res.ok || !data.ok) throw new Error(data.error || res.statusText); return data; }
-    async function postJson(path, payload = {}) { const res = await fetch('./' + path.replace(/^\/+/, ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); const data = await res.json(); if (!res.ok || !data.ok) throw new Error(data.error || res.statusText); return data; }
-    function setFilesStatus(text, variant) { filesStatus.textContent = text; filesStatus.classList.toggle('warn', variant === 'warn'); }
+    const STARTUP_REQUEST_TIMEOUT_MS = 8000;
+    const STARTUP_MAX_LOG_LINES = 600;
+    const startupIntervals = new Map();
+    let logSource = null;
+    let renderedLogLines = 0;
+    function setManagedInterval(key, fn, delay) { const existing = startupIntervals.get(key); if (existing) window.clearInterval(existing); const id = window.setInterval(fn, delay); startupIntervals.set(key, id); return id; }
+    function showStartupError(message) { const text = 'Startfehler: ' + message; statusEl.textContent = text; statusDot.classList.remove('ok'); const target = document.querySelector('[data-panel="overview"] .card') || document.querySelector('[data-panel="overview"]') || document.querySelector('main'); if (target && !document.getElementById('startupErrorBanner')) { const box = document.createElement('div'); box.id = 'startupErrorBanner'; box.className = 'info warn'; box.textContent = text + ' · Die Oberfläche bleibt bedienbar; bitte Backend-Logs prüfen.'; target.prepend(box); } }
+    async function fetchWithTimeout(url, options = {}, timeout = STARTUP_REQUEST_TIMEOUT_MS) { const controller = new AbortController(); const timer = window.setTimeout(() => controller.abort(), timeout); try { return await fetch(url, { ...options, signal: controller.signal }); } catch (err) { if (err.name === 'AbortError') throw new Error('Zeitüberschreitung beim Laden von ' + url); throw err; } finally { window.clearTimeout(timer); } }
+    async function readJsonResponse(res) { let data = {}; try { data = await res.json(); } catch (_) { throw new Error('Ungültige API-Antwort (' + res.status + ')'); } if (!res.ok || !data.ok) throw new Error(data.error || res.statusText || ('HTTP ' + res.status)); return data; }
+    async function fetchJson(path, params = {}) { return readJsonResponse(await fetchWithTimeout(apiUrl(path, params), { cache: 'no-store' })); }
+    async function postJson(path, payload = {}) { return readJsonResponse(await fetchWithTimeout('./' + path.replace(/^\/+/, ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })); }
+    function setFilesStatus(text, variant) { if (!filesStatus) return; filesStatus.textContent = text; filesStatus.classList.toggle('warn', variant === 'warn'); }
 
     function applyWebWriteLock() {
       localStorage.setItem(STORE_WEB_WRITE_LOCK, String(webWriteLocked));
@@ -6805,11 +6814,11 @@ body.winomc-mobile .editor-panel.editor-open {
           if (document.body.classList.contains('desktop-mode')) bringDesktopWindowToFront(panel.dataset.panel);
         });
       });
-      setInterval(updateDesktopClock, 15000);
+      setManagedInterval('desktopClock', updateDesktopClock, 15000);
       updateDesktopClock();
     }
 
-    function connectLogs() { const source = new EventSource('./api/logs'); source.onopen = () => { statusEl.textContent = 'Live verbunden'; statusDot.classList.add('ok'); }; source.onmessage = event => { try { const data = JSON.parse(event.data); if (data.line) appendLine(data.line); } catch (_) {} }; source.onerror = () => { statusEl.textContent = 'Verbindung wird neu aufgebaut...'; statusDot.classList.remove('ok'); }; }
+    function connectLogs() { if (logSource) { try { logSource.close(); } catch (_) {} } logSource = new EventSource('./api/logs'); logSource.onopen = () => { statusEl.textContent = 'Live verbunden'; statusDot.classList.add('ok'); }; logSource.onmessage = event => { try { const data = JSON.parse(event.data); if (data.line) { renderedLogLines += 1; if (renderedLogLines <= STARTUP_MAX_LOG_LINES || log.children.length < STARTUP_MAX_LOG_LINES) appendLine(data.line); } } catch (_) {} }; logSource.onerror = () => { statusEl.textContent = 'Log-Verbindung wartet auf Backend...'; statusDot.classList.remove('ok'); }; }
     applySidebarState(); applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal'); applyEditorPrefs(); initConsoleResize();
 
 
@@ -7458,7 +7467,7 @@ body.winomc-mobile .editor-panel.editor-open {
       } catch (err) { alert(err.message); appendLine('[WinoMC 2.0] '+err.message,'error'); }
     });
 
-    initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); initAdaptiveUx(); renderDashboard(); connectLogs(); loadStatus();
+    try { initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); initAdaptiveUx(); renderDashboard(); window.setTimeout(connectLogs, 250); loadStatus().catch(err => showStartupError(err.message)); } catch (err) { showStartupError(err.message); }
   
 
     /* v1.6.14 UX and metrics controllers */
@@ -11415,7 +11424,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCConsole/2.0.0"
+    server_version = "WinoMCConsole/2.0.0.8b"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
