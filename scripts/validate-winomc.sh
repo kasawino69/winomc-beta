@@ -26,32 +26,69 @@ for path in root.rglob('*.json'):
 py_compile.compile(str(server), doraise=True)
 
 # WinoMC 2.1b manager/runtime smoke test with a fake Bedrock executable.
-import os, runpy, stat, tempfile, time, zipfile
+import os, runpy, stat, tempfile, time, zipfile, json
 smoke_root = pathlib.Path(tempfile.mkdtemp(prefix='winomc-manager-smoke-'))
 shared = smoke_root/'.winomc'/'bds'/'shared'
 shared.mkdir(parents=True)
 fake_bds = shared/'bedrock_server'
-fake_bds.write_text('#!/bin/sh\necho "Fake Bedrock ready"\nwhile IFS= read -r line; do echo "CMD:$line"; [ "$line" = "stop" ] && exit 0; done\n', encoding='utf-8')
+fake_bds.write_text('#!/bin/sh\necho "Fake Bedrock ready $$"\nwhile IFS= read -r line; do echo "CMD:$line"; [ "$line" = "stop" ] && exit 0; done\n', encoding='utf-8')
 fake_bds.chmod(fake_bds.stat().st_mode | stat.S_IXUSR)
 os.environ['WINOMC_DATA_DIR'] = str(smoke_root)
 os.environ['WINOMC_BDS_SHARED_DIR'] = str(shared)
 module = runpy.run_path(str(server))
-first = module['create_instance']({'id':'survival','name':'Survival','profile':'family-safe','bedrock':{'server_port':19132,'server_port_v6':19133}})
-assert (smoke_root/'instances'/'survival'/'server.properties').read_text(encoding='utf-8').count('server-port=19132') == 1
+module['create_instance']({'id':'survival','name':'Survival','profile':'family-safe','bedrock':{'server_port':40132,'server_port_v6':40133}})
+module['create_instance']({'id':'creative','name':'Creative','profile':'creative','bedrock':{'server_port':40142,'server_port_v6':40143}})
+assert (smoke_root/'instances'/'survival'/'server.properties').read_text(encoding='utf-8').count('server-port=40132') == 1
 try:
-    module['create_instance']({'id':'creative','name':'Creative','profile':'creative','bedrock':{'server_port':19132,'server_port_v6':19134}})
+    module['create_instance']({'id':'conflict','name':'Conflict','profile':'creative','bedrock':{'server_port':40132,'server_port_v6':40144}})
     raise AssertionError('port conflict was not detected')
 except ValueError as exc:
-    assert 'Port 19132' in str(exc)
-started = module['start_instance']('survival')
-assert started['status']['state'] == 'running' and started['status']['pid']
+    assert 'Port 40132' in str(exc)
+# missing and non-executable shared runtime validation must be structured.
+original_candidates = module['BDS_CANDIDATE_DIRS']
+module['validate_bds_runtime_or_raise'].__globals__['BDS_CANDIDATE_DIRS'] = [str(smoke_root/'missing-bds')]
+try:
+    module['validate_bds_runtime_or_raise']('survival')
+    raise AssertionError('missing bedrock_server was not detected')
+except module['WinoMCRuntimeError'] as exc:
+    assert exc.code == 'bedrock_missing' and exc.to_payload()['component'] == 'shared-runtime'
+module['validate_bds_runtime_or_raise'].__globals__['BDS_CANDIDATE_DIRS'] = [str(shared)]
+fake_bds.chmod(fake_bds.stat().st_mode & ~stat.S_IXUSR)
+try:
+    module['validate_bds_runtime_or_raise']('survival')
+    raise AssertionError('non-executable bedrock_server was not detected')
+except module['WinoMCRuntimeError'] as exc:
+    assert exc.code == 'bedrock_not_executable'
+fake_bds.chmod(fake_bds.stat().st_mode | stat.S_IXUSR)
+module['validate_bds_runtime_or_raise'].__globals__['BDS_CANDIDATE_DIRS'] = original_candidates
+# stale PID reconciliation must not blindly trust the saved PID.
+module['write_runtime_state']('survival', {'state':'running','pid':999999,'last_action':'start'})
+reconciled = module['reconcile_instance_runtime']('survival')
+assert reconciled['state'] == 'crashed' and reconciled['pid'] is None
+started_survival = module['start_instance']('survival')
+started_creative = module['start_instance']('creative')
+assert started_survival['status']['state'] == 'running' and started_survival['status']['pid']
+assert started_creative['status']['state'] == 'running' and started_creative['status']['pid']
+assert started_survival['status']['pid'] != started_creative['status']['pid']
 assert (smoke_root/'instances'/'survival'/'runtime'/'state.json').exists()
-module['send_instance_command']('survival', 'say smoke')
-stopped = module['stop_instance']('survival')
-assert stopped['status']['state'] in ('stopped', 'crashed')
+assert (smoke_root/'instances'/'creative'/'runtime'/'state.json').exists()
+module['send_instance_command']('survival', 'say survival-only')
+module['send_instance_command']('creative', 'say creative-only')
+time.sleep(0.2)
+survival_history = (smoke_root/'instances'/'survival'/'logs'/'commands.log').read_text(encoding='utf-8')
+creative_history = (smoke_root/'instances'/'creative'/'logs'/'commands.log').read_text(encoding='utf-8')
+assert 'survival-only' in survival_history and 'creative-only' not in survival_history
+assert 'creative-only' in creative_history and 'survival-only' not in creative_history
+stopped_survival = module['stop_instance']('survival')
+assert stopped_survival['status']['state'] == 'stopped'
+creative_after = module['runtime_status']('creative')
+assert creative_after['state'] == 'running'
+stopped_creative = module['stop_instance']('creative')
+assert stopped_creative['status']['state'] == 'stopped'
 backup = module['instance_backup']('survival')['backup']
 with zipfile.ZipFile(backup['path']) as zf:
-    assert 'backup-metadata.json' in zf.namelist()
+    metadata = json.loads(zf.read('backup-metadata.json').decode('utf-8'))
+    assert metadata['instance_id'] == 'survival' and metadata['instance_name'] == 'Survival'
 print('WinoMC manager runtime smoke OK')
 required_symbols = [
     'def require_web_write_allowed', 'def read_web_protection_state', 'def set_web_protection_state',

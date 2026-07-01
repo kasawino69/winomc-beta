@@ -10797,6 +10797,28 @@ BDS_SHARED_NAMES = ("bedrock_server", "bedrock_server_symbols.debug", "bedrock_s
 PROCESS_HANDLES = {}
 PROCESS_LOCK = threading.RLock()
 
+class WinoMCRuntimeError(RuntimeError):
+    def __init__(self, code, message, instance_id=None, component="runtime", suggested_action=None, details=None):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.instance_id = instance_id
+        self.component = component
+        self.suggested_action = suggested_action
+        self.details = details or {}
+
+    def to_payload(self):
+        payload = {"ok": False, "error": self.message, "code": self.code, "message": self.message, "component": self.component}
+        if self.instance_id: payload["instance_id"] = self.instance_id
+        if self.suggested_action: payload["suggested_action"] = self.suggested_action
+        if self.details: payload["details"] = self.details
+        return payload
+
+def runtime_error_payload(exc, instance_id=None, component="runtime", code="runtime_error"):
+    if isinstance(exc, WinoMCRuntimeError):
+        return exc.to_payload()
+    return {"ok": False, "error": str(exc), "code": code, "message": str(exc), "instance_id": instance_id, "component": component}
+
 def manager_now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -10873,14 +10895,15 @@ def ensure_instance_layout(config):
     write_json_file(os.path.join(base, "instance.json"), config)
     return config
 
-def load_instance(instance_id):
+def load_instance(instance_id, include_health=True):
     path = instance_path(instance_id, "instance.json")
     data = read_json_file(path, None)
     if not data:
         raise FileNotFoundError("Instanz nicht gefunden: %s" % instance_id)
     data.setdefault("id", validate_instance_id(instance_id))
     data["status"] = runtime_status(data["id"])
-    data["health"] = validate_instance_config(data)
+    if include_health:
+        data["health"] = validate_instance_config(data)
     return data
 
 def list_instances():
@@ -10890,7 +10913,7 @@ def list_instances():
         try:
             path = instance_path(name, "instance.json")
             if os.path.isfile(path):
-                inst = load_instance(name)
+                inst = load_instance(name, include_health=False)
                 items.append({k: inst.get(k) for k in ("id", "name", "engine", "profile", "created_at", "updated_at") } | {"bedrock": inst.get("bedrock", {}), "status": inst.get("status"), "health": inst.get("health")})
         except Exception as exc:
             items.append({"id": name, "name": name, "broken": True, "error": str(exc), "status": {"state": "broken"}})
@@ -10975,7 +10998,52 @@ def detect_bds_runtime():
         if candidate["executable"]:
             candidate["ok"] = True
             return candidate
-    return {"ok": False, "error": "Keine ausführbare Bedrock Dedicated Server Runtime gefunden. Erwartet wird bedrock_server in WINOMC_BDS_SHARED_DIR oder im bestehenden /config-BDS-Bestand.", "candidates": candidates}
+    error = "Keine ausführbare Bedrock Dedicated Server Runtime gefunden. Erwartet wird bedrock_server in WINOMC_BDS_SHARED_DIR oder im bestehenden /config-BDS-Bestand."
+    return {"ok": False, "error": error, "candidates": candidates}
+
+def validate_bds_runtime_or_raise(instance_id=None):
+    runtime = detect_bds_runtime()
+    if not runtime.get("ok"):
+        existing = [c for c in runtime.get("candidates", []) if c.get("exists")]
+        code = "bedrock_not_executable" if existing else "bedrock_missing"
+        raise WinoMCRuntimeError(code, runtime.get("error"), instance_id=instance_id, component="shared-runtime", suggested_action="Installiere oder aktualisiere Bedrock Dedicated Server in der gemeinsamen WinoMC Runtime.", details={"candidates": runtime.get("candidates", [])})
+    shared_dir = runtime["path"]
+    if not os.access(shared_dir, os.R_OK | os.X_OK):
+        raise WinoMCRuntimeError("shared_runtime_unreadable", "Die gemeinsame Bedrock-Runtime ist nicht lesbar.", instance_id=instance_id, component="shared-runtime", details={"path": shared_dir})
+    return runtime
+
+def can_bind_udp(port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.bind(("0.0.0.0", int(port)))
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+def validate_instance_start_or_raise(inst):
+    iid = validate_instance_id(inst.get("id"))
+    health = validate_instance_config(inst)
+    if not health.get("ok"):
+        raise WinoMCRuntimeError("invalid_instance_config", "Instanzkonfiguration ist ungültig.", instance_id=iid, component="instance-config", suggested_action="Prüfe Ports, Engine und Pfade der Instanz.", details=health)
+    runtime = validate_bds_runtime_or_raise(iid)
+    ensure_instance_layout(inst)
+    for path_name in ("worlds", "resource_packs", "behavior_packs", "logs", "runtime"):
+        path = instance_path(iid, path_name)
+        if not os.path.isdir(path) or not os.access(path, os.W_OK):
+            raise WinoMCRuntimeError("instance_path_not_writable", "Instanzpfad ist nicht beschreibbar: %s" % path_name, instance_id=iid, component="instance-paths", details={"path": path})
+    for filename in ("server.properties", "allowlist.json", "permissions.json"):
+        path = instance_path(iid, filename)
+        if not os.path.isfile(path) or not os.access(path, os.W_OK):
+            raise WinoMCRuntimeError("instance_file_not_writable", "Instanzdatei ist nicht beschreibbar: %s" % filename, instance_id=iid, component="instance-files", details={"path": path})
+    b = inst.get("bedrock", {})
+    for key in ("server_port", "server_port_v6"):
+        port = int(b.get(key))
+        if not can_bind_udp(port):
+            # If this exact instance is already running, start_instance will return before this check. Otherwise fail clearly.
+            raise WinoMCRuntimeError("port_unavailable", "Port %s ist auf dem Host nicht frei." % port, instance_id=iid, component="network", suggested_action="Wähle einen freien Bedrock-Port für diese Instanz.", details={"port": port, "field": key})
+    return {"runtime": runtime, "health": health}
 
 def safe_symlink_or_copy(source, target):
     if os.path.lexists(target):
@@ -10994,9 +11062,7 @@ def safe_symlink_or_copy(source, target):
 def prepare_instance_runtime(inst):
     iid = validate_instance_id(inst["id"])
     ensure_instance_layout(inst)
-    runtime = detect_bds_runtime()
-    if not runtime.get("ok"):
-        raise FileNotFoundError(runtime["error"])
+    runtime = validate_bds_runtime_or_raise(iid)
     workdir = runtime_workdir(iid)
     os.makedirs(workdir, exist_ok=True)
     # Writable instance-owned Bedrock data lives outside the shared runtime and is linked into the process cwd.
@@ -11022,6 +11088,66 @@ def prepare_instance_runtime(inst):
             safe_symlink_or_copy(source, os.path.join(workdir, name))
     return {"runtime": runtime, "workdir": workdir}
 
+def process_cwd(pid):
+    try:
+        return os.path.realpath(os.readlink("/proc/%s/cwd" % int(pid)))
+    except Exception:
+        return ""
+
+def process_cmdline(pid):
+    try:
+        with open("/proc/%s/cmdline" % int(pid), "rb") as handle:
+            return handle.read().replace(b"\x00", b" ").decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+def pid_matches_instance(instance_id, pid):
+    if not pid:
+        return False
+    workdir = os.path.realpath(runtime_workdir(instance_id))
+    cwd = process_cwd(pid)
+    cmdline = process_cmdline(pid)
+    return bool(cwd and cwd == workdir and "bedrock_server" in cmdline)
+
+def reconcile_instance_runtime(instance_id):
+    iid = validate_instance_id(instance_id)
+    state = read_json_file(runtime_state_path(iid), {"state": "stopped"})
+    pid = state.get("pid")
+    if not pid:
+        if state.get("state") in ("starting", "running", "stopping"):
+            state.update({"state": "unknown", "reconciled_at": manager_now(), "recovery_note": "Runtime-State enthielt keinen PID."})
+            write_runtime_state(iid, state)
+        return state
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        next_state = "stopped" if state.get("last_action") == "stop" or state.get("state") == "stopping" else "crashed"
+        state.update({"state": next_state, "pid": None, "reconciled_at": manager_now(), "recovery_note": "Gespeicherter PID existiert nicht mehr."})
+        write_runtime_state(iid, state)
+        return state
+    except PermissionError:
+        state.update({"state": "unknown", "reconciled_at": manager_now(), "recovery_note": "Gespeicherter PID ist nicht prüfbar."})
+        write_runtime_state(iid, state)
+        return state
+    if not pid_matches_instance(iid, pid):
+        state.update({"state": "unknown", "pid": None, "reconciled_at": manager_now(), "recovery_note": "PID gehört nicht eindeutig zu dieser Bedrock-Instanz; er wurde verworfen."})
+        write_runtime_state(iid, state)
+        return state
+    state.update({"state": "running", "reconciled_at": manager_now(), "recovered_without_stdin": True, "recovery_note": "Prozess läuft noch, aber die Manager-STDIN-Verbindung muss durch Neustart der Instanz erneuert werden."})
+    write_runtime_state(iid, state)
+    return state
+
+def reconcile_all_instances():
+    results = []
+    os.makedirs(INSTANCES_DIR, exist_ok=True)
+    for name in sorted(os.listdir(INSTANCES_DIR)):
+        if os.path.isfile(instance_path(name, "instance.json")):
+            try:
+                results.append({"id": name, "state": reconcile_instance_runtime(name)})
+            except Exception as exc:
+                results.append({"id": name, "error": str(exc)})
+    return results
+
 def runtime_status(instance_id):
     state = read_json_file(runtime_state_path(instance_id), {"state": "stopped"})
     pid = state.get("pid")
@@ -11038,14 +11164,7 @@ def runtime_status(instance_id):
                 PROCESS_HANDLES.pop(validate_instance_id(instance_id), None)
         return state
     if pid:
-        try:
-            os.kill(int(pid), 0)
-            state["state"] = state.get("state") if state.get("state") in ("starting", "stopping") else "running"
-        except ProcessLookupError:
-            state.update({"state": "crashed" if state.get("state") not in ("stopping", "stopped") else "stopped", "pid": None, "crashed_at": state.get("crashed_at") or manager_now()})
-            write_runtime_state(instance_id, state)
-        except PermissionError:
-            state["state"] = "unknown"
+        state = reconcile_instance_runtime(instance_id)
     return state
 
 def write_runtime_state(instance_id, payload):
@@ -11081,11 +11200,11 @@ def bedrock_environment(inst, prepared):
 
 def start_instance(instance_id):
     iid = validate_instance_id(instance_id)
-    inst = load_instance(iid); health = validate_instance_config(inst)
-    if not health.get("ok"): raise ValueError("Instanz ist ungültig: " + "; ".join(health.get("errors", [])))
+    inst = load_instance(iid)
     status = runtime_status(iid)
     if status.get("state") in ("running", "starting"):
         return {"ok": True, "status": status, "message": "Instanz läuft bereits oder startet."}
+    validation = validate_instance_start_or_raise(inst)
     write_runtime_state(iid, {"state": "starting", "pid": None, "last_action": "start", "started_at": manager_now()})
     prepared = prepare_instance_runtime(inst)
     log_path = runtime_log_path_instance(iid)
@@ -11108,6 +11227,11 @@ def stop_instance(instance_id):
     status = runtime_status(iid)
     pid = status.get("pid")
     write_runtime_state(iid, dict(status, state="stopping", last_action="stop", stopping_at=manager_now()))
+    try:
+        with open(runtime_log_path_instance(iid), "ab", buffering=0) as log_handle:
+            log_handle.write(("[%s] WinoMC stoppt Bedrock-Instanz %s kontrolliert\n" % (manager_now(), iid)).encode("utf-8"))
+    except Exception:
+        pass
     with PROCESS_LOCK:
         proc = PROCESS_HANDLES.get(iid)
     if proc is not None and proc.poll() is None:
@@ -11462,7 +11586,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     self._send_json(200, load_instance(iid))
             except Exception as exc:
-                self._send_json(400, {"ok": False, "error": str(exc)})
+                self._send_json(400, runtime_error_payload(exc, m.group(1) if m else None))
             return
         if path.endswith("/api/logs") or path == "/api/logs":
             self._stream_logs()
@@ -11571,7 +11695,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.require_web_write_allowed("Instanz bearbeiten")
                 self._send_json(200, {"ok": True, "instance": update_instance(m.group(1), self._read_json_payload())})
             except Exception as exc:
-                self._send_json(400, {"ok": False, "error": str(exc)})
+                self._send_json(400, runtime_error_payload(exc, m.group(1) if m else None, component="instance-manager"))
             return
         self.send_error(404)
 
@@ -11585,7 +11709,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.require_web_write_allowed("Instanz löschen")
                 self._send_json(200, delete_instance(m.group(1)))
             except Exception as exc:
-                self._send_json(400, {"ok": False, "error": str(exc)})
+                self._send_json(400, runtime_error_payload(exc, m.group(1) if m else None, component="instance-manager"))
             return
         self.send_error(404)
 
@@ -11599,7 +11723,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.require_web_write_allowed("Instanz erstellen")
                 self._send_json(200, {"ok": True, "instance": create_instance(self._read_json_payload())})
             except Exception as exc:
-                self._send_json(400, {"ok": False, "error": str(exc)})
+                self._send_json(400, runtime_error_payload(exc, component="instance-manager"))
             return
         m = re.match(r"^/api/instances/([^/]+)/(start|stop|restart|command|backup)$", path)
         if m:
@@ -11613,7 +11737,7 @@ class Handler(BaseHTTPRequestHandler):
                 else: result = instance_backup(iid, str(payload.get("type", "manual")))
                 self._send_json(200, result)
             except Exception as exc:
-                self._send_json(400, {"ok": False, "error": str(exc)})
+                self._send_json(400, runtime_error_payload(exc, iid if 'iid' in locals() else None))
             return
         if path.endswith("/api/command") or path == "/api/command":
             try:
@@ -11937,6 +12061,9 @@ def main():
     ensure_runtime_parent_dir(log_path)
     with open_runtime(log_path, "a", encoding="utf-8"):
         pass
+    reconciliation = reconcile_all_instances()
+    if reconciliation:
+        print("[WinoMC Console] Runtime reconciliation: %s" % json.dumps(reconciliation, ensure_ascii=False), flush=True)
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
 
     def shutdown(_signum, _frame):
