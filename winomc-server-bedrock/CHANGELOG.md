@@ -1,3 +1,12 @@
+## 2.1.11b - Targeted Auto-Refresh
+
+- Reworks Manager auto-refresh to update only targeted runtime objects instead of re-rendering full tabs.
+- Dashboard cards now refresh status, health, ports, runtime start and automation display without touching forms.
+- Selected overview updates only its facts block.
+- Console auto-refresh updates only `#consoleLog`; `#commandForm`, command input and autocomplete remain untouched.
+- Settings, Files and Editor areas are no longer rebuilt by background refresh cycles.
+- Keeps `config.yaml` changes strictly limited to `version` and `environment.WINOMC_VERSION`.
+
 ## WinoMC 2.1.9b - Complete Bedrock Catalogs and Settings Schema
 
 

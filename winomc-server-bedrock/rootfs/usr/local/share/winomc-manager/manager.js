@@ -1,4 +1,4 @@
-const VERSION = '2.1.10b';
+const VERSION = '2.1.11b';
 
 const state = {
   instances: [],
@@ -196,46 +196,56 @@ function automationView(instance) {
   return labels.length ? labels.join(' · ') : 'Manuell';
 }
 
-function renderDashboard() {
-  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager ${VERSION} · Auto-Refresh 10 s · vollständige Server-Einstellungen`;
+function renderInstanceCard(instance) {
+  const b = instance.bedrock || {};
+  const status = instanceStatus(instance);
+  const health = healthView(instance);
+  const error = instance.error || (instance.health?.errors || []).join(' · ');
+
+  return `
+    <article class="instance-card status-${esc(status)} ${health.ok ? 'health-ok' : 'health-bad'}"
+             data-instance-card="${esc(instance.id)}"
+             draggable="true"
+             tabindex="0"
+             role="button"
+             aria-label="Instanz ${esc(instance.name || instance.id)} auswählen">
+      <p class="eyebrow">${esc(instance.id)}</p>
+      <h3>${esc(instance.name || instance.id)}</h3>
+      <span class="status-pill">${esc(status)}</span>
+
+      <dl class="facts">
+        <div><dt>Profil</dt><dd>${esc(instance.profile || '-')}</dd></div>
+        <div><dt>IPv4</dt><dd>${esc(b.server_port || '-')}</dd></div>
+        <div><dt>IPv6</dt><dd>${esc(b.server_port_v6 || '-')}</dd></div>
+        <div><dt>Start</dt><dd>${esc(instance.status?.started_at || '-')}</dd></div>
+        <div><dt>Health</dt><dd>${esc(health.label)}</dd></div>
+        <div><dt>Automation</dt><dd>${esc(automationView(instance))}</dd></div>
+      </dl>
+
+      ${!health.ok ? `<p class="warn-box">${esc(error || `Runtime-Status: ${status}`)}</p>` : ''}
+
+      <div class="card-actions">
+        <button type="button" data-action="start" data-id="${esc(instance.id)}">Start</button>
+        <button type="button" data-action="stop" data-id="${esc(instance.id)}">Stop</button>
+        <button type="button" data-action="restart" data-id="${esc(instance.id)}">Restart</button>
+      </div>
+    </article>
+  `;
+}
+
+function patchManagerSummary() {
+  $('#managerSummary').textContent = `${state.instances.length} Instanz(en) · WinoMC Manager ${VERSION} · Auto-Refresh 10 s · gezielte Statusaktualisierung`;
   removeManualDashboardRefreshButtons();
+}
 
-  $('#instancesGrid').innerHTML = state.instances.map((instance) => {
-    const b = instance.bedrock || {};
-    const status = instanceStatus(instance);
-    const health = healthView(instance);
-    const error = instance.error || (instance.health?.errors || []).join(' · ');
+function renderDashboard() {
+  patchManagerSummary();
 
-    return `
-      <article class="instance-card status-${esc(status)} ${health.ok ? 'health-ok' : 'health-bad'}"
-               data-instance-card="${esc(instance.id)}"
-               draggable="true"
-               tabindex="0"
-               role="button"
-               aria-label="Instanz ${esc(instance.name || instance.id)} auswählen">
-        <p class="eyebrow">${esc(instance.id)}</p>
-        <h3>${esc(instance.name || instance.id)}</h3>
-        <span class="status-pill">${esc(status)}</span>
+  const grid = $('#instancesGrid');
+  if (!grid) return;
 
-        <dl class="facts">
-          <div><dt>Profil</dt><dd>${esc(instance.profile || '-')}</dd></div>
-          <div><dt>IPv4</dt><dd>${esc(b.server_port || '-')}</dd></div>
-          <div><dt>IPv6</dt><dd>${esc(b.server_port_v6 || '-')}</dd></div>
-          <div><dt>Start</dt><dd>${esc(instance.status?.started_at || '-')}</dd></div>
-          <div><dt>Health</dt><dd>${esc(health.label)}</dd></div>
-          <div><dt>Automation</dt><dd>${esc(automationView(instance))}</dd></div>
-        </dl>
-
-        ${!health.ok ? `<p class="warn-box">${esc(error || `Runtime-Status: ${status}`)}</p>` : ''}
-
-        <div class="card-actions">
-          <button type="button" data-action="start" data-id="${esc(instance.id)}">Start</button>
-          <button type="button" data-action="stop" data-id="${esc(instance.id)}">Stop</button>
-          <button type="button" data-action="restart" data-id="${esc(instance.id)}">Restart</button>
-        </div>
-      </article>
-    `;
-  }).join('') || '<p class="empty-state">Noch keine Instanzen. Öffne rechts „Neue Instanz“.</p>';
+  grid.innerHTML = state.instances.map((instance) => renderInstanceCard(instance)).join('') ||
+    '<p class="empty-state">Noch keine Instanzen. Öffne rechts „Neue Instanz“.</p>';
 }
 
 async function selectInstance(id) {
@@ -484,6 +494,26 @@ function collectBedrockSettings(form) {
   return bedrock;
 }
 
+function renderOverviewFacts(inst) {
+  const b = inst.bedrock || {};
+  const a = inst.automation || {};
+  const health = healthView(inst);
+
+  return `
+    <dl class="facts large">
+      <div><dt>Status</dt><dd>${esc(inst.status?.state || '-')}</dd></div>
+      <div><dt>Health</dt><dd>${esc(health.label)}</dd></div>
+      <div><dt>Profil</dt><dd>${esc(inst.profile || '-')}</dd></div>
+      <div><dt>IPv4</dt><dd>${esc(b.server_port || '-')}</dd></div>
+      <div><dt>IPv6</dt><dd>${esc(b.server_port_v6 || '-')}</dd></div>
+      <div><dt>Welt</dt><dd>${esc(b.level_name || '-')}</dd></div>
+      <div><dt>Spielmodus</dt><dd>${esc(b.gamemode || '-')}</dd></div>
+      <div><dt>Autostart</dt><dd>${a.autostart ? 'Aktiv' : 'Aus'}</dd></div>
+      <div><dt>Watchdog</dt><dd>${a.watchdog ? 'Aktiv' : 'Aus'}</dd></div>
+    </dl>
+  `;
+}
+
 async function renderDetail() {
   if (!state.selected) return;
 
@@ -496,19 +526,7 @@ async function renderDetail() {
   updateDiagnosticsVisibility();
 
   if (state.tab === 'overview') {
-    target.innerHTML = `
-      <dl class="facts large">
-        <div><dt>Status</dt><dd>${esc(inst.status?.state || '-')}</dd></div>
-        <div><dt>Health</dt><dd>${esc(health.label)}</dd></div>
-        <div><dt>Profil</dt><dd>${esc(inst.profile || '-')}</dd></div>
-        <div><dt>IPv4</dt><dd>${esc(b.server_port || '-')}</dd></div>
-        <div><dt>IPv6</dt><dd>${esc(b.server_port_v6 || '-')}</dd></div>
-        <div><dt>Welt</dt><dd>${esc(b.level_name || '-')}</dd></div>
-        <div><dt>Spielmodus</dt><dd>${esc(b.gamemode || '-')}</dd></div>
-        <div><dt>Autostart</dt><dd>${a.autostart ? 'Aktiv' : 'Aus'}</dd></div>
-        <div><dt>Watchdog</dt><dd>${a.watchdog ? 'Aktiv' : 'Aus'}</dd></div>
-      </dl>
-    `;
+    target.innerHTML = renderOverviewFacts(inst);
   } else if (state.tab === 'console') {
     const consoleData = await get(`/api/instances/${encodeURIComponent(inst.id)}/console`);
     const lines = consoleData.lines || consoleData.console || consoleData.logs || [];
@@ -688,18 +706,127 @@ function shouldSkipAutoRefresh() {
   return Boolean(active && active.closest && active.closest('#commandForm, #settingsForm, #createInstanceForm, .autocomplete-box'));
 }
 
+async function patchConsoleLog(instanceId) {
+  const log = $('#consoleLog');
+  if (!log || !instanceId) return;
+
+  const wasAtBottom = (log.scrollHeight - log.scrollTop - log.clientHeight) < 24;
+  const consoleData = await get(`/api/instances/${encodeURIComponent(instanceId)}/console`);
+  const lines = consoleData.lines || consoleData.console || consoleData.logs || [];
+  const nextText = Array.isArray(lines) ? lines.join('
+') : String(lines || 'Noch keine Logzeilen für diese Instanz.');
+
+  if (log.textContent !== nextText) {
+    log.textContent = nextText;
+    if (wasAtBottom) {
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+}
+
+function patchDashboardCards(instances) {
+  const grid = $('#instancesGrid');
+  if (!grid) return;
+
+  if (!instances.length) {
+    grid.innerHTML = '<p class="empty-state">Noch keine Instanzen. Öffne rechts „Neue Instanz“.</p>';
+    return;
+  }
+
+  const seen = new Set();
+
+  for (const instance of instances) {
+    const current = [...grid.querySelectorAll('[data-instance-card]')]
+      .find((card) => card.dataset.instanceCard === instance.id);
+
+    const html = renderInstanceCard(instance);
+
+    if (current) {
+      current.outerHTML = html;
+    } else {
+      grid.insertAdjacentHTML('beforeend', html);
+    }
+
+    seen.add(instance.id);
+  }
+
+  for (const card of [...grid.querySelectorAll('[data-instance-card]')]) {
+    if (!seen.has(card.dataset.instanceCard)) {
+      card.remove();
+    }
+  }
+}
+
+async function patchSelectedRuntimeObjects(instanceSummary) {
+  if (!state.selectedId || !instanceSummary || instanceSummary.id !== state.selectedId) return;
+
+  state.selected = {
+    ...(state.selected || {}),
+    ...instanceSummary,
+    bedrock: {
+      ...((state.selected || {}).bedrock || {}),
+      ...(instanceSummary.bedrock || {}),
+    },
+    automation: {
+      ...((state.selected || {}).automation || {}),
+      ...(instanceSummary.automation || {}),
+    },
+    status: instanceSummary.status || (state.selected || {}).status,
+    health: instanceSummary.health || (state.selected || {}).health,
+  };
+
+  const title = $('#detailTitle');
+  if (title) {
+    title.textContent = `${state.selected.name || state.selectedId} (${state.selectedId})`;
+  }
+
+  if (state.tab === 'overview') {
+    const target = $('#detailContent');
+    if (target) {
+      target.innerHTML = renderOverviewFacts(state.selected);
+    }
+    return;
+  }
+
+  if (state.tab === 'console') {
+    await patchConsoleLog(state.selectedId);
+    return;
+  }
+
+  if (state.tab === 'diagnostics' && state.logLevel === 'debug') {
+    const pre = $('#detailContent pre');
+    if (pre) {
+      pre.textContent = JSON.stringify(state.selected.status || state.selected, null, 2);
+    }
+  }
+}
+
+async function refreshRuntimeObjectsOnly() {
+  const selectedId = state.selectedId;
+  const data = await get('/api/instances');
+
+  state.instances = sortInstances(data.instances || []);
+  state.profiles = data.profiles || state.profiles || [];
+  state.logLevel = String(data.manager?.log_level || data.log_level || state.logLevel || 'info').toLowerCase();
+
+  patchManagerSummary();
+  patchDashboardCards(state.instances);
+  updateDiagnosticsVisibility();
+
+  const selectedSummary = state.instances.find((instance) => instance.id === selectedId);
+  if (selectedSummary) {
+    await patchSelectedRuntimeObjects(selectedSummary);
+  }
+}
+
 async function autoRefreshTick(force = false) {
   if (state.autoRefreshBusy) return;
   if (!force && document.hidden) return;
-  if (!force && shouldSkipAutoRefresh()) return;
 
   state.autoRefreshBusy = true;
-  const selectedId = state.selectedId;
-  const currentTab = state.tab;
 
   try {
-    state.tab = currentTab;
-    await loadInstances(selectedId);
+    await refreshRuntimeObjectsOnly();
     state.lastAutoRefreshAt = new Date().toISOString();
   } catch (err) {
     console.warn('[WinoMC] Auto-Refresh fehlgeschlagen', err);
