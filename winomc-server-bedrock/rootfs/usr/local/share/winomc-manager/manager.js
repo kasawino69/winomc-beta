@@ -1,4 +1,4 @@
-const VERSION = '2.1.14b';
+const VERSION = '2.1.15b';
 
 const state = {
   instances: [],
@@ -13,6 +13,8 @@ const state = {
   autoRefreshTimer: null,
   autoRefreshBusy: false,
   lastAutoRefreshAt: null,
+  players: [],
+  playerFilter: 'all',
 };
 
 const BEDROCK_COMMAND_CATALOG_SOURCE = 'Microsoft Bedrock stable command reference + Bedrock archive compatibility list';
@@ -86,6 +88,7 @@ async function api(path, options = {}) {
 const get = (path) => api(path);
 const post = (path, payload = {}) => api(path, { method: 'POST', body: JSON.stringify(payload) });
 const patch = (path, payload = {}) => api(path, { method: 'PATCH', body: JSON.stringify(payload) });
+const put = (path, payload = {}) => api(path, { method: 'PUT', body: JSON.stringify(payload) });
 
 function unwrapInstance(data) {
   return data?.instance || data;
@@ -534,6 +537,108 @@ function collectBedrockSettings(form) {
   return bedrock;
 }
 
+function roleLabel(role) {
+  return ({ operator: 'Operator', member: 'Member', visitor: 'Visitor' }[role] || role || 'Member');
+}
+
+function playerMatchesFilter(player) {
+  const f = state.playerFilter || 'all';
+  if (f === 'all') return true;
+  if (f === 'allowlisted') return Boolean(player.allowlisted);
+  if (f === 'not-allowlisted') return !player.allowlisted;
+  return player.role === f;
+}
+
+function renderPlayersModule(players, warnings = []) {
+  const counts = players.reduce((acc, p) => {
+    acc[p.role] = (acc[p.role] || 0) + 1;
+    acc.allowlisted += p.allowlisted ? 1 : 0;
+    acc.notAllowlisted += p.allowlisted ? 0 : 1;
+    return acc;
+  }, { operator: 0, member: 0, visitor: 0, allowlisted: 0, notAllowlisted: 0 });
+  const filtered = players.filter(playerMatchesFilter);
+  const filters = [
+    ['all', `Alle (${players.length})`],
+    ['operator', `OPs (${counts.operator})`],
+    ['member', `Members (${counts.member})`],
+    ['visitor', `Visitors (${counts.visitor})`],
+    ['allowlisted', `Allowlisted (${counts.allowlisted})`],
+    ['not-allowlisted', `Nicht allowlisted (${counts.notAllowlisted})`],
+  ];
+  return `
+    <section class="players-module" id="playersModule">
+      <div class="info">
+        <strong>Spieler & Rechte:</strong> allowlist.json steuert, wer auf den Server darf. permissions.json steuert Rechte wie Operator, Member oder Visitor. Änderungen benötigen je nach Bedrock-Verhalten ggf. Server-Neustart oder Reload.
+      </div>
+      ${warnings.length ? `<div class="info warning-box">${warnings.map(esc).join('<br>')}</div>` : ''}
+      <div class="actions player-filters">
+        ${filters.map(([key, label]) => `<button type="button" class="${state.playerFilter === key ? 'primary' : 'soft'}" data-player-filter="${esc(key)}">${esc(label)}</button>`).join('')}
+      </div>
+      <form id="playersForm" class="settings-form">
+        <div class="file-table-wrap">
+          <table class="file-table players-table">
+            <thead><tr><th>Name</th><th>XUID</th><th>Rolle</th><th>Allowlist</th><th>Limit ignorieren</th><th>Aktionen</th></tr></thead>
+            <tbody id="playersTableBody">
+              ${filtered.map((p, index) => {
+                const realIndex = players.indexOf(p);
+                return `<tr data-player-row="${realIndex}">
+                  <td><input data-player-field="name" data-player-index="${realIndex}" value="${esc(p.name)}" required></td>
+                  <td><input data-player-field="xuid" data-player-index="${realIndex}" value="${esc(p.xuid)}" inputmode="numeric" pattern="[0-9]+" required></td>
+                  <td><select data-player-field="role" data-player-index="${realIndex}">
+                    ${['operator','member','visitor'].map((role) => `<option value="${role}" ${p.role === role ? 'selected' : ''}>${roleLabel(role)}</option>`).join('')}
+                  </select></td>
+                  <td><input type="checkbox" data-player-field="allowlisted" data-player-index="${realIndex}" ${p.allowlisted ? 'checked' : ''}></td>
+                  <td><input type="checkbox" data-player-field="ignores_player_limit" data-player-index="${realIndex}" ${p.ignores_player_limit ? 'checked' : ''}></td>
+                  <td><button type="button" class="danger" data-player-remove="${realIndex}">Entfernen</button></td>
+                </tr>`;
+              }).join('') || '<tr><td colspan="6">Keine Spieler in diesem Filter.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+        <div class="actions">
+          <button type="button" id="addPlayer">Spieler hinzufügen</button>
+          <button type="button" id="importPlayers">Aus Dateien laden</button>
+          <button type="submit" class="primary">Speichern</button>
+          <span id="playersStatus" class="hint"></span>
+        </div>
+      </form>
+    </section>
+  `;
+}
+
+function collectPlayersForm() {
+  document.querySelectorAll('[data-player-field]').forEach((el) => {
+    const index = Number(el.dataset.playerIndex);
+    const field = el.dataset.playerField;
+    if (!state.players[index]) return;
+    state.players[index][field] = el.type === 'checkbox' ? el.checked : el.value.trim();
+  });
+  return state.players;
+}
+
+function bindPlayersModule(inst) {
+  $('#playersModule')?.addEventListener('click', async (ev) => {
+    const filter = ev.target.closest('[data-player-filter]');
+    if (filter) { collectPlayersForm(); state.playerFilter = filter.dataset.playerFilter; $('#detailContent').innerHTML = renderPlayersModule(state.players); bindPlayersModule(inst); return; }
+    const remove = ev.target.closest('[data-player-remove]');
+    if (remove) { collectPlayersForm(); state.players.splice(Number(remove.dataset.playerRemove), 1); $('#detailContent').innerHTML = renderPlayersModule(state.players); bindPlayersModule(inst); return; }
+    if (ev.target.closest('#addPlayer')) { collectPlayersForm(); state.players.push({ name: '', xuid: '', role: 'member', allowlisted: true, ignores_player_limit: false }); state.playerFilter = 'all'; $('#detailContent').innerHTML = renderPlayersModule(state.players); bindPlayersModule(inst); return; }
+    if (ev.target.closest('#importPlayers')) {
+      try { const data = await post(`/api/instances/${encodeURIComponent(inst.id)}/players/import`, {}); state.players = data.players || []; $('#detailContent').innerHTML = renderPlayersModule(state.players, data.warnings || []); bindPlayersModule(inst); }
+      catch (err) { showError(err); }
+    }
+  });
+  $('#playersForm').onsubmit = async (ev) => {
+    ev.preventDefault();
+    try {
+      const data = await put(`/api/instances/${encodeURIComponent(inst.id)}/players`, { players: collectPlayersForm() });
+      state.players = data.players || [];
+      $('#detailContent').innerHTML = renderPlayersModule(state.players, data.warnings || []);
+      bindPlayersModule(inst);
+    } catch (err) { showError(err); }
+  };
+}
+
 function renderOverviewFacts(inst) {
   const b = inst.bedrock || {};
   const a = inst.automation || {};
@@ -696,6 +801,11 @@ async function renderDetail() {
         showError(err);
       }
     };
+  } else if (state.tab === 'players') {
+    const data = await get(`/api/instances/${encodeURIComponent(inst.id)}/players`);
+    state.players = data.players || [];
+    target.innerHTML = renderPlayersModule(state.players, data.warnings || []);
+    bindPlayersModule(inst);
   } else if (state.tab === 'files') {
     const files = await get(`/api/instances/${encodeURIComponent(inst.id)}/files`);
 
@@ -763,7 +873,7 @@ function removeManualDashboardRefreshButtons() {
 
 function shouldSkipAutoRefresh() {
   const active = document.activeElement;
-  return Boolean(active && active.closest && active.closest('#commandForm, #settingsForm, #createInstanceForm, .autocomplete-box'));
+  return Boolean(active && active.closest && active.closest('#commandForm, #settingsForm, #playersForm, #createInstanceForm, .autocomplete-box'));
 }
 
 async function patchConsoleLog(instanceId) {
