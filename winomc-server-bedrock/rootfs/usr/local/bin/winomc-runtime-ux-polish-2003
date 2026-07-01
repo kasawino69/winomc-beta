@@ -1,36 +1,52 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-TARGET = Path("/usr/local/bin/winomc-console-server")
-VERSION = "2.0.0.5b"
-RIGHTS_MARKER = "v2.0.0.5b direct player rights"
-PROFILE_MARKER = "v2.0.0.5b profile loader"
-MODE_MARKER = "v2.0.0.5b strict mode boundary"
+CONSOLE = Path("/usr/local/bin/winomc-console-server")
+NATIVE_START = Path("/usr/local/bin/winomc-native-start")
+WRITE_PROPS = Path("/usr/local/bin/winomc-write-server-properties")
 
-p = TARGET
-t = p.read_text(encoding="utf-8")
-o = t
+VERSION = "2.0.0.6b"
+RIGHTS_MARKER = "v2.0.0.6b direct player rights"
+PROFILE_MARKER = "v2.0.0.6b profile loader"
+MODE_MARKER = "v2.0.0.6b safe mode boundary"
+START_MARKER = "v2.0.0.6b preserve ui access files"
+PROPS_MARKER = "v2.0.0.6b preserve profile properties"
 
-for old in ("2.0.0.3b", "2.0.0.4b", "2.0.0.2b"):
-    t = t.replace(old, VERSION)
 
-t = t.replace("{ action: 'repair_all_safe', mode: 'safe', confirm: true }", "{ action: 'repair_all_safe', mode: 'expert', confirm: true }")
-t = t.replace("{ action: t.dataset.diagnosticsRepair, mode: 'safe', confirm: true }", "{ action: t.dataset.diagnosticsRepair, mode: 'expert', confirm: true }")
-t = t.replace("alert(result.message || 'Reparatur abgeschlossen.');", "appendLine('[Diagnose] ' + (result.message || 'Reparatur abgeschlossen.'), 'info');")
-t = t.replace("frameworkCard('Keine Packs','-', 'Installierte Packs erscheinen hier.', 'Warnung')", "frameworkCard('Keine Packs','0', 'Keine lokalen Nutzer-Packs installiert.', 'OK')")
+def replace_once(text, old, new):
+    if old not in text:
+        return text
+    return text.replace(old, new, 1)
 
-old = "data.checks.map(c=>frameworkCard(c.title,c.status,c.message,c.status)).join('') + '<div class=\"tile\"><button class=\"primary\" id=\"updatesPrepare2\" type=\"button\">Update vorbereiten</button><p>Erstellt Backup und markiert Update-Bereitschaft. Danach Add-on neu starten.</p></div>'"
-new = "data.checks.map(c=>frameworkCard(c.title,c.status,c.message,c.status)).join('') + '<article class=\"tile\"><div class=\"tile-title\">Update-Ablauf</div><div class=\"tile-desc\">Kein Extra-Vorbereitungsschritt: Bei aktivem BDS_AUTO_UPDATE oder gesetzter VERSION reicht ein Add-on-Neustart. Erstelle vorher bei Bedarf ein Backup.</div></article>'"
-t = t.replace(old, new)
 
-mode_css = r'''
-    /* v2.0.0.5b strict mode boundary */
-    body.winomc-mode-mobile:not(.desktop-mode) .desktop-stage,
-    body.winomc-mode-mobile:not(.desktop-mode) .desktop-window,
-    body.winomc-mode-mobile:not(.desktop-mode) .desktop-icon,
-    body.winomc-mode-pc:not(.desktop-mode) .desktop-stage,
-    body.winomc-mode-pc:not(.desktop-mode) .desktop-window,
-    body.winomc-mode-pc:not(.desktop-mode) .desktop-icon {
+def patch_console():
+    if not CONSOLE.exists():
+        print("WinoMC console patch skipped: console server not found")
+        return
+
+    t = CONSOLE.read_text(encoding="utf-8")
+    o = t
+
+    for old in ("2.0.0.5b", "2.0.0.4b", "2.0.0.3b", "2.0.0.2b"):
+        t = t.replace(old, VERSION)
+
+    t = t.replace("{ action: 'repair_all_safe', mode: 'safe', confirm: true }", "{ action: 'repair_all_safe', mode: 'expert', confirm: true }")
+    t = t.replace("{ action: t.dataset.diagnosticsRepair, mode: 'safe', confirm: true }", "{ action: t.dataset.diagnosticsRepair, mode: 'expert', confirm: true }")
+    t = t.replace("alert(result.message || 'Reparatur abgeschlossen.');", "appendLine('[Diagnose] ' + (result.message || 'Reparatur abgeschlossen.'), 'info');")
+    t = t.replace("frameworkCard('Keine Packs','-', 'Installierte Packs erscheinen hier.', 'Warnung')", "frameworkCard('Keine Packs','0', 'Keine lokalen Nutzer-Packs installiert.', 'OK')")
+
+    old_update = "data.checks.map(c=>frameworkCard(c.title,c.status,c.message,c.status)).join('') + '<div class=\"tile\"><button class=\"primary\" id=\"updatesPrepare2\" type=\"button\">Update vorbereiten</button><p>Erstellt Backup und markiert Update-Bereitschaft. Danach Add-on neu starten.</p></div>'"
+    new_update = "data.checks.map(c=>frameworkCard(c.title,c.status,c.message,c.status)).join('') + '<article class=\"tile\"><div class=\"tile-title\">Update-Ablauf</div><div class=\"tile-desc\">Kein Extra-Vorbereitungsschritt: Bei aktivem BDS_AUTO_UPDATE oder gesetzter VERSION reicht ein Add-on-Neustart. Erstelle vorher bei Bedarf ein Backup.</div></article>'"
+    t = t.replace(old_update, new_update)
+
+    mode_css = r'''
+    /* v2.0.0.6b safe mode boundary */
+    body.winomc-mode-mobile:not(.desktop-mode) .desktop-layer,
+    body.winomc-mode-mobile:not(.desktop-mode) .desktop-taskbar,
+    body.winomc-mode-mobile:not(.desktop-mode) .desktop-start-menu,
+    body.winomc-mode-pc:not(.desktop-mode) .desktop-layer,
+    body.winomc-mode-pc:not(.desktop-mode) .desktop-taskbar,
+    body.winomc-mode-pc:not(.desktop-mode) .desktop-start-menu {
       display: none !important;
       visibility: hidden !important;
       pointer-events: none !important;
@@ -45,34 +61,38 @@ mode_css = r'''
       pointer-events: none !important;
     }
 '''
-if MODE_MARKER not in t:
-    t = t.replace("  </style>", mode_css + "  </style>", 1)
+    if MODE_MARKER not in t:
+        t = t.replace("  </style>", mode_css + "  </style>", 1)
 
-rights_block = r'''
+    rights_block = r'''
 
-# v2.0.0.5b direct player rights
-def _player_name_key_2005(name):
+
+# v2.0.0.6b direct player rights
+def _player_name_key_2006(name):
     return re.sub(r"\s+", " ", str(name or "").strip()).lower().replace(" ", "")
 
-def _player_key_2005(player):
+def _player_key_2006(player):
     xuid = str(player.get("xuid") or "").strip()
     if xuid:
         return "xuid:" + xuid
-    return "name:" + _player_name_key_2005(player.get("name"))
+    return "name:" + _player_name_key_2006(player.get("name"))
 
-def known_player_xuid_2005(name):
-    wanted = _player_name_key_2005(name)
+def known_player_xuid_2006(name):
+    wanted = _player_name_key_2006(name)
     if not wanted:
         return ""
     known = {}
     def add(n, x):
-        n = _player_name_key_2005(n)
+        n = _player_name_key_2006(n)
         x = str(x or "").strip()
         if n and re.match(r"^[0-9]{5,32}$", x):
             known[n] = x
     for raw in re.split(r"[,;\n]+", os.environ.get("ALLOW_LIST_USERS", "") or ""):
         if ":" in raw:
             n, x = raw.split(":", 1)
+            add(n, x)
+        elif "=" in raw:
+            n, x = raw.split("=", 1)
             add(n, x)
     allow, _ = json_file(os.path.join(DATA_DIR, "allowlist.json"), [])
     if isinstance(allow, list):
@@ -97,13 +117,13 @@ def known_player_xuid_2005(name):
             pass
     return known.get(wanted, "")
 
-def _normalize_player_entry_direct_2005(item):
+def _normalize_player_entry_direct_2006(item):
     if not isinstance(item, dict):
         raise ValueError("Spieler-Eintrag ist ungültig.")
     name = str(item.get("name") or "").strip()
     xuid = str(item.get("xuid") or "").strip()
     if name and not xuid:
-        xuid = known_player_xuid_2005(name)
+        xuid = known_player_xuid_2006(name)
     if not name and not xuid:
         raise ValueError("Spieler braucht mindestens Gamertag oder XUID.")
     if xuid and not re.match(r"^[0-9]{5,32}$", xuid):
@@ -123,7 +143,7 @@ def players_payload():
         if not isinstance(item, dict):
             continue
         row = {"name": item.get("name", "-"), "xuid": item.get("xuid", ""), "allowlisted": True, "role": "member", "issues": []}
-        key = _player_key_2005(row)
+        key = _player_key_2006(row)
         existing = by.setdefault(key, row)
         existing["allowlisted"] = True
         if row.get("xuid"):
@@ -134,14 +154,14 @@ def players_payload():
         if not isinstance(perm, dict):
             continue
         row = {"name": perm.get("name", "-"), "xuid": perm.get("xuid", ""), "allowlisted": False, "role": normalize_role(perm.get("permission", "member")), "issues": []}
-        key = _player_key_2005(row)
+        key = _player_key_2006(row)
         existing = by.setdefault(key, row)
         existing["role"] = normalize_role(perm.get("permission", "member"))
         if row.get("xuid"):
             existing["xuid"] = row["xuid"]
     for row in by.values():
         if row.get("name") and not row.get("xuid"):
-            row["xuid"] = known_player_xuid_2005(row.get("name"))
+            row["xuid"] = known_player_xuid_2006(row.get("name"))
         if row.get("role") == "operator" and not row.get("allowlisted"):
             row.setdefault("issues", []).append("OP ist nicht auf der Allowlist.")
     warnings = []
@@ -158,10 +178,10 @@ def players_payload():
 def save_players(players):
     if not isinstance(players, list):
         raise ValueError("players muss eine Liste sein.")
-    normalized = [_normalize_player_entry_direct_2005(item) for item in players]
+    normalized = [_normalize_player_entry_direct_2006(item) for item in players]
     seen = set()
     for player in normalized:
-        key = _player_key_2005(player)
+        key = _player_key_2006(player)
         if key in seen:
             raise ValueError("Doppelter Spieler/XUID: %s" % key)
         seen.add(key)
@@ -181,40 +201,57 @@ def save_players(players):
     payload.update({"saved": True, "allowlist_result": allow_result, "permissions_result": perm_result, "message": "Spielerrechte wurden direkt in allowlist.json und permissions.json gespeichert."})
     return payload
 '''
-if RIGHTS_MARKER not in t:
-    t = t.replace("\n\ndef find_backup_meta(backup_name):", rights_block + "\n\ndef find_backup_meta(backup_name):", 1)
+    if RIGHTS_MARKER not in t:
+        t = t.replace("\n\ndef find_backup_meta(backup_name):", rights_block + "\n\ndef find_backup_meta(backup_name):", 1)
 
-profile_mode_js = r'''
-    /* v2.0.0.5b profile loader + strict mode boundary */
+    profile_mode_js = r'''
+    /* v2.0.0.6b profile loader + safe mode boundary */
     (() => {
-      const body = document.body;
-      function currentWinoMode2005() {
+      function getBody2006() { return document.body; }
+      function currentWinoMode2006() {
+        const body = getBody2006();
+        if (!body) return 'pc';
         if (body.classList.contains('desktop-mode')) return 'desktop';
+        if (body.classList.contains('winomc-mobile')) return 'mobile';
         if (body.classList.contains('ux-mobile')) return 'mobile';
+        try {
+          if (window.WinoMCMobileUI?.isActive?.()) return 'mobile';
+        } catch (_) {}
+        if (body.classList.contains('winomc-pc')) return 'pc';
         return 'pc';
       }
-      function syncWinoMode2005() {
-        const mode = currentWinoMode2005();
+      function syncWinoMode2006() {
+        const body = getBody2006();
+        if (!body) return;
+        const mode = currentWinoMode2006();
         body.dataset.winomcMode = mode;
         body.classList.toggle('winomc-mode-mobile', mode === 'mobile');
         body.classList.toggle('winomc-mode-pc', mode === 'pc');
         body.classList.toggle('winomc-mode-desktop', mode === 'desktop');
-        if (mode !== 'mobile') body.classList.remove('mobile-file-tools-open');
-        if (mode !== 'pc') body.classList.remove('sidebar-rail-active');
         if (mode !== 'desktop') body.classList.remove('desktop-dragging', 'desktop-resizing');
       }
       window.WinoMCMode = {
-        current: () => document.body.dataset.winomcMode || currentWinoMode2005(),
-        isMobile: () => (document.body.dataset.winomcMode || currentWinoMode2005()) === 'mobile',
-        isPC: () => (document.body.dataset.winomcMode || currentWinoMode2005()) === 'pc',
-        isDesktop: () => (document.body.dataset.winomcMode || currentWinoMode2005()) === 'desktop'
+        sync: syncWinoMode2006,
+        current: () => document.body?.dataset?.winomcMode || currentWinoMode2006(),
+        isMobile: () => (document.body?.dataset?.winomcMode || currentWinoMode2006()) === 'mobile',
+        isPC: () => (document.body?.dataset?.winomcMode || currentWinoMode2006()) === 'pc',
+        isDesktop: () => (document.body?.dataset?.winomcMode || currentWinoMode2006()) === 'desktop'
       };
-      const observer = new MutationObserver(syncWinoMode2005);
-      observer.observe(body, { attributes: true, attributeFilter: ['class'] });
-      window.addEventListener('resize', syncWinoMode2005, { passive: true });
-      syncWinoMode2005();
+      function installModeObserver2006() {
+        const body = getBody2006();
+        if (!body || body.dataset.winomcModeObserver === '1') return;
+        body.dataset.winomcModeObserver = '1';
+        const observer = new MutationObserver(syncWinoMode2006);
+        observer.observe(body, { attributes: true, attributeFilter: ['class'] });
+        window.addEventListener('resize', syncWinoMode2006, { passive: true });
+        syncWinoMode2006();
+        window.setTimeout(syncWinoMode2006, 50);
+        window.setTimeout(syncWinoMode2006, 250);
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installModeObserver2006, { once: true });
+      else installModeObserver2006();
 
-      window.loadProfiles2 = async function loadProfiles2Stable2005() {
+      window.loadProfiles2 = async function loadProfiles2Stable2006() {
         const target = document.getElementById('profilesGrid');
         const button = document.getElementById('profilesLoad');
         try {
@@ -246,11 +283,180 @@ profile_mode_js = r'''
       }, true);
     })();
 '''
-if PROFILE_MARKER not in t:
-    t = t.replace("</script>", profile_mode_js + "\n</script>", 1)
+    if PROFILE_MARKER not in t:
+        t = t.replace("</script>", profile_mode_js + "\n</script>", 1)
 
-if t != o:
-    p.write_text(t, encoding="utf-8")
-    print("WinoMC %s PR23 cleanup applied" % VERSION)
-else:
-    print("WinoMC %s PR23 cleanup already present" % VERSION)
+    if t != o:
+        CONSOLE.write_text(t, encoding="utf-8")
+        print("WinoMC %s console polish applied" % VERSION)
+    else:
+        print("WinoMC %s console polish already present" % VERSION)
+
+
+def patch_native_start():
+    if not NATIVE_START.exists():
+        print("WinoMC native-start patch skipped: file not found")
+        return
+    t = NATIVE_START.read_text(encoding="utf-8")
+    o = t
+
+    helper = r'''
+# v2.0.0.6b preserve ui access files
+has_list_values() {
+  values="$(list_values "${1:-}")"
+  old_ifs="${IFS}"
+  IFS=','
+
+  for entry in ${values}; do
+    entry="$(trim_value "${entry}")"
+    if [ -n "${entry}" ]; then
+      IFS="${old_ifs}"
+      return 0
+    fi
+  done
+
+  IFS="${old_ifs}"
+  return 1
+}
+'''
+    if START_MARKER not in t:
+        t = t.replace('\nwrite_allowlist_entry() {\n', helper + '\nwrite_allowlist_entry() {\n', 1)
+
+    old_write_allowlist = r'''write_allowlist() {
+  tmp_file="$(mktemp)"
+  allowed_values="$(list_values "${ALLOW_LIST_USERS:-}")"
+
+  old_ifs="${IFS}"
+  IFS=','
+
+  for entry in ${allowed_values}; do
+    entry="$(trim_value "${entry}")"
+
+    if [ -z "${entry}" ]; then
+      continue
+    fi
+
+    write_allowlist_entry "${entry}" "${tmp_file}"
+  done
+
+  IFS="${old_ifs}"
+
+  json_array_from_lines "${tmp_file}" > "${SERVER_DATA_DIR}/allowlist.json"
+  rm -f "${tmp_file}"
+
+  echo "WinoMC native allowlist.json written"
+}
+'''
+    new_write_allowlist = r'''write_allowlist() {
+  if ! has_list_values "${ALLOW_LIST_USERS:-}"; then
+    if [ -f "${SERVER_DATA_DIR}/allowlist.json" ]; then
+      echo "WinoMC native allowlist.json preserved"
+      return 0
+    fi
+  fi
+
+  tmp_file="$(mktemp)"
+  allowed_values="$(list_values "${ALLOW_LIST_USERS:-}")"
+
+  old_ifs="${IFS}"
+  IFS=','
+
+  for entry in ${allowed_values}; do
+    entry="$(trim_value "${entry}")"
+
+    if [ -z "${entry}" ]; then
+      continue
+    fi
+
+    write_allowlist_entry "${entry}" "${tmp_file}"
+  done
+
+  IFS="${old_ifs}"
+
+  json_array_from_lines "${tmp_file}" > "${SERVER_DATA_DIR}/allowlist.json"
+  rm -f "${tmp_file}"
+
+  echo "WinoMC native allowlist.json written"
+}
+'''
+    t = replace_once(t, old_write_allowlist, new_write_allowlist)
+
+    old_write_permissions = r'''write_permissions() {
+  tmp_file="$(mktemp)"
+
+  append_permission_entries "operator" "${OPS:-}" "${tmp_file}"
+  append_permission_entries "member" "${MEMBERS:-}" "${tmp_file}"
+  append_permission_entries "visitor" "${VISITORS:-}" "${tmp_file}"
+
+  json_array_from_lines "${tmp_file}" > "${SERVER_DATA_DIR}/permissions.json"
+  rm -f "${tmp_file}"
+
+  echo "WinoMC native permissions.json written"
+}
+'''
+    new_write_permissions = r'''write_permissions() {
+  if ! has_list_values "${OPS:-}" && ! has_list_values "${MEMBERS:-}" && ! has_list_values "${VISITORS:-}"; then
+    if [ -f "${SERVER_DATA_DIR}/permissions.json" ]; then
+      echo "WinoMC native permissions.json preserved"
+      return 0
+    fi
+  fi
+
+  tmp_file="$(mktemp)"
+
+  append_permission_entries "operator" "${OPS:-}" "${tmp_file}"
+  append_permission_entries "member" "${MEMBERS:-}" "${tmp_file}"
+  append_permission_entries "visitor" "${VISITORS:-}" "${tmp_file}"
+
+  json_array_from_lines "${tmp_file}" > "${SERVER_DATA_DIR}/permissions.json"
+  rm -f "${tmp_file}"
+
+  echo "WinoMC native permissions.json written"
+}
+'''
+    t = replace_once(t, old_write_permissions, new_write_permissions)
+
+    if t != o:
+        NATIVE_START.write_text(t, encoding="utf-8")
+        print("WinoMC %s native-start persistence patch applied" % VERSION)
+    else:
+        print("WinoMC %s native-start persistence patch already present" % VERSION)
+
+
+def patch_write_properties():
+    if not WRITE_PROPS.exists():
+        print("WinoMC write-server-properties patch skipped: file not found")
+        return
+    t = WRITE_PROPS.read_text(encoding="utf-8")
+    o = t
+
+    if PROPS_MARKER not in t:
+        t = t.replace('PROPERTIES_FILE="${SERVER_DATA_DIR}/server.properties"\n',
+                      'PROPERTIES_FILE="${SERVER_DATA_DIR}/server.properties"\nPROFILE_STATE_FILE="${SERVER_DATA_DIR}/.winomc/applied-profile.json"\n', 1)
+        guard = r'''
+# v2.0.0.6b preserve profile properties
+if [ "${WINOMC_PRESERVE_PROFILE_PROPERTIES:-true}" != "false" ] && [ -f "${PROFILE_STATE_FILE}" ] && [ -f "${PROPERTIES_FILE}" ]; then
+  echo "WinoMC native server.properties preserved: applied profile is active"
+  exit 0
+fi
+
+'''
+        t = t.replace('mkdir -p "${SERVER_DATA_DIR}"\n\ncat > "${PROPERTIES_FILE}" <<EOF\n',
+                      'mkdir -p "${SERVER_DATA_DIR}"\n\n' + guard + 'cat > "${PROPERTIES_FILE}" <<EOF\n', 1)
+
+    if t != o:
+        WRITE_PROPS.write_text(t, encoding="utf-8")
+        print("WinoMC %s server.properties persistence patch applied" % VERSION)
+    else:
+        print("WinoMC %s server.properties persistence patch already present" % VERSION)
+
+
+def main():
+    patch_console()
+    patch_native_start()
+    patch_write_properties()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
