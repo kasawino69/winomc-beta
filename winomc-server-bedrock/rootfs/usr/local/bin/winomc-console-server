@@ -45,7 +45,7 @@ FILE_BACKUP_DIR = os.environ.get("WINOMC_FILE_BACKUP_DIR", os.path.join(DATA_DIR
 TRASH_DIR = os.environ.get("WINOMC_TRASH_DIR", os.path.join(DATA_DIR, ".winomc", "trash"))
 TRASH_RETENTION_DAYS = int(os.environ.get("WINOMC_TRASH_RETENTION_DAYS", "7"))
 CONSOLE_SETTINGS_FILE = os.environ.get("WINOMC_CONSOLE_SETTINGS_FILE", os.path.join(DATA_DIR, ".winomc", "web_console_settings.json"))
-WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.0.0.8b")
+WINOMC_VERSION = os.environ.get("WINOMC_VERSION", "2.0.0.9b")
 BACKUP_DIR = os.environ.get("WINOMC_BACKUP_DIR", os.path.join(DATA_DIR, "backups"))
 BACKUP_KEEP = int(os.environ.get("WINOMC_BACKUP_KEEP", os.environ.get("PACKAGE_BACKUP_KEEP", "5")))
 SERVER_DIR = os.environ.get("WINOMC_SERVER_DIR", DATA_DIR)
@@ -82,7 +82,7 @@ EDITABLE_TEXT_EXTENSIONS = {
 JSON_EXTENSIONS = {".json"}
 ZIP_EXTENSIONS = {".zip", ".mcpack", ".mcaddon", ".mcworld", ".mctemplate"}
 
-INDEX_HTML = r"""<!doctype html>
+LEGACY_INDEX_HTML = r"""<!doctype html>
 <html lang="de">
 <head>
   <meta charset="utf-8">
@@ -155,6 +155,13 @@ INDEX_HTML = r"""<!doctype html>
     .status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
     .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 4px rgba(245, 158, 11, .12); }
     .dot.ok { background: var(--accent); box-shadow: 0 0 0 4px rgba(34, 197, 94, .14); }
+    .winomc-boot-fallback { margin: 14px auto 0; max-width: 1500px; padding: 0 14px; display: block !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 1000; }
+    .winomc-boot-box { border: 1px solid rgba(96, 165, 250, .35); border-radius: 14px; background: rgba(15, 23, 42, .96); color: #e5e7eb; padding: 12px 14px; box-shadow: 0 18px 45px rgba(0,0,0,.22); }
+    .winomc-boot-title { font-weight: 780; margin-bottom: 4px; }
+    .winomc-boot-steps { margin: 8px 0 0; padding-left: 18px; color: #cbd5e1; line-height: 1.5; }
+    .winomc-boot-error { margin-top: 8px; color: #fecaca; background: rgba(239, 68, 68, .14); border: 1px solid rgba(239, 68, 68, .28); border-radius: 10px; padding: 8px 10px; }
+    body.winomc-js-ready #bootFallback { position: static !important; }
+    body.winomc-app-rendered #bootFallback { display: none !important; }
     .layout { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); gap: 14px; max-width: 1500px; margin: 0 auto; padding: 14px; transition: grid-template-columns .18s ease; }
     nav { background: var(--panel); border: 1px solid var(--border-soft); border-radius: var(--workbench-radius); padding: 10px; height: calc(100vh - var(--console-height) - 92px); min-height: 320px; position: sticky; top: 74px; overflow: auto; transition: width .18s ease, padding .18s ease; }
     .nav-title { padding: 10px 10px 12px; color: var(--muted-2); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
@@ -4814,6 +4821,38 @@ body.winomc-mobile .editor-panel.editor-open {
 
 </head>
 <body>
+  <section id="bootFallback" class="winomc-boot-fallback" aria-live="polite">
+    <div class="winomc-boot-box">
+      <div class="winomc-boot-title">WinoMC Console wird geladen...</div>
+      <p>Wenn JavaScript oder ein Ingress-Pfad fehlschlägt, bleibt diese Diagnose sichtbar.</p>
+      <ol id="bootSteps" class="winomc-boot-steps">
+        <li>HTML geladen</li>
+      </ol>
+      <div id="bootError" class="winomc-boot-error" hidden></div>
+    </div>
+  </section>
+  <noscript><section class="winomc-boot-fallback"><div class="winomc-boot-box"><div class="winomc-boot-title">JavaScript ist deaktiviert.</div><p>Die WinoMC Console benötigt JavaScript. Der statische Fallback bestätigt, dass HTML sichtbar ausgeliefert wurde.</p></div></section></noscript>
+  <script>
+    (function () {
+      function step(text) {
+        var list = document.getElementById('bootSteps');
+        if (!list) return;
+        var item = document.createElement('li');
+        item.textContent = text;
+        list.appendChild(item);
+      }
+      function fail(message) {
+        var box = document.getElementById('bootError');
+        if (box) { box.hidden = false; box.textContent = 'Fehler: ' + message; }
+        step('Fehler abgefangen');
+      }
+      window.WinoMCBoot = { step: step, fail: fail };
+      document.documentElement.classList.add('winomc-html-loaded');
+      step('JavaScript gestartet');
+      window.addEventListener('error', function (event) { fail(event.message || 'Unbekannter JavaScript-Fehler'); });
+      window.addEventListener('unhandledrejection', function (event) { var reason = event.reason; fail((reason && (reason.message || reason.toString())) || 'Unbehandelte Promise-Ablehnung'); });
+    })();
+  </script>
   <header>
     <h1 id="appTitle">WinoMC 2.0.0.8b Framework Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
@@ -5403,7 +5442,7 @@ body.winomc-mobile .editor-panel.editor-open {
     let logSource = null;
     let renderedLogLines = 0;
     function setManagedInterval(key, fn, delay) { const existing = startupIntervals.get(key); if (existing) window.clearInterval(existing); const id = window.setInterval(fn, delay); startupIntervals.set(key, id); return id; }
-    function showStartupError(message) { const text = 'Startfehler: ' + message; statusEl.textContent = text; statusDot.classList.remove('ok'); const target = document.querySelector('[data-panel="overview"] .card') || document.querySelector('[data-panel="overview"]') || document.querySelector('main'); if (target && !document.getElementById('startupErrorBanner')) { const box = document.createElement('div'); box.id = 'startupErrorBanner'; box.className = 'info warn'; box.textContent = text + ' · Die Oberfläche bleibt bedienbar; bitte Backend-Logs prüfen.'; target.prepend(box); } }
+    function showStartupError(message) { window.WinoMCBoot?.fail(message); const text = 'Startfehler: ' + message; statusEl.textContent = text; statusDot.classList.remove('ok'); const target = document.querySelector('[data-panel="overview"] .card') || document.querySelector('[data-panel="overview"]') || document.querySelector('main'); if (target && !document.getElementById('startupErrorBanner')) { const box = document.createElement('div'); box.id = 'startupErrorBanner'; box.className = 'info warn'; box.textContent = text + ' · Die Oberfläche bleibt bedienbar; bitte Backend-Logs prüfen.'; target.prepend(box); } }
     async function fetchWithTimeout(url, options = {}, timeout = STARTUP_REQUEST_TIMEOUT_MS) { const controller = new AbortController(); const timer = window.setTimeout(() => controller.abort(), timeout); try { return await fetch(url, { ...options, signal: controller.signal }); } catch (err) { if (err.name === 'AbortError') throw new Error('Zeitüberschreitung beim Laden von ' + url); throw err; } finally { window.clearTimeout(timer); } }
     async function readJsonResponse(res) { let data = {}; try { data = await res.json(); } catch (_) { throw new Error('Ungültige API-Antwort (' + res.status + ')'); } if (!res.ok || !data.ok) throw new Error(data.error || res.statusText || ('HTTP ' + res.status)); return data; }
     async function fetchJson(path, params = {}) { return readJsonResponse(await fetchWithTimeout(apiUrl(path, params), { cache: 'no-store' })); }
@@ -5519,7 +5558,7 @@ body.winomc-mobile .editor-panel.editor-open {
     function activateTab(tab) { if (document.body.classList.contains('desktop-mode')) { openDesktopWindow(tab); return; } document.body.classList.toggle('hide-hero', tab !== 'overview'); document.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item.dataset.tab === tab)); document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab)); if (document.body.classList.contains('sidebar-collapsed')) requestAnimationFrame(scrollActiveSidebarIconIntoView); if (tab === 'files') initFileManager(); if (tab === 'overview' || tab === 'network') loadStatus(); if (tab === 'backups') loadBackups2(); if (tab === 'diagnostics') loadDiagnostics2(); if (tab === 'players') loadPlayers2(); if (tab === 'packs') { loadTransfer2(); loadPacks2(); } if (tab === 'transfer') loadTransfer2(); if (tab === 'updates') loadUpdates2(); if (tab === 'firststart') loadProfiles2(); }
     function openRoot(root, path = '/') { activateTab('files'); setTimeout(async () => { await initFileManager(); currentFileRoot = root; fileRootSelect.value = root; await loadFileList(path); }, 0); }
 
-    async function loadStatus() { try { const data = await fetchJson('/api/status'); latestStatus = data; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v||'Nicht verfügbar'}; set('statPlayers', data.metrics?.players?.label); set('statMemory', data.metrics?.memory?.label); set('statDisk', data.metrics?.disk?.label); set('statWinoVersion', data.winomc_version || '2.0.0'); set('statHealth', 'Health: ' + (data.health?.overall || 'Nicht verfügbar')); set('statLastBackup', data.backup?.latest?.name || 'Kein Backup'); set('statProtection', 'Online: '+(data.env.ONLINE_MODE||'-')+' · Allowlist: '+(data.env.ALLOW_LIST||'-')); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
+    async function loadStatus() { try { window.WinoMCBoot?.step('Status API wird geladen'); const data = await fetchJson('/api/status'); window.WinoMCBoot?.step('Status API erreicht'); latestStatus = data; data.env = data.env || {}; document.getElementById('statServerName').textContent = data.env.SERVER_NAME || '-'; document.getElementById('statLevelName').textContent = 'Welt: ' + (data.env.LEVEL_NAME || '-'); document.getElementById('statVersion').textContent = data.env.VERSION || '-'; document.getElementById('statRuntime').textContent = 'Runtime: native · BDS Auto Update: ' + (data.env.BDS_AUTO_UPDATE || '-'); document.getElementById('statPorts').textContent = (data.env.SERVER_PORT || '-') + ' / ' + (data.env.SERVER_PORT_V6 || '-'); document.getElementById('statLan').textContent = 'LAN: ' + (data.env.ENABLE_LAN_VISIBILITY || '-'); document.getElementById('statFifo').textContent = data.fifo_exists ? 'Console FIFO vorhanden' : 'Console FIFO fehlt'; document.getElementById('statLog').textContent = data.log_exists ? 'Logdatei vorhanden' : 'Logdatei fehlt'; document.getElementById('networkIpv4').textContent = 'SERVER_PORT=' + (data.env.SERVER_PORT || '-'); document.getElementById('networkIpv6').textContent = 'SERVER_PORT_V6=' + (data.env.SERVER_PORT_V6 || '-') + ' · ENABLE_BDS_V6BIND_FIX=' + (data.env.ENABLE_BDS_V6BIND_FIX || '-'); document.getElementById('networkLan').textContent = 'ENABLE_LAN_VISIBILITY=' + (data.env.ENABLE_LAN_VISIBILITY || '-'); const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v||'Nicht verfügbar'}; set('statPlayers', data.metrics?.players?.label); set('statMemory', data.metrics?.memory?.label); set('statDisk', data.metrics?.disk?.label); set('statWinoVersion', data.winomc_version || '2.0.0'); set('statHealth', 'Health: ' + (data.health?.overall || 'Nicht verfügbar')); set('statLastBackup', data.backup?.latest?.name || 'Kein Backup'); set('statProtection', 'Online: '+(data.env.ONLINE_MODE||'-')+' · Allowlist: '+(data.env.ALLOW_LIST||'-')); } catch (err) { appendLine('[WinoMC Status] ' + err.message, 'error'); } }
 
     async function initFileManager() { if (filesInitialized) { await loadFileList(); return; } filesInitialized = true; try { setFilesStatus('Lade Bereiche...', 'warn'); const data = await fetchJson('/api/files/roots'); fileRootSelect.innerHTML = ''; data.roots.forEach(root => { const option = document.createElement('option'); option.value = root.key; option.textContent = root.label + (root.exists ? '' : ' (fehlt)'); option.disabled = !root.exists || !root.readable; fileRootSelect.appendChild(option); }); const firstEnabled = [...fileRootSelect.options].find(option => !option.disabled); if (![...fileRootSelect.options].some(option => option.value === currentFileRoot && !option.disabled)) currentFileRoot = firstEnabled ? firstEnabled.value : 'config'; fileRootSelect.value = currentFileRoot; await loadTrashSettings(); await syncWebProtectionFromServer(); await loadFileList(currentFilePath); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
     async function loadFileList(path) { if (path !== undefined) currentFilePath = normalizeUiPath(path); currentFileRoot = fileRootSelect.value || currentFileRoot; try { setFilesStatus('Lade...', 'warn'); updatePathDisplay(); const data = await fetchJson('/api/files/list', { root: currentFileRoot, path: currentFilePath }); currentFilePath = data.path || '/'; fileParent.disabled = currentFilePath === '/'; updatePathDisplay(); renderFileEntries(data.entries || []); setFilesStatus('Bereit', ''); } catch (err) { setFilesStatus('Fehler', 'warn'); fileTableBody.innerHTML = '<tr><td colspan="5">Fehler: ' + escapeHtml(err.message) + '</td></tr>'; } }
@@ -6818,7 +6857,7 @@ body.winomc-mobile .editor-panel.editor-open {
       updateDesktopClock();
     }
 
-    function connectLogs() { if (logSource) { try { logSource.close(); } catch (_) {} } logSource = new EventSource('./api/logs'); logSource.onopen = () => { statusEl.textContent = 'Live verbunden'; statusDot.classList.add('ok'); }; logSource.onmessage = event => { try { const data = JSON.parse(event.data); if (data.line) { renderedLogLines += 1; if (renderedLogLines <= STARTUP_MAX_LOG_LINES || log.children.length < STARTUP_MAX_LOG_LINES) appendLine(data.line); } } catch (_) {} }; logSource.onerror = () => { statusEl.textContent = 'Log-Verbindung wartet auf Backend...'; statusDot.classList.remove('ok'); }; }
+    function connectLogs() { try { window.WinoMCBoot?.step('Live-Log wird verbunden'); if (!window.EventSource) { appendLine('[WinoMC Logs] EventSource wird von diesem Browser nicht unterstützt.', 'error'); return; } if (logSource) { try { logSource.close(); } catch (_) {} } logSource = new EventSource(apiUrl('/api/logs')); logSource.onopen = () => { statusEl.textContent = 'Live verbunden'; statusDot.classList.add('ok'); }; logSource.onmessage = event => { try { const data = JSON.parse(event.data); if (data.line) { renderedLogLines += 1; if (renderedLogLines <= STARTUP_MAX_LOG_LINES || log.children.length < STARTUP_MAX_LOG_LINES) appendLine(data.line); } } catch (_) {} }; logSource.onerror = () => { statusEl.textContent = 'Log-Verbindung wartet auf Backend...'; statusDot.classList.remove('ok'); window.WinoMCBoot?.step('Live-Log wartet'); }; } catch (err) { appendLine('[WinoMC Logs] ' + err.message, 'error'); window.WinoMCBoot?.fail('Live-Log: ' + err.message); } }
     applySidebarState(); applyConsoleSize(localStorage.getItem(STORE_CONSOLE_SIZE) || 'normal'); applyEditorPrefs(); initConsoleResize();
 
 
@@ -7467,7 +7506,7 @@ body.winomc-mobile .editor-panel.editor-open {
       } catch (err) { alert(err.message); appendLine('[WinoMC 2.0] '+err.message,'error'); }
     });
 
-    try { initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); initAdaptiveUx(); renderDashboard(); window.setTimeout(connectLogs, 250); loadStatus().catch(err => showStartupError(err.message)); } catch (err) { showStartupError(err.message); }
+    try { window.WinoMCBoot?.step('Basis-UI wird gerendert'); initDesktopConsoleWindow(); initFileSplitResize(); initCardChrome(); initDesktopWorkbench(); initAdaptiveUx(); renderDashboard(); document.body.classList.add('winomc-js-ready'); window.WinoMCBoot?.step('Basis-UI sichtbar'); window.setTimeout(() => document.body.classList.add('winomc-app-rendered'), 1200); loadStatus().catch(err => showStartupError(err.message)); window.setTimeout(connectLogs, 900); } catch (err) { showStartupError(err.message); }
   
 
     /* v1.6.14 UX and metrics controllers */
@@ -8888,6 +8927,152 @@ body.winomc-mobile .editor-panel.editor-open {
 </script>
 </body>
 </html>
+"""
+
+
+INDEX_HTML = r"""<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="winomc-console-version" content="2.0.0.9b">
+  <title>WinoMC Console 2.0.0.9b</title>
+  <style data-version="2.0.0.9b">
+    :root{color-scheme:dark;--bg:#0b1120;--panel:#111827;--panel2:#172033;--text:#e5e7eb;--muted:#94a3b8;--line:#334155;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--blue:#60a5fa}*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:radial-gradient(circle at top left,rgba(34,197,94,.12),transparent 30rem),var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{display:block!important;visibility:visible!important;opacity:1!important}.wmc-static-shell,.wmc-app{display:block;visibility:visible;opacity:1}.wmc-static-shell{max-width:1280px;margin:0 auto;padding:14px}.wmc-card,.wmc-panel{background:rgba(17,24,39,.94);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 14px 42px rgba(0,0,0,.2)}.wmc-header{position:sticky;top:0;z-index:2;background:rgba(15,23,42,.96);border-bottom:1px solid #243244;padding:12px 16px;display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}.wmc-title{font-size:19px;font-weight:800}.wmc-actions,.wmc-nav{display:flex;gap:8px;flex-wrap:wrap}.wmc-btn,button{border:1px solid var(--line);background:#1e293b;color:#f8fafc;border-radius:10px;padding:9px 12px;text-decoration:none;cursor:pointer;font-weight:700}.wmc-btn.primary,button.primary{background:#166534;border-color:#22c55e}.wmc-btn.warn,button.warn{background:#78350f;border-color:#f59e0b}.wmc-layout{max-width:1280px;margin:0 auto;padding:14px;display:grid;grid-template-columns:230px minmax(0,1fr);gap:14px}.wmc-nav{align-content:start;position:sticky;top:70px}.wmc-nav button{width:100%;text-align:left}.wmc-nav button.active{background:#14532d;border-color:#22c55e}.wmc-main{display:grid;gap:14px;min-width:0}.wmc-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.wmc-panel{display:none}.wmc-panel.active{display:block}.wmc-kpi{background:#0f172a;border:1px solid #243244;border-radius:12px;padding:12px}.wmc-kpi b{display:block;font-size:20px;margin-top:4px}.wmc-muted{color:var(--muted)}.wmc-ok{color:var(--ok)}.wmc-warn{color:var(--warn)}.wmc-bad{color:var(--bad)}.wmc-error{border-color:rgba(239,68,68,.5);background:rgba(127,29,29,.28)}.wmc-log{height:260px;overflow:auto;background:#020617;border:1px solid #1e293b;border-radius:12px;padding:10px;font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap}.wmc-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.wmc-row input,.wmc-row select{flex:1;min-width:180px;background:#0f172a;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px}.wmc-table{width:100%;border-collapse:collapse}.wmc-table th,.wmc-table td{border-bottom:1px solid #243244;padding:8px;text-align:left;vertical-align:top}.wmc-mobile .wmc-layout{grid-template-columns:1fr}.wmc-mobile .wmc-nav{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.wmc-mobile .wmc-grid{grid-template-columns:1fr}.wmc-classic .wmc-header{border-bottom-color:#334155}.wmc-desktop .wmc-layout{grid-template-columns:1fr}.wmc-desktop .wmc-nav{position:static;display:flex}.wmc-desktop .wmc-panel{border-style:solid;box-shadow:0 18px 60px rgba(0,0,0,.35)}@media(max-width:760px){.wmc-layout{grid-template-columns:1fr}.wmc-nav{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.wmc-grid{grid-template-columns:1fr}.wmc-header{position:static}}
+  </style>
+</head>
+<body>
+  <div id="staticShell" class="wmc-static-shell">
+    <section class="wmc-card">
+      <h1>WinoMC Console</h1>
+      <p>Statische App-Shell geladen. Die Oberfläche bleibt sichtbar, auch wenn optionale Module fehlschlagen.</p>
+      <ul><li>HTML geladen</li><li>CSS geladen</li></ul>
+    </section>
+  </div>
+  <script data-version="2.0.0.9b">
+  (() => {
+    'use strict';
+    const VERSION = '2.0.0.9b';
+    const MAX_LOG_LINES = 400;
+    const state = { safe: new URLSearchParams(location.search).get('safe') === '1', active: 'overview', api: null, es: null, logBuffer: [], logFlush: 0, modules: new Map(), errors: [] };
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    function bootStep(text, level='ok') { const list = $('#bootSteps'); if (list) list.insertAdjacentHTML('beforeend', `<li class="wmc-${level}">${esc(new Date().toLocaleTimeString())} · ${esc(text)}</li>`); }
+    function showError(scope, err) { const message = err && (err.message || String(err)) || 'Unbekannter Fehler'; state.errors.push({scope,message}); const box = $('#globalErrors'); if (box) { box.hidden = false; box.insertAdjacentHTML('beforeend', `<div><b>${esc(scope)}:</b> ${esc(message)}</div>`); } const target = document.querySelector(`[data-module-error="${CSS.escape(scope)}"]`); if (target) target.innerHTML = `<div class="wmc-card wmc-error"><b>${esc(scope)} Fehler</b><p>${esc(message)}</p></div>`; bootStep(`${scope}: ${message}`, 'bad'); }
+    function guarded(name, fn) { try { const result = fn(); if (result && typeof result.catch === 'function') result.catch(err => showError(name, err)); return result; } catch (err) { showError(name, err); return null; } }
+    window.addEventListener('error', ev => showError('JavaScript', ev.message || ev.error));
+    window.addEventListener('unhandledrejection', ev => showError('Promise', ev.reason));
+    function apiUrl(path, params = {}) { const q = new URLSearchParams(params); return './' + String(path).replace(/^\/+/, '') + (q.toString() ? '?' + q.toString() : ''); }
+    function renderBaseShell() {
+      document.body.className = state.safe ? 'wmc-safe wmc-classic' : 'wmc-classic';
+      document.body.innerHTML = `
+        <header class="wmc-header"><div><div class="wmc-title">WinoMC Console</div><div class="wmc-muted">Beta ${VERSION} · robuste Webconsole-App-Shell</div></div><div class="wmc-actions"><button id="reloadBtn">Neu laden</button><a class="wmc-btn" href="./diag">Diagnose</a><a class="wmc-btn warn" href="./?safe=1">Safe Mode</a><button id="classicBtn">PC klassisch</button><button id="mobileBtn">Mobile</button><button id="desktopBtn">Desktop</button></div></header>
+        <div class="wmc-layout"><nav class="wmc-nav" aria-label="WinoMC Navigation" id="nav"></nav><main class="wmc-main">
+          ${state.safe ? '<section class="wmc-card wmc-warn"><b>Safe Mode aktiv</b><p>Desktop, Explorer, Profile, Add-on Manager, Webschutz, Live-Log-SSE und Polling sind deaktiviert. Nur Shell und ein manueller Status-Test laufen.</p></section>' : ''}
+          <section class="wmc-card"><h2>Boot-Diagnose</h2><ol id="bootSteps"><li>HTML geladen</li><li>CSS geladen</li><li>JavaScript gestartet</li><li>App-Shell gerendert</li></ol><div id="globalErrors" class="wmc-card wmc-error" hidden><b>Fehlerbereich</b></div></section>
+          <section id="panel-overview" class="wmc-panel active" data-panel="overview"><h2>Übersicht / Serverstatus</h2><div id="statusArea" data-module-error="status"><div class="wmc-card">Status wird asynchron geladen...</div></div></section>
+          <section id="panel-console" class="wmc-panel" data-panel="console"><h2>Live-Konsole</h2><div id="consoleArea" data-module-error="console"></div></section>
+          <section id="panel-files" class="wmc-panel" data-panel="files"><h2>Dateien / Explorer</h2><div id="filesArea" data-module-error="files"><div class="wmc-card">Dateimodul wird erst beim Öffnen geladen.</div></div></section>
+          <section id="panel-profiles" class="wmc-panel" data-panel="profiles"><h2>Erststart / Profile</h2><div id="profilesArea" data-module-error="profiles"><div class="wmc-card">Profile werden erst beim Öffnen geladen.</div></div></section>
+          <section id="panel-addons" class="wmc-panel" data-panel="addons"><h2>Add-on Manager</h2><div id="addonsArea" data-module-error="addons"><div class="wmc-card">Add-on Manager wird erst beim Öffnen geladen.</div></div></section>
+          <section id="panel-webprotection" class="wmc-panel" data-panel="webprotection"><h2>Webschutz</h2><div id="webProtectionArea" data-module-error="webprotection"><div class="wmc-card">Webschutz wird erst beim Öffnen geladen.</div></div></section>
+          <section id="panel-diagnostics" class="wmc-panel" data-panel="diagnostics"><h2>Diagnose</h2><div id="diagnosticsArea"></div></section>
+        </main></div>`;
+      bootStep('Navigation wird sichtbar');
+    }
+    function initApiClient() {
+      state.api = {
+        url: apiUrl,
+        async request(path, options = {}, timeout = 8000) {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeout);
+          try {
+            const res = await fetch(apiUrl(path, options.params || {}), { cache:'no-store', ...options, signal: controller.signal });
+            const text = await res.text();
+            let data = {};
+            try { data = text ? JSON.parse(text) : {}; } catch { throw new Error(`Ungültige JSON-Antwort von ${path}: HTTP ${res.status}`); }
+            if (!res.ok || data.ok === false) throw new Error(data.error || res.statusText || `HTTP ${res.status}`);
+            return data;
+          } catch (err) {
+            if (err.name === 'AbortError') throw new Error(`Zeitüberschreitung bei ${path}`);
+            throw err;
+          } finally { clearTimeout(timer); }
+        },
+        get(path, params, timeout) { return this.request(path, { params }, timeout); },
+        post(path, payload, timeout) { return this.request(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload || {}) }, timeout); }
+      };
+      bootStep('API-Client bereit');
+    }
+    function initNavigation() {
+      const items = [['overview','Übersicht'],['console','Live-Konsole'],['files','Dateien'],['profiles','Profile'],['addons','Add-ons'],['webprotection','Webschutz'],['diagnostics','Diagnose']];
+      const nav = $('#nav');
+      nav.innerHTML = items.map(([id,label]) => `<button data-nav="${id}" class="${id==='overview'?'active':''}">${label}</button>`).join('');
+      nav.addEventListener('click', ev => { const btn = ev.target.closest('[data-nav]'); if (btn) activatePanel(btn.dataset.nav); });
+      $('#reloadBtn').onclick = () => location.reload(); $('#classicBtn').onclick = () => initClassicMode(); $('#mobileBtn').onclick = () => initMobileMode(); $('#desktopBtn').onclick = () => guarded('desktop', initDesktopMode);
+    }
+    function activatePanel(id) {
+      state.active = id;
+      document.querySelectorAll('[data-nav]').forEach(b => b.classList.toggle('active', b.dataset.nav === id));
+      document.querySelectorAll('[data-panel]').forEach(p => p.classList.toggle('active', p.dataset.panel === id));
+      if (id === 'files' && !state.safe) guarded('files', initFilesPanel);
+      if (id === 'profiles' && !state.safe) guarded('profiles', initProfilesPanel);
+      if (id === 'addons' && !state.safe) guarded('addons', initAddonManagerPanel);
+      if (id === 'webprotection' && !state.safe) guarded('webprotection', initWebProtectionPanel);
+      if (id === 'diagnostics') renderDiagnosticsPanel();
+    }
+    async function initStatusPanel() {
+      const target = $('#statusArea');
+      target.innerHTML = `<div class="wmc-card">Status wird geladen...</div>`;
+      const data = await state.api.get('/api/status', {}, 9000);
+      const env = data.env || {}; const m = data.metrics || {};
+      target.innerHTML = `<div class="wmc-grid"><div class="wmc-kpi">Server<b>${esc(env.SERVER_NAME || '-')}</b><span class="wmc-muted">Welt: ${esc(env.LEVEL_NAME || '-')}</span></div><div class="wmc-kpi">Spieler<b>${esc(m.players?.label || 'Nicht verfügbar')}</b><span class="wmc-muted">Health: ${esc(data.health?.overall || '-')}</span></div><div class="wmc-kpi">Speicher<b>${esc(m.memory?.label || '-')}</b><span class="wmc-muted">Disk: ${esc(m.disk?.label || '-')}</span></div></div><div class="wmc-card"><b>Ports</b><p>${esc(env.SERVER_PORT || '-')} / ${esc(env.SERVER_PORT_V6 || '-')}</p><p>WinoMC ${esc(data.winomc_version || VERSION)} · FIFO ${data.fifo_exists ? 'OK' : 'fehlt'} · Log ${data.log_exists ? 'OK' : 'fehlt'}</p></div>`;
+      bootStep('Status API erreicht');
+    }
+    function initConsolePanel() {
+      const target = $('#consoleArea');
+      if (state.safe) {
+        target.innerHTML = `<div class="wmc-card wmc-warn"><b>Live-Konsole im Safe Mode deaktiviert</b><p>Keine Befehle, kein EventSource und kein automatisches Polling. Nutze den normalen Modus, wenn die Shell stabil sichtbar ist.</p></div><div id="logBox" class="wmc-log" aria-live="polite">[WinoMC] Safe Mode: Live-Log-SSE deaktiviert.\n</div>`;
+        return;
+      }
+      target.innerHTML = `<div class="wmc-row"><input id="commandInput" placeholder="Bedrock-Befehl, z. B. list oder say Hallo"><button class="primary" id="sendCommandBtn">Senden</button><button id="connectLogBtn">Live-Log verbinden</button></div><p id="consoleStatus" class="wmc-muted">Konsole sichtbar. Live-Log startet nach der UI.</p><div id="logBox" class="wmc-log" aria-live="polite">[WinoMC] Konsole bereit. Live-Log ist nicht Voraussetzung für den Start.\n</div>`;
+      $('#sendCommandBtn').onclick = () => sendCommand(); $('#commandInput').addEventListener('keydown', ev => { if (ev.key === 'Enter') sendCommand(); }); $('#connectLogBtn').onclick = () => connectLogs(true);
+      setTimeout(() => guarded('console', () => connectLogs(false)), 700);
+    }
+    async function sendCommand() { const input = $('#commandInput'); const command = input.value.trim(); if (!command) return; appendLog('> ' + command); input.value=''; try { await state.api.post('/api/command', {command}, 8000); appendLog('[WinoMC] Befehl gesendet.'); } catch (err) { appendLog('[Fehler] ' + err.message); showError('console', err); } }
+    function appendLog(line) { state.logBuffer.push(String(line)); if (!state.logFlush) state.logFlush = requestAnimationFrame(flushLog); }
+    function flushLog() { state.logFlush = 0; const box = $('#logBox'); if (!box) return; const lines = (box.textContent ? box.textContent.split('\n').filter(Boolean) : []).concat(state.logBuffer.splice(0)).slice(-MAX_LOG_LINES); box.textContent = lines.join('\n') + '\n'; box.scrollTop = box.scrollHeight; }
+    function connectLogs(manual) {
+      if (!window.EventSource) { $('#consoleStatus').textContent = 'EventSource wird nicht unterstützt.'; return; }
+      if (state.es) { try { state.es.close(); } catch {} state.es = null; }
+      $('#consoleStatus').textContent = 'Live-Log verbindet...';
+      const es = new EventSource(apiUrl('/api/logs')); state.es = es;
+      es.onopen = () => { $('#consoleStatus').textContent = 'Live-Log verbunden.'; bootStep('Live-Log verbunden'); };
+      es.onmessage = ev => { try { const data = JSON.parse(ev.data); if (data.line) appendLog(data.line); } catch {} };
+      es.onerror = () => { $('#consoleStatus').textContent = 'Live-Log wartet oder ist getrennt. UI bleibt bedienbar.'; try { es.close(); } catch {} state.es = null; if (manual) showError('console', new Error('Live-Log-Verbindung fehlgeschlagen')); };
+    }
+    function initMobileMode() { document.body.classList.remove('wmc-classic','wmc-desktop'); document.body.classList.add('wmc-mobile'); bootStep('Mobile-Modus aktiv'); }
+    function initClassicMode() { document.body.classList.remove('wmc-mobile','wmc-desktop'); document.body.classList.add('wmc-classic'); bootStep('PC-Classic-Modus aktiv'); }
+    function initDesktopMode() { if (state.safe) throw new Error('Desktop-Modus ist im Safe Mode deaktiviert.'); document.body.classList.remove('wmc-mobile','wmc-classic'); document.body.classList.add('wmc-desktop'); bootStep('Desktop-Modus isoliert aktiviert'); }
+    async function initFilesPanel() { if (state.modules.get('files')) return; state.modules.set('files', true); const area = $('#filesArea'); area.innerHTML = '<div class="wmc-card">Dateibereiche werden geladen...</div>'; const data = await state.api.get('/api/files/roots', {}, 8000); area.innerHTML = `<div class="wmc-row"><select id="fileRoot">${(data.roots||[]).map(r=>`<option value="${esc(r.key)}" ${(!r.exists||!r.readable)?'disabled':''}>${esc(r.label)}${r.exists?'':' (fehlt)'}</option>`).join('')}</select><input id="filePath" value="/"><button id="fileOpen">Öffnen</button></div><div id="fileList" class="wmc-card">Bereit.</div>`; $('#fileOpen').onclick = () => loadFiles(); await loadFiles(); }
+    async function loadFiles() { const root=$('#fileRoot').value, path=$('#filePath').value||'/'; const list=$('#fileList'); list.textContent='Lade...'; const data=await state.api.get('/api/files/list',{root,path},8000); list.innerHTML = `<table class="wmc-table"><thead><tr><th>Name</th><th>Typ</th><th>Größe</th><th>Aktion</th></tr></thead><tbody>${(data.entries||[]).map(e=>`<tr><td>${esc(e.name)}</td><td>${esc(e.type)}</td><td>${esc(e.size_label||'')}</td><td>${e.type==='file'?`<a class="wmc-btn" href="${apiUrl('/api/files/download',{root,path:e.path})}">Download</a>`:''}</td></tr>`).join('') || '<tr><td colspan="4">Leer</td></tr>'}</tbody></table>`; }
+    async function initProfilesPanel() { if (state.modules.get('profiles')) return; state.modules.set('profiles', true); const area=$('#profilesArea'); area.innerHTML='<div class="wmc-card">Profile werden geladen...</div>'; const data=await state.api.get('/api/profiles',{},8000); area.innerHTML=(data.profiles||[]).map(p=>`<article class="wmc-card"><h3>${esc(p.name)}</h3><p>${esc(p.description)}</p><pre>${esc(JSON.stringify(p.defaults||{},null,2))}</pre><button data-profile="${esc(p.name)}">Profil vorbereiten</button></article>`).join('') || '<div class="wmc-card">Keine Profile gefunden.</div>'; area.onclick=ev=>{ const b=ev.target.closest('[data-profile]'); if(b) state.api.post('/api/profiles/prepare',{profile:b.dataset.profile}).then(r=>alert(r.message||'Profil vorbereitet')).catch(e=>showError('profiles',e)); } }
+    async function initAddonManagerPanel() { if (state.modules.get('addons')) return; state.modules.set('addons', true); const area=$('#addonsArea'); area.innerHTML='<div class="wmc-card">Add-on Manager wird geladen...</div>'; const data=await state.api.get('/api/addons/catalog',{},10000); const c=data.counts||{}; area.innerHTML=`<div class="wmc-grid"><div class="wmc-kpi">Import<b>${esc(c.inbox||0)}</b></div><div class="wmc-kpi">Installiert<b>${esc(c.installed||0)}</b></div><div class="wmc-kpi">Probleme<b>${esc(c.issues||0)}</b></div></div>` + ((data.items||[]).slice(0,80).map(i=>`<article class="wmc-card"><b>${esc(i.name||i.filename||i.item_id)}</b><p>${esc(i.type||'-')} · ${esc(i.source||'')} · Risiko ${esc(i.risk||'-')}</p></article>`).join('') || '<div class="wmc-card">Keine Add-ons im Katalog.</div>'); }
+    async function initWebProtectionPanel() { if (state.modules.get('webprotection')) return; state.modules.set('webprotection', true); const area=$('#webProtectionArea'); area.innerHTML='<div class="wmc-card">Webschutz wird geladen...</div>'; const data=await state.api.get('/api/web-protection',{},8000); area.innerHTML=`<div class="wmc-card"><p>Status: <b>${data.enabled?'aktiv':'inaktiv'}</b></p><button id="webProtectionToggle">Umschalten</button></div>`; $('#webProtectionToggle').onclick=()=>state.api.post('/api/web-protection',{enabled:!data.enabled}).then(()=>{state.modules.delete('webprotection'); initWebProtectionPanel();}).catch(e=>showError('webprotection',e)); }
+    function renderDiagnosticsPanel() { $('#diagnosticsArea').innerHTML = `<div class="wmc-card"><ul><li>HTML geladen</li><li>CSS geladen</li><li>JavaScript gestartet</li><li>Pfad: ${esc(location.pathname + location.search)}</li><li>Base/API-Pfad: ${esc(apiUrl('/api/status'))}</li><li>Safe Mode: ${state.safe?'ja':'nein'}</li><li>Zeit: ${esc(new Date().toISOString())}</li><li>User Agent: ${esc(navigator.userAgent)}</li></ul><p>Vollständige unabhängige Diagnose: <a class="wmc-btn" href="./diag">/diag öffnen</a></p></div>`; }
+    function boot() {
+      renderBaseShell(); initBootDiagnostics(); guarded('api', initApiClient); guarded('navigation', initNavigation); guarded('modes', () => matchMedia('(max-width: 760px)').matches ? initMobileMode() : initClassicMode()); guarded('console', initConsolePanel); guarded('status', initStatusPanel); if (state.safe) bootStep('Safe Mode: optionale Module deaktiviert', 'warn');
+    }
+    function initBootDiagnostics() { bootStep('Boot-Diagnose initialisiert'); }
+    boot();
+  })();
+  </script>
+</body>
+</html>
+"""
+
+
+DIAG_HTML = r"""<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="winomc-console-version" content="2.0.0.9b"><title>WinoMC Diagnose</title><style>body{margin:0;background:#0b1120;color:#e5e7eb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:980px;margin:0 auto;padding:16px}.card{background:#111827;border:1px solid #334155;border-radius:14px;padding:14px;margin:12px 0}.ok{color:#22c55e}.warn{color:#f59e0b}.bad{color:#ef4444}code,pre{background:#020617;border:1px solid #1e293b;border-radius:10px;padding:8px;display:block;white-space:pre-wrap}a{color:#93c5fd}</style></head><body><main><h1>WinoMC Diagnose</h1><section class="card"><h2>Statische Checks</h2><ul><li class="ok">HTML geladen</li><li class="ok">CSS geladen</li><li id="jsState" class="warn">JavaScript noch nicht bestätigt</li></ul></section><section class="card"><h2>Browser / Pfade</h2><pre id="info">Pfad wird ohne JavaScript nicht erweitert. Diese Seite liefert dennoch sichtbaren Inhalt per curl.</pre></section><section class="card"><h2>API-Testbereich</h2><div id="apiStatus">/api/status: noch nicht getestet</div><div id="apiLogs">/api/logs: Live-Log wird nicht blockierend getestet</div><pre id="errors"></pre></section><p><a href="./">Zur Webconsole</a> · <a href="./?safe=1">Safe Mode</a></p></main><script>(()=>{const $=s=>document.querySelector(s); const api=p=>'./'+p.replace(/^\/+/, ''); $('#jsState').textContent='JavaScript gestartet'; $('#jsState').className='ok'; $('#info').textContent=JSON.stringify({path:location.pathname+location.search, basePath:api('/api/status'), userAgent:navigator.userAgent, timestamp:new Date().toISOString()},null,2); const errors=[]; const timeout=(ms)=>new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout')),ms)); Promise.race([fetch(api('/api/status'),{cache:'no-store'}), timeout(8000)]).then(r=>r.text().then(t=>({r,t}))).then(({r,t})=>{$('#apiStatus').innerHTML='<span class="'+(r.ok?'ok':'bad')+'">/api/status HTTP '+r.status+'</span><pre>'+t.slice(0,1600).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+'</pre>';}).catch(e=>{$('#apiStatus').innerHTML='<span class="bad">/api/status Fehler: '+e.message+'</span>'; errors.push(e.message); $('#errors').textContent=errors.join('\n');}); $('#apiLogs').innerHTML='<span class="warn">/api/logs: SSE wird bewusst nicht dauerhaft geöffnet; Live-Log ist nicht startblockierend.</span>'; window.addEventListener('error',e=>{$('#errors').textContent += '\n'+(e.message||e.error);});})();</script></body></html>
 """
 
 
@@ -11424,7 +11609,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCConsole/2.0.0.8b"
+    server_version = "WinoMCConsole/2.0.0.9b"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
@@ -11604,6 +11789,24 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         query = parse_qs(parsed.query)
+        if path.endswith("/diag") or path == "/diag":
+            data = DIAG_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if path.endswith("/legacy") or path == "/legacy":
+            data = LEGACY_INDEX_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path in ("/", "", "/index.html"):
             data = INDEX_HTML.encode("utf-8")
             self.send_response(200)
@@ -11701,6 +11904,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.endswith("/api/files/trash/settings") or path == "/api/files/trash/settings":
             self._send_json(200, {"ok": True, "retention_days": get_trash_retention_days(), "allowed_days": [0, 3, 7, 14, 30, 60, 90]})
+            return
+        if "/api/" not in path and not os.path.splitext(path)[1]:
+            data = INDEX_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
             return
         self.send_error(404)
 

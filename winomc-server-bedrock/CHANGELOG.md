@@ -1,3 +1,12 @@
+# 2.0.0.9b
+
+- Rebuilt the WinoMC web console around a new stable app shell that is visible immediately and does not depend on `/api/status`, live logs, Desktop mode, Explorer, Profiles, or the Add-on Manager during startup.
+- Added independent `/diag` diagnostics page with visible HTML/CSS/JavaScript, path, base-path, browser, timestamp, and non-blocking API checks.
+- Added `?safe=1` Safe Mode that disables Desktop, Explorer, Profiles, Add-on Manager, Webschutz, Live-Log SSE, and automatic polling while keeping a visible shell and manual status test.
+- Added a robust ingress-compatible relative API client with per-request timeouts, JSON validation, visible module errors, and isolated module startup.
+- Reworked live-console initialization so the UI renders first, EventSource starts later, log lines are bounded, DOM updates are batched, and log failures never block the console.
+- Separated Mobile, PC classic, and Desktop mode initialization so one mode cannot hide or destroy the others; existing backend APIs and legacy frontend code remain available for later cleanup.
+
 # Changelog
 
 # 2.0.0.8b
