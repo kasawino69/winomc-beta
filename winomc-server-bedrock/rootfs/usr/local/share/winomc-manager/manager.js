@@ -1,4 +1,4 @@
-const VERSION = '2.1.15b';
+const VERSION = '2.1.17b';
 
 const state = {
   instances: [],
@@ -450,7 +450,7 @@ function settingGroupDescription(group) {
   const descriptions = {
     'Bedrock Runtime': 'BDS-Version und WinoMC-Runtime-Werte dieser Instanz.',
     'Allgemein / Realm-nah': 'Die Werte, die man typischerweise aus Realm-/Welt-Einstellungen kennt.',
-    'Zugang & Sicherheit': 'Xbox-Auth, Allowlist, Rechte, Chat und Skin-/Interaktionsschutz.',
+    'Zugang & Sicherheit': 'Online-Modus, Allowlist, Rechte, Chat und Skin-/Interaktionsschutz.',
     'Netzwerk': 'Ports, LAN-Sichtbarkeit und Paketkompression.',
     'Performance': 'Sichtweite, Tick-Distanz, Threads und Chunk-/Build-Verhalten.',
     'Packs & Logging': 'Texturepacks, Content-Logs, Telemetrie und visuelle Client-Optionen.',
@@ -538,7 +538,7 @@ function collectBedrockSettings(form) {
 }
 
 function roleLabel(role) {
-  return ({ operator: 'Operator', member: 'Member', visitor: 'Visitor' }[role] || role || 'Member');
+  return ({ operator: 'Operator', member: 'Member', visitor: 'Visitor', none: 'Keine Rolle', '': 'Keine Rolle' }[role] || role || 'Keine Rolle');
 }
 
 function identitySourceLabel(source) {
@@ -547,9 +547,18 @@ function identitySourceLabel(source) {
     allowlist_file: 'allowlist.json',
     permissions_file: 'permissions.json',
     server_log: 'Serverlog',
-    xbox_live: 'Xbox Live',
     manual: 'manuell',
   }[source] || source || 'unbekannt');
+}
+
+function hasValidPlayerXuid(player) {
+  return /^[0-9]+$/.test(String(player?.xuid || '').trim());
+}
+
+function playerModeHint(player) {
+  return hasValidPlayerXuid(player)
+    ? 'Name + XUID: Rollen werden in permissions.json gespeichert.'
+    : 'Ohne XUID ist nur Allowlist möglich. Für OP/Member/Visitor-Rechte muss die XUID eingetragen werden.';
 }
 
 function playerMatchesFilter(player) {
@@ -579,7 +588,7 @@ function renderPlayersModule(players, warnings = []) {
   return `
     <section class="players-module" id="playersModule">
       <div class="info">
-        <strong>Spieler & Rechte:</strong> allowlist.json steuert, wer auf den Server darf. permissions.json steuert Rechte wie Operator, Member oder Visitor. Änderungen benötigen je nach Bedrock-Verhalten ggf. Server-Neustart oder Reload.
+        <strong>Spieler & Rechte:</strong> Name-only-Spieler können nur in die Allowlist. Operator-, Member- und Visitor-Rechte benötigen eine gültige XUID und werden in permissions.json geschrieben.
       </div>
       ${warnings.length ? `<div class="info warning-box">${warnings.map(esc).join('<br>')}</div>` : ''}
       <div class="actions player-filters">
@@ -592,18 +601,22 @@ function renderPlayersModule(players, warnings = []) {
             <tbody id="playersTableBody">
               ${filtered.map((p, index) => {
                 const realIndex = players.indexOf(p);
+                const hasXuid = hasValidPlayerXuid(p);
+                const sourceText = p.xuid_source ? `Quelle: ${identitySourceLabel(p.xuid_source)}` : '';
+                const statusText = hasXuid ? sourceText : `${playerModeHint(p)}${sourceText ? ` ${sourceText}` : ''}`;
                 return `<tr data-player-row="${realIndex}">
                   <td>
                     <input data-player-field="name" data-player-index="${realIndex}" value="${esc(p.name)}" maxlength="64" required>
-                    <span class="hint player-identity-status" data-player-resolve-status="${realIndex}">${p.xuid_source ? `Quelle: ${esc(identitySourceLabel(p.xuid_source))}` : ''}</span>
+                    <span class="hint player-identity-status" data-player-resolve-status="${realIndex}">${esc(statusText)}</span>
                   </td>
                   <td>
                     <div class="player-xuid-control">
-                      <input data-player-field="xuid" data-player-index="${realIndex}" value="${esc(p.xuid)}" inputmode="numeric" pattern="[0-9]+" required>
-                      <button type="button" class="soft" data-player-resolve="${realIndex}">XUID suchen</button>
+                      <input data-player-field="xuid" data-player-index="${realIndex}" value="${esc(p.xuid)}" inputmode="numeric" pattern="[0-9]*" placeholder="optional">
+                      <button type="button" class="soft" data-player-resolve="${realIndex}">Aus lokalen Dateien/Logs suchen</button>
                     </div>
                   </td>
-                  <td><select data-player-field="role" data-player-index="${realIndex}">
+                  <td><select data-player-field="role" data-player-index="${realIndex}" ${hasXuid ? '' : 'disabled'}>
+                    <option value="" ${!p.role ? 'selected' : ''}>Keine Rolle</option>
                     ${['operator','member','visitor'].map((role) => `<option value="${role}" ${p.role === role ? 'selected' : ''}>${roleLabel(role)}</option>`).join('')}
                   </select></td>
                   <td><input type="checkbox" data-player-field="allowlisted" data-player-index="${realIndex}" ${p.allowlisted ? 'checked' : ''}></td>
@@ -632,6 +645,13 @@ function collectPlayersForm() {
     if (!state.players[index]) return;
     state.players[index][field] = el.type === 'checkbox' ? el.checked : el.value.trim();
   });
+  state.players.forEach((player) => {
+    if (!hasValidPlayerXuid(player)) {
+      player.role = '';
+    } else if (!player.role) {
+      player.role = 'member';
+    }
+  });
   return state.players;
 }
 
@@ -655,7 +675,7 @@ async function resolvePlayerXuid(inst, index, button) {
   const originalText = button.textContent;
   button.disabled = true;
   button.textContent = 'Suche...';
-  setPlayerResolveStatus(index, 'XUID wird gesucht...', 'info');
+  setPlayerResolveStatus(index, 'Lokale Dateien und Logs werden durchsucht...', 'info');
 
   try {
     const data = await post(`/api/instances/${encodeURIComponent(inst.id)}/players/resolve`, { name });
@@ -666,8 +686,13 @@ async function resolvePlayerXuid(inst, index, button) {
       const row = document.querySelector(`[data-player-row="${index}"]`);
       const nameInput = row?.querySelector('[data-player-field="name"]');
       const xuidInput = row?.querySelector('[data-player-field="xuid"]');
+      const roleSelect = row?.querySelector('[data-player-field="role"]');
       if (nameInput) nameInput.value = player.name;
       if (xuidInput) xuidInput.value = player.xuid;
+      if (roleSelect) {
+        roleSelect.disabled = false;
+        if (!roleSelect.value) roleSelect.value = 'member';
+      }
       const warning = (data.warnings || []).join(' ');
       setPlayerResolveStatus(index, `XUID gefunden (${identitySourceLabel(data.source)}).${warning ? ` ${warning}` : ''}`, data.warnings?.length ? 'warning' : 'ok');
       return;
@@ -676,9 +701,8 @@ async function resolvePlayerXuid(inst, index, button) {
     const fallbacks = (data.fallbacks || []).map((item) => ({
       manual: 'XUID manuell eintragen',
       import_existing_files: 'bestehende Dateien importieren',
-      temporary_join_assistant: 'Join-Assistent vorbereitet, noch nicht aktiv',
     }[item] || item)).join(', ');
-    setPlayerResolveStatus(index, `${data.message || 'XUID nicht gefunden.'} Fallbacks: ${fallbacks || 'manuell eintragen'}.`, 'warning');
+    setPlayerResolveStatus(index, data.message || `Keine XUID lokal gefunden. Du kannst den Spieler trotzdem nur per Name auf die Allowlist setzen oder die XUID manuell eintragen.${fallbacks ? ` Optionen: ${fallbacks}.` : ''}`, 'warning');
   } catch (err) {
     setPlayerResolveStatus(index, err?.message || err?.error || String(err), 'warning');
   } finally {
@@ -693,12 +717,31 @@ function bindPlayersModule(inst) {
     if (filter) { collectPlayersForm(); state.playerFilter = filter.dataset.playerFilter; $('#detailContent').innerHTML = renderPlayersModule(state.players); bindPlayersModule(inst); return; }
     const remove = ev.target.closest('[data-player-remove]');
     if (remove) { collectPlayersForm(); state.players.splice(Number(remove.dataset.playerRemove), 1); $('#detailContent').innerHTML = renderPlayersModule(state.players); bindPlayersModule(inst); return; }
-    if (ev.target.closest('#addPlayer')) { collectPlayersForm(); state.players.push({ name: '', xuid: '', role: 'member', allowlisted: true, ignores_player_limit: false }); state.playerFilter = 'all'; $('#detailContent').innerHTML = renderPlayersModule(state.players); bindPlayersModule(inst); return; }
+    if (ev.target.closest('#addPlayer')) { collectPlayersForm(); state.players.push({ name: '', xuid: '', role: '', allowlisted: true, ignores_player_limit: false, xuid_source: 'manual' }); state.playerFilter = 'all'; $('#detailContent').innerHTML = renderPlayersModule(state.players); bindPlayersModule(inst); return; }
     const resolver = ev.target.closest('[data-player-resolve]');
     if (resolver) { await resolvePlayerXuid(inst, Number(resolver.dataset.playerResolve), resolver); return; }
     if (ev.target.closest('#importPlayers')) {
       try { const data = await post(`/api/instances/${encodeURIComponent(inst.id)}/players/import`, {}); state.players = data.players || []; $('#detailContent').innerHTML = renderPlayersModule(state.players, data.warnings || []); bindPlayersModule(inst); }
       catch (err) { showError(err); }
+    }
+  });
+  $('#playersModule')?.addEventListener('input', (ev) => {
+    const xuidInput = ev.target.closest('[data-player-field="xuid"]');
+    if (!xuidInput) return;
+    const index = Number(xuidInput.dataset.playerIndex);
+    const row = document.querySelector(`[data-player-row="${index}"]`);
+    const roleSelect = row?.querySelector('[data-player-field="role"]');
+    const player = state.players[index] || {};
+    player.xuid = xuidInput.value.trim();
+    if (!roleSelect) return;
+    if (hasValidPlayerXuid(player)) {
+      roleSelect.disabled = false;
+      if (!roleSelect.value) roleSelect.value = 'member';
+      setPlayerResolveStatus(index, playerModeHint(player), 'ok');
+    } else {
+      roleSelect.value = '';
+      roleSelect.disabled = true;
+      setPlayerResolveStatus(index, playerModeHint(player), 'warning');
     }
   });
   $('#playersForm').onsubmit = async (ev) => {

@@ -1,10 +1,21 @@
+## 2.1.17b - Remove Xbox Auth and Simplify Player Rights
+
+- Removes Microsoft/Xbox device-code authentication and online Xbox XUID lookup.
+- Removes Xbox token storage, auth APIs, auth UI and Xbox resolver configuration.
+- Keeps local player identity lookup from existing WinoMC player store, allowlist.json, permissions.json and logs.
+- Allows name-only players to be managed for allowlist use only.
+- Requires a valid XUID for operator, member and visitor permission management.
+- Ensures permissions.json only contains players with valid XUIDs.
+- Keeps allowlist.json and permissions.json writing atomic and per-instance.
+- Keeps the targeted auto-refresh architecture without reintroducing legacy polling.
+
 ## 2.1.15b - Spieler & Rechte
 - Adds a dedicated per-instance Player & Permissions tab.
 - Adds UI management for allowlisted players, operators, members and visitors.
 - Adds structured reading and writing of `allowlist.json` and `permissions.json`.
 - Adds validation for player name, XUID, role and allowlist flags.
 - Supports importing/synchronizing existing Bedrock allowlist and permission files.
-- Adds a dedicated XUID resolver architecture with existing-player, allowlist, permissions, log and optional Xbox Live provider slots.
+- Adds a dedicated XUID resolver architecture with existing-player, allowlist, permissions and log provider slots.
 - Adds a targeted `players/resolve` API so gamertags can populate XUID fields without guessing or creating fake IDs.
 - Shows XUID lookup source and fallback options in the Player & Permissions UI while keeping manual XUID entry available.
 - Keeps player management separate from generic server settings.
