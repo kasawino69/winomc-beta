@@ -23,6 +23,52 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
+ADDON_OPTIONS_FILE = os.environ.get("WINOMC_ADDON_OPTIONS_FILE", "/data/options.json")
+ADDON_OPTION_KEYS = {
+    "WINOMC_XBOX_RESOLVER_ENABLED",
+    "WINOMC_XBOX_AUTH_MODE",
+    "WINOMC_XBOX_CLIENT_ID",
+    "WINOMC_XBOX_AUTH_SCOPE",
+}
+
+
+def load_addon_options(path=ADDON_OPTIONS_FILE):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (FileNotFoundError, PermissionError, OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {key: data.get(key) for key in ADDON_OPTION_KEYS if key in data}
+
+
+ADDON_OPTIONS = load_addon_options()
+
+
+def addon_config_value(key, default=None):
+    if key in os.environ:
+        return os.environ.get(key)
+    value = ADDON_OPTIONS.get(key)
+    if value is None:
+        return default
+    return value
+
+
+def addon_config_text(key, default=""):
+    value = addon_config_value(key, default)
+    return str(value if value is not None else "").strip()
+
+
+def addon_config_bool(key, default=False):
+    value = addon_config_value(key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("WINOMC_CONSOLE_PORT", "8099"))
 FIFO_PATH = os.environ.get("WINOMC_CONSOLE_FIFO", "/tmp/winomc-bedrock-console.fifo")
@@ -63,10 +109,10 @@ IMPORT_STATUS_FILE = os.environ.get("WINOMC_IMPORT_STATUS_FILE", os.path.join(WI
 ADDON_HISTORY_FILE = os.environ.get("WINOMC_ADDON_HISTORY_FILE", os.path.join(WINOMC_STATE_DIR, "addons", "install-history.json"))
 QUARANTINE_DIR = os.environ.get("WINOMC_QUARANTINE_DIR", os.path.join(WINOMC_STATE_DIR, "quarantine"))
 XBOX_AUTH_FILE = os.environ.get("WINOMC_XBOX_AUTH_FILE", os.path.join(WINOMC_STATE_DIR, "xbox_auth.json"))
-XBOX_RESOLVER_ENABLED = str(os.environ.get("WINOMC_XBOX_RESOLVER_ENABLED", "true")).strip().lower() in ("1", "true", "yes", "on")
-XBOX_AUTH_MODE = os.environ.get("WINOMC_XBOX_AUTH_MODE", "device_code").strip().lower()
-XBOX_CLIENT_ID = os.environ.get("WINOMC_XBOX_CLIENT_ID", "").strip()
-XBOX_AUTH_SCOPE = os.environ.get("WINOMC_XBOX_AUTH_SCOPE", "XboxLive.signin offline_access").strip()
+XBOX_RESOLVER_ENABLED = addon_config_bool("WINOMC_XBOX_RESOLVER_ENABLED", True)
+XBOX_AUTH_MODE = addon_config_text("WINOMC_XBOX_AUTH_MODE", "device_code").lower()
+XBOX_CLIENT_ID = addon_config_text("WINOMC_XBOX_CLIENT_ID", "")
+XBOX_AUTH_SCOPE = addon_config_text("WINOMC_XBOX_AUTH_SCOPE", "XboxLive.signin offline_access")
 XBOX_DEVICE_CODE_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode"
 XBOX_TOKEN_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
 XBOX_USER_AUTH_URL = "https://user.auth.xboxlive.com/user/authenticate"
