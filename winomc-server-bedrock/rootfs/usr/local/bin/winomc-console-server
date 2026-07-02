@@ -92,7 +92,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC 2.1.15b Manager Workbench</title>
+  <title>WinoMC 2.1.17b Manager Workbench</title>
   <style>
     :root {
       color-scheme: dark;
@@ -303,7 +303,7 @@ INDEX_HTML = r"""<!doctype html>
     .console-inner { padding-top: 16px; }
     .mobile-quickbar { display: none; }
 
-    /* WinoMC 2.1.15b Manager Workbench */
+    /* WinoMC 2.1.17b Manager Workbench */
     body.desktop-mode {
       padding-bottom: 0;
       overflow: hidden;
@@ -4868,7 +4868,7 @@ body.winomc-mobile .editor-panel.editor-open {
     })();
   </script>
   <header>
-    <h1 id="appTitle">WinoMC 2.1.15b Manager Workbench</h1>
+    <h1 id="appTitle">WinoMC 2.1.17b Manager Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
   </header>
 
@@ -7490,8 +7490,8 @@ body.winomc-mobile .editor-panel.editor-open {
     }
     async function loadDiagnostics2() { try { const data = await fetchJson('/api/diagnostics'); const s = document.getElementById('diagnosticsSummary'); if (s) s.innerHTML = 'Gesamtstatus: ' + escapeHtml(data.overall) + ' Â· ' + data.items.length + ' PrÃ¼fungen <button id="repairAllSafe2" type="button" class="primary">Sichere Reparaturen ausfÃ¼hren</button><div class="info">Sichere Reparaturen fÃ¼hren nur grÃ¼ne Reparaturen aus. Experten-Reparaturen benÃ¶tigen Warnung, Expertenmodus und bewusste BestÃ¤tigung.</div>'; const l = document.getElementById('diagnosticsList'); const repairMap = { 'allowlist.json':'repair_allowlist', 'permissions.json':'repair_permissions', 'Resource Packs':'ensure_directories', 'Behavior Packs':'ensure_directories', 'Backups':'ensure_directories' }; if (l) l.innerHTML = data.items.map(i => '<article class="tile"><div class="tile-title">'+escapeHtml(i.title)+'</div><div class="stat-value">'+escapeHtml(i.status)+'</div><span class="badge '+(i.severity==='OK'?'':'warn')+'">Risiko '+(i.severity==='OK'?'green':'yellow')+'</span><div class="tile-desc">'+escapeHtml(i.message)+'</div>' + (repairMap[i.title] ? '<label class="setting"><input type="checkbox" data-repair-confirm="'+repairMap[i.title]+'"> Ich habe verstanden, dass diese Reparatur Dateien Ã¤ndern kann.</label><button data-expert-toggle="'+repairMap[i.title]+'">Expertenmodus aktivieren</button><button data-diagnostics-repair="'+repairMap[i.title]+'">Reparatur ausfÃ¼hren</button>' : '') + '</article>').join(''); } catch (err) { appendLine('[Diagnose] ' + err.message, 'error'); } }
     async function loadPacks2() { try { const data = await fetchJson('/api/packs'); const panel = document.querySelector('[data-panel="packs"]'); let target = document.getElementById('packs2Grid'); if (!target && panel) { panel.insertAdjacentHTML('beforeend', '<div class="card"><h3>Pack-Verwaltung 2.0</h3><p>Aktiviere/deaktiviere Packs fÃ¼r die aktuelle Welt. Vor Ã„nderungen wird die Welt-Pack-Datei gesichert.</p><div id="packs2Grid" class="dashboard-grid auto"></div></div>'); target = document.getElementById('packs2Grid'); } if (!target) return; const render = (p,t) => '<article class="tile"><div class="tile-title">'+escapeHtml(p.name)+'</div><div class="tile-desc">'+escapeHtml((p.uuid||'Keine UUID')+' Â· '+(p.version||'keine Version')+' Â· '+(p.description||''))+'</div><span class="badge '+(p.active?'':'warn')+'">'+(p.active?'Aktiv':'Inaktiv')+'</span><div class="tile-actions"><button data-pack-activate="'+escapeHtml(t)+'" data-pack-path="'+escapeHtml(p.path||'')+'">Aktivieren</button><button data-pack-deactivate="'+escapeHtml(t)+'" data-pack-uuid="'+escapeHtml(p.uuid||'')+'">Deaktivieren</button></div></article>'; target.innerHTML = [...(data.resource_packs||[]).map(p=>render(p,'resource')), ...(data.behavior_packs||[]).map(p=>render(p,'behavior'))].join('') || frameworkCard('Keine Packs','-', 'Installierte Packs erscheinen hier.', 'Warnung'); } catch (err) { appendLine('[Packs] '+err.message,'error'); } }
-    async function loadPlayers2() { try { const data = await fetchJson('/api/players'); window.winomcPlayers2 = data.players || []; const w = document.getElementById('playersWarnings'); if (w) w.textContent = (data.warnings || []).join(' Â· ') || 'Keine akuten Warnungen.'; const t = document.getElementById('playersTable'); if (t) t.innerHTML = window.winomcPlayers2.map((p,i)=>'<tr><td><input data-player-field="name" data-player-index="'+i+'" value="'+escapeHtml(p.name||'')+'"></td><td><input data-player-field="xuid" data-player-index="'+i+'" value="'+escapeHtml(p.xuid||'')+'"></td><td><select data-player-field="allowlisted" data-player-index="'+i+'"><option value="true" '+(p.allowlisted?'selected':'')+'>Ja</option><option value="false" '+(!p.allowlisted?'selected':'')+'>Nein</option></select></td><td><select data-player-field="role" data-player-index="'+i+'"><option value="member" '+(p.role==='member'?'selected':'')+'>Member</option><option value="operator" '+(p.role==='operator'?'selected':'')+'>Operator</option><option value="visitor" '+(p.role==='visitor'?'selected':'')+'>Visitor</option></select></td><td>'+escapeHtml((p.issues||[]).join(', ')||'OK')+'</td><td><button data-player-remove="'+i+'" type="button">Entfernen</button></td></tr>').join('') || '<tr><td colspan="5">Noch keine Spieler. Nutze â€žSpieler hinzufÃ¼genâ€œ.</td></tr>'; const panel=document.querySelector('[data-panel="players"] .card-header .actions') || document.querySelector('[data-panel="players"] .card-header'); if(panel && !document.getElementById('playersSave2')) panel.insertAdjacentHTML('beforeend','<div class="actions"><button id="playersAdd2" type="button">Spieler hinzufÃ¼gen</button><button class="primary" id="playersSave2" type="button">Speichern</button></div>'); } catch (err) { appendLine('[Spielerrechte] '+err.message,'error'); } }
-    function collectPlayers2(){ document.querySelectorAll('[data-player-field]').forEach(el=>{ const i=Number(el.dataset.playerIndex); const f=el.dataset.playerField; if(!window.winomcPlayers2[i]) return; window.winomcPlayers2[i][f]= f==='allowlisted' ? el.value==='true' : el.value; }); return window.winomcPlayers2 || []; }
+    async function loadPlayers2() { try { const data = await fetchJson('/api/players'); window.winomcPlayers2 = data.players || []; const w = document.getElementById('playersWarnings'); if (w) w.textContent = (data.warnings || []).join(' Â· ') || 'Ohne XUID ist nur Allowlist mÃ¶glich. FÃ¼r OP/Member/Visitor-Rechte muss die XUID eingetragen werden.'; const t = document.getElementById('playersTable'); if (t) t.innerHTML = window.winomcPlayers2.map((p,i)=>{ const hasXuid=/^[0-9]+$/.test(String(p.xuid||'')); const note=hasXuid?'permissions.json wird geschrieben.':'Ohne XUID ist nur Allowlist mÃ¶glich.'; return '<tr><td><input data-player-field="name" data-player-index="'+i+'" value="'+escapeHtml(p.name||'')+'"></td><td><input data-player-field="xuid" data-player-index="'+i+'" value="'+escapeHtml(p.xuid||'')+'" inputmode="numeric" pattern="[0-9]*"></td><td><select data-player-field="allowlisted" data-player-index="'+i+'"><option value="true" '+(p.allowlisted?'selected':'')+'>Ja</option><option value="false" '+(!p.allowlisted?'selected':'')+'>Nein</option></select></td><td><select data-player-field="role" data-player-index="'+i+'" '+(hasXuid?'':'disabled')+'><option value="" '+(!p.role?'selected':'')+'>Keine Rolle</option><option value="member" '+(p.role==='member'?'selected':'')+'>Member</option><option value="operator" '+(p.role==='operator'?'selected':'')+'>Operator</option><option value="visitor" '+(p.role==='visitor'?'selected':'')+'>Visitor</option></select></td><td>'+escapeHtml(note)+'</td><td><button data-player-remove="'+i+'" type="button">Entfernen</button></td></tr>'; }).join('') || '<tr><td colspan="5">Noch keine Spieler. Nutze â€žSpieler hinzufÃ¼genâ€œ.</td></tr>'; const panel=document.querySelector('[data-panel="players"] .card-header .actions') || document.querySelector('[data-panel="players"] .card-header'); if(panel && !document.getElementById('playersSave2')) panel.insertAdjacentHTML('beforeend','<div class="actions"><button id="playersAdd2" type="button">Spieler hinzufÃ¼gen</button><button class="primary" id="playersSave2" type="button">Speichern</button></div>'); } catch (err) { appendLine('[Spielerrechte] '+err.message,'error'); } }
+    function collectPlayers2(){ document.querySelectorAll('[data-player-field]').forEach(el=>{ const i=Number(el.dataset.playerIndex); const f=el.dataset.playerField; if(!window.winomcPlayers2[i]) return; window.winomcPlayers2[i][f]= f==='allowlisted' ? el.value==='true' : el.value.trim(); }); (window.winomcPlayers2||[]).forEach(p=>{ if(!/^[0-9]+$/.test(String(p.xuid||''))) p.role=''; else if(!p.role) p.role='member'; }); return window.winomcPlayers2 || []; }
     async function loadTransfer2(){ try{ const data=await fetchJson('/api/addons/catalog'); const e=document.getElementById('transferSummary'); if(e) { const c=data.counts||{}; const cards=frameworkCard('Import-Eingang',c.inbox||0,'/share/winomc/import','OK')+frameworkCard('Installiert',c.installed||0,'Lokale Packs','OK')+frameworkCard('Aktiv',c.active||0,'FÃ¼r aktuelle Welt aktiv','OK')+frameworkCard('Lokale Updates',c.updates||0,'Keine InternetprÃ¼fung','Warnung')+frameworkCard('Probleme',c.issues||0,'Bitte Details prÃ¼fen',c.issues?'Warnung':'OK'); const items=(data.items||[]).map(i=>'<article class="tile"><div class="tile-title">'+escapeHtml(i.name||i.filename||i.item_id)+'</div><div class="tile-desc">'+escapeHtml((i.type||'-')+' Â· '+(i.version||'keine Version')+' Â· '+(i.source||''))+'</div><span class="badge '+(i.risk==='red'?'danger':(i.risk==='yellow'?'warn':''))+'">Risiko '+escapeHtml(i.risk||'-')+'</span><div class="tile-desc">'+escapeHtml((i.update_status||'')+' '+((i.issues||[]).join(' Â· ')))+'</div><div class="tile-actions"><button data-addon-plan="'+escapeHtml(i.item_id)+'">PrÃ¼fen</button>'+(i.source==='Importordner'?'<button class="primary" data-addon-install="'+escapeHtml(i.item_id)+'">Installieren</button><button data-addon-install-activate="'+escapeHtml(i.item_id)+'">Installieren & aktivieren</button><button data-addon-remove="'+escapeHtml(i.item_id)+'">Aus Import entfernen</button>':'')+'</div></article>').join('') || '<article class="tile"><div class="tile-title">Noch keine Dateien im Import-Eingang.</div><div class="tile-desc">Lade ein .mcpack, .mcaddon, .mcworld oder .mctemplate herunter und lege es in /share/winomc/import.</div></article>'; e.innerHTML=cards+'<article class="tile"><div class="tile-title">WinoMC Add-on Manager</div><div class="tile-desc">User brings the file. WinoMC makes it safe and simple. Freier URL-Download ist deaktiviert.</div><div class="tile-actions"><button id="addonsScan2">Importordner scannen</button><button data-open-root="import">Importordner Ã¶ffnen</button></div></article>'+items; } }catch(err){ appendLine('[Add-on Manager] '+err.message,'error'); } }
 
     async function loadUpdates2(){ try{ const data=await fetchJson('/api/update-guard'); const e=document.getElementById('updatesSummary'); if(e) e.innerHTML=data.checks.map(c=>frameworkCard(c.title,c.status,c.message,c.status)).join('') + '<div class="tile"><button class="primary" id="updatesPrepare2" type="button">Update vorbereiten</button><p>Erstellt Backup und markiert Update-Bereitschaft. Danach Add-on neu starten.</p></div>'; }catch(err){ appendLine('[Updates] '+err.message,'error'); } }
@@ -7507,7 +7507,7 @@ body.winomc-mobile .editor-panel.editor-open {
         if (t?.dataset?.backupDelete) { if(confirm('Backup lÃ¶schen?')) { await postJson('/api/backups/delete',{backup:t.dataset.backupDelete}); await loadBackups2(); } }
         if (t?.dataset?.packActivate) { const r=await postJson('/api/packs/activate',{type:t.dataset.packActivate,path:t.dataset.packPath}); alert(r.message||'Pack aktiviert.'); await loadPacks2(); await loadTransfer2(); }
         if (t?.dataset?.packDeactivate) { const r=await postJson('/api/packs/deactivate',{type:t.dataset.packDeactivate,uuid:t.dataset.packUuid}); alert(r.message||'Pack deaktiviert.'); await loadPacks2(); await loadTransfer2(); }
-        if (t?.id === 'playersAdd2') { window.winomcPlayers2=(window.winomcPlayers2||[]); window.winomcPlayers2.push({name:'',xuid:'',allowlisted:true,role:'member',issues:[]}); const tBody=document.getElementById('playersTable'); if(tBody) await loadPlayers2(); }
+        if (t?.id === 'playersAdd2') { window.winomcPlayers2=(window.winomcPlayers2||[]); window.winomcPlayers2.push({name:'',xuid:'',allowlisted:true,role:'',issues:[],xuid_source:'manual'}); const tBody=document.getElementById('playersTable'); if(tBody) await loadPlayers2(); }
         if (t?.dataset?.playerRemove) { window.winomcPlayers2=(window.winomcPlayers2||[]); window.winomcPlayers2.splice(Number(t.dataset.playerRemove),1); const w=document.getElementById('playersWarnings'); if(w) w.textContent='Spieler entfernt. Bitte Speichern klicken.'; await loadPlayers2(); }
         if (t?.id === 'playersSave2') { const r=await postJson('/api/players/save',{players:collectPlayers2()}); const w=document.getElementById('playersWarnings'); if(w) w.textContent=r.message||'Spielerrechte wurden gespeichert.'; await loadPlayers2(); }
         if (t?.id === 'updatesPrepare2') { const r=await postJson('/api/updates/prepare',{warning:'Serverupdate wird vorbereitet. Bitte gleich neu verbinden.'}); alert(r.message); await loadUpdates2(); }
@@ -9708,11 +9708,15 @@ def scan_packs(base_dir, pack_type):
 PLAYER_ROLES = ("operator", "member", "visitor")
 XUID_RE = re.compile(r"^[0-9]+$")
 PLAYER_NAME_MAX_LENGTH = 64
-IDENTITY_SOURCES = ("manual", "existing_player_store", "allowlist_file", "permissions_file", "server_log", "xbox_live")
+IDENTITY_SOURCES = ("manual", "existing_player_store", "allowlist_file", "permissions_file", "server_log")
 
 
-def normalize_role(role):
-    role = str(role or "member").lower().strip()
+def normalize_role(role, allow_none=False):
+    role = str(role or "").lower().strip()
+    if allow_none and role in ("", "none"):
+        return ""
+    if not role:
+        role = "member"
     if role not in PLAYER_ROLES:
         raise WinoMCRuntimeError("invalid_player_role", "Rolle muss operator, member oder visitor sein.", component="instance-players", details={"role": role})
     return role
@@ -9743,12 +9747,13 @@ def normalize_player_entry(item):
         raise WinoMCRuntimeError("invalid_player_entry", "Spieler-Eintrag ist ungültig.", component="instance-players")
     name = validate_player_name(item.get("name"), component="instance-players")
     xuid = str(item.get("xuid") or "").strip()
-    if not xuid or not XUID_RE.match(xuid):
-        raise WinoMCRuntimeError("invalid_player_xuid", "XUID muss ein nicht-leerer Ziffernstring sein.", component="instance-players", details={"name": name})
+    has_xuid = bool(xuid)
+    if has_xuid and not XUID_RE.match(xuid):
+        raise WinoMCRuntimeError("invalid_player_xuid", "XUID muss leer oder ein Ziffernstring sein.", component="instance-players", details={"name": name})
     return {
         "name": name,
         "xuid": xuid,
-        "role": normalize_role(item.get("role", "member")),
+        "role": normalize_role(item.get("role", "member"), allow_none=False) if has_xuid else "",
         "allowlisted": validate_player_bool(item.get("allowlisted", False), "allowlisted"),
         "ignores_player_limit": validate_player_bool(item.get("ignores_player_limit", False), "ignores_player_limit"),
         "xuid_source": normalize_identity_source(item.get("xuid_source") or item.get("source")),
@@ -9840,7 +9845,7 @@ def import_instance_players(instance_id):
         if xuid and not XUID_RE.match(xuid):
             warnings.append("allowlist.json enthält eine ungültige XUID für %s." % (name or "unbekannt"))
             continue
-        row = {"name": name, "xuid": xuid, "role": "member", "allowlisted": True, "ignores_player_limit": bool(item.get("ignoresPlayerLimit", item.get("ignores_player_limit", False))), "xuid_source": "allowlist_file"}
+        row = {"name": name, "xuid": xuid, "role": "member" if xuid else "", "allowlisted": True, "ignores_player_limit": bool(item.get("ignoresPlayerLimit", item.get("ignores_player_limit", False))), "xuid_source": "allowlist_file"}
         if xuid:
             by_xuid[xuid] = {**by_xuid.get(xuid, {}), **row}
         else:
@@ -9864,9 +9869,11 @@ def import_instance_players(instance_id):
         by_xuid[xuid] = row
 
     players = nameless + [by_xuid[xuid] for xuid in sorted(by_xuid, key=lambda v: (by_xuid[v].get("name") or v).lower())]
-    store_by_xuid = {str(player.get("xuid") or ""): player for player in read_instance_player_store(iid) if isinstance(player, dict)}
+    store_by_xuid = {str(player.get("xuid") or ""): player for player in read_instance_player_store(iid) if isinstance(player, dict) and str(player.get("xuid") or "").strip()}
+    store_by_name = {str(player.get("name") or "").strip().casefold(): player for player in read_instance_player_store(iid) if isinstance(player, dict) and not str(player.get("xuid") or "").strip() and str(player.get("name") or "").strip()}
     for player in players:
-        stored = store_by_xuid.get(str(player.get("xuid") or ""))
+        player_xuid = str(player.get("xuid") or "").strip()
+        stored = store_by_xuid.get(player_xuid) if player_xuid else store_by_name.get(str(player.get("name") or "").strip().casefold())
         if stored and stored.get("xuid_source"):
             player["xuid_source"] = normalize_identity_source(stored.get("xuid_source"))
     if allow_error: warnings.append("allowlist.json: " + allow_error)
@@ -9914,11 +9921,20 @@ def save_instance_players(instance_id, players):
     normalized = [normalize_player_entry(item) for item in players]
     seen = set()
     for player in normalized:
+        if not player["xuid"]:
+            continue
         if player["xuid"] in seen:
             raise WinoMCRuntimeError("duplicate_player_xuid", "Doppelte XUID: %s" % player["xuid"], instance_id=iid, component="instance-players")
         seen.add(player["xuid"])
-    allowlist = [{"name": p["name"], "xuid": p["xuid"], "ignoresPlayerLimit": p["ignores_player_limit"]} for p in normalized if p["allowlisted"]]
-    permissions = [{"permission": p["role"], "xuid": p["xuid"]} for p in normalized]
+    allowlist = []
+    for player in normalized:
+        if not player["allowlisted"]:
+            continue
+        entry = {"name": player["name"], "ignoresPlayerLimit": player["ignores_player_limit"]}
+        if player["xuid"]:
+            entry["xuid"] = player["xuid"]
+        allowlist.append(entry)
+    permissions = [{"permission": p["role"], "xuid": p["xuid"]} for p in normalized if p["xuid"]]
     allow_result = write_instance_json_atomic(iid, "allowlist.json", allowlist)
     perm_result = write_instance_json_atomic(iid, "permissions.json", permissions)
     store_result = write_instance_player_store_atomic(iid, normalized)
@@ -10032,27 +10048,8 @@ class LogResolver:
         return matches[-1] if matches else None
 
 
-class XboxLiveResolver:
-    source = "xbox_live"
-
-    def __init__(self):
-        self.enabled = str(os.environ.get("WINOMC_XBOX_RESOLVER_ENABLED", "")).strip().lower() in ("1", "true", "yes", "on")
-
-    def resolve(self, instance_id, name):
-        if not self.enabled:
-            return None
-        raise WinoMCRuntimeError(
-            "xbox_live_resolver_not_configured",
-            "Xbox-Live-XUID-Aufloesung ist vorbereitet, aber Microsoft/Xbox-Authentifizierung ist noch nicht konfiguriert.",
-            instance_id=instance_id,
-            component="instance-player-identity",
-            suggested_action="XUID manuell eintragen oder bestehende Dateien/Logs synchronisieren.",
-            details={"provider": self.source},
-        )
-
-
 class PlayerIdentityResolver:
-    fallbacks = ["manual", "import_existing_files", "temporary_join_assistant"]
+    fallbacks = ["manual", "import_existing_files"]
 
     def __init__(self):
         self.resolvers = (
@@ -10060,7 +10057,6 @@ class PlayerIdentityResolver:
             AllowlistFileResolver(),
             PermissionsFileResolver(),
             LogResolver(),
-            XboxLiveResolver(),
         )
 
     def resolve(self, instance_id, name):
@@ -10106,7 +10102,7 @@ class PlayerIdentityResolver:
         return {
             "ok": False,
             "name": requested_name,
-            "message": "XUID konnte nicht automatisch gefunden werden.",
+            "message": "Keine XUID lokal gefunden. Du kannst den Spieler trotzdem nur per Name auf die Allowlist setzen oder die XUID manuell eintragen.",
             "fallbacks": self.fallbacks,
             "checked_sources": checked_sources,
         }
@@ -12174,7 +12170,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCManager/2.1.15b"
+    server_version = "WinoMCManager/2.1.17b"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")

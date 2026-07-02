@@ -106,7 +106,7 @@ window.WINOMC_BEDROCK_SETTINGS_SCHEMA = [
     "key": "online_mode",
     "property": "online-mode",
     "group": "Zugang & Sicherheit",
-    "label": "Online Mode / Xbox Auth",
+    "label": "Online Mode",
     "type": "boolean",
     "default": true
   },
