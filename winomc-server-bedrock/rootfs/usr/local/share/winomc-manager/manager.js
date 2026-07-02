@@ -1,4 +1,4 @@
-const VERSION = '2.1.15b';
+const VERSION = '2.1.16b';
 
 const state = {
   instances: [],
@@ -15,6 +15,7 @@ const state = {
   lastAutoRefreshAt: null,
   players: [],
   playerFilter: 'all',
+  xboxAuth: null,
 };
 
 const BEDROCK_COMMAND_CATALOG_SOURCE = 'Microsoft Bedrock stable command reference + Bedrock archive compatibility list';
@@ -552,6 +553,47 @@ function identitySourceLabel(source) {
   }[source] || source || 'unbekannt');
 }
 
+function xboxAuthStatusLabel(status) {
+  return ({
+    not_configured: 'nicht konfiguriert',
+    not_signed_in: 'nicht angemeldet',
+    waiting: 'wartet auf Anmeldung',
+    authenticated: 'Xbox Resolver aktiv',
+    expired: 'abgelaufen',
+    error: 'Fehler',
+  }[status] || status || 'unbekannt');
+}
+
+function renderXboxAuthPanel(auth = {}) {
+  const status = auth.status || 'not_signed_in';
+  const account = auth.account_gamertag ? ` · ${esc(auth.account_gamertag)}` : '';
+  const message = auth.message ? `<p class="hint">${esc(auth.message)}</p>` : '';
+  const code = status === 'waiting' && auth.user_code ? `
+    <div class="xbox-login-code">
+      <strong>${esc(auth.user_code)}</strong>
+      ${auth.verification_uri ? `<a href="${esc(auth.verification_uri)}" target="_blank" rel="noreferrer">Microsoft Login öffnen</a>` : ''}
+    </div>
+  ` : '';
+  let actions = '';
+  if (status === 'authenticated') {
+    actions = '<button type="button" id="xboxLogout" class="soft">Abmelden</button>';
+  } else if (status === 'waiting') {
+    actions = '<button type="button" id="xboxPoll" class="primary">Status prüfen</button><button type="button" id="xboxLogout" class="soft">Abbrechen</button>';
+  } else if (auth.configured) {
+    actions = '<button type="button" id="xboxStartLogin" class="primary">Mit Microsoft/Xbox anmelden</button>';
+  }
+  return `
+    <div class="xbox-auth-panel" id="xboxAuthPanel" data-xbox-status="${esc(status)}">
+      <div>
+        <strong>Microsoft/Xbox: ${esc(xboxAuthStatusLabel(status))}${account}</strong>
+        ${message}
+        ${code}
+      </div>
+      <div class="actions">${actions}<span id="xboxAuthStatus" class="hint"></span></div>
+    </div>
+  `;
+}
+
 function playerMatchesFilter(player) {
   const f = state.playerFilter || 'all';
   if (f === 'all') return true;
@@ -560,7 +602,7 @@ function playerMatchesFilter(player) {
   return player.role === f;
 }
 
-function renderPlayersModule(players, warnings = []) {
+function renderPlayersModule(players, warnings = [], xboxAuth = state.xboxAuth || {}) {
   const counts = players.reduce((acc, p) => {
     acc[p.role] = (acc[p.role] || 0) + 1;
     acc.allowlisted += p.allowlisted ? 1 : 0;
@@ -581,6 +623,7 @@ function renderPlayersModule(players, warnings = []) {
       <div class="info">
         <strong>Spieler & Rechte:</strong> allowlist.json steuert, wer auf den Server darf. permissions.json steuert Rechte wie Operator, Member oder Visitor. Änderungen benötigen je nach Bedrock-Verhalten ggf. Server-Neustart oder Reload.
       </div>
+      ${renderXboxAuthPanel(xboxAuth)}
       ${warnings.length ? `<div class="info warning-box">${warnings.map(esc).join('<br>')}</div>` : ''}
       <div class="actions player-filters">
         ${filters.map(([key, label]) => `<button type="button" class="${state.playerFilter === key ? 'primary' : 'soft'}" data-player-filter="${esc(key)}">${esc(label)}</button>`).join('')}
@@ -642,6 +685,44 @@ function setPlayerResolveStatus(index, message, tone = 'info') {
   status.dataset.tone = tone;
 }
 
+async function loadXboxAuthStatus() {
+  try {
+    state.xboxAuth = await get('/api/xbox/auth/status');
+  } catch (err) {
+    state.xboxAuth = { ok: false, status: 'error', message: err?.message || err?.error || String(err), configured: false };
+  }
+  return state.xboxAuth;
+}
+
+function setXboxAuthStatus(message, tone = 'info') {
+  const status = $('#xboxAuthStatus');
+  if (!status) return;
+  status.textContent = message || '';
+  status.dataset.tone = tone;
+}
+
+async function runXboxAuthAction(action, inst) {
+  const button = action === 'start' ? $('#xboxStartLogin') : action === 'poll' ? $('#xboxPoll') : $('#xboxLogout');
+  const originalText = button?.textContent;
+  if (button) {
+    button.disabled = true;
+    button.textContent = action === 'logout' ? 'Melde ab...' : 'Prüfe...';
+  }
+  setXboxAuthStatus(action === 'start' ? 'Microsoft Device-Code wird erstellt...' : 'Status wird geprüft...', 'info');
+  try {
+    state.xboxAuth = await post(`/api/xbox/auth/${action}`, {});
+    $('#detailContent').innerHTML = renderPlayersModule(state.players, [], state.xboxAuth);
+    bindPlayersModule(inst);
+  } catch (err) {
+    setXboxAuthStatus(err?.message || err?.error || String(err), 'warning');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
 async function resolvePlayerXuid(inst, index, button) {
   collectPlayersForm();
   const player = state.players[index];
@@ -677,6 +758,7 @@ async function resolvePlayerXuid(inst, index, button) {
       manual: 'XUID manuell eintragen',
       import_existing_files: 'bestehende Dateien importieren',
       temporary_join_assistant: 'Join-Assistent vorbereitet, noch nicht aktiv',
+      xbox_login: 'Microsoft/Xbox anmelden',
     }[item] || item)).join(', ');
     setPlayerResolveStatus(index, `${data.message || 'XUID nicht gefunden.'} Fallbacks: ${fallbacks || 'manuell eintragen'}.`, 'warning');
   } catch (err) {
@@ -689,6 +771,9 @@ async function resolvePlayerXuid(inst, index, button) {
 
 function bindPlayersModule(inst) {
   $('#playersModule')?.addEventListener('click', async (ev) => {
+    if (ev.target.closest('#xboxStartLogin')) { await runXboxAuthAction('start', inst); return; }
+    if (ev.target.closest('#xboxPoll')) { await runXboxAuthAction('poll', inst); return; }
+    if (ev.target.closest('#xboxLogout')) { await runXboxAuthAction('logout', inst); return; }
     const filter = ev.target.closest('[data-player-filter]');
     if (filter) { collectPlayersForm(); state.playerFilter = filter.dataset.playerFilter; $('#detailContent').innerHTML = renderPlayersModule(state.players); bindPlayersModule(inst); return; }
     const remove = ev.target.closest('[data-player-remove]');
@@ -875,9 +960,12 @@ async function renderDetail() {
       }
     };
   } else if (state.tab === 'players') {
-    const data = await get(`/api/instances/${encodeURIComponent(inst.id)}/players`);
+    const [data, auth] = await Promise.all([
+      get(`/api/instances/${encodeURIComponent(inst.id)}/players`),
+      loadXboxAuthStatus(),
+    ]);
     state.players = data.players || [];
-    target.innerHTML = renderPlayersModule(state.players, data.warnings || []);
+    target.innerHTML = renderPlayersModule(state.players, data.warnings || [], auth);
     bindPlayersModule(inst);
   } else if (state.tab === 'files') {
     const files = await get(`/api/instances/${encodeURIComponent(inst.id)}/files`);

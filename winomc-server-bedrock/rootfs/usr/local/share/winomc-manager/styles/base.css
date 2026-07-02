@@ -483,6 +483,34 @@ code {
   color: var(--warn);
 }
 
+.xbox-auth-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(2, 6, 23, .28);
+}
+
+.xbox-login-code {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.xbox-login-code strong {
+  letter-spacing: .08em;
+  color: var(--ok);
+}
+
+#xboxAuthStatus[data-tone="warning"] {
+  color: var(--warn);
+}
+
 .settings-group {
   border: 1px solid var(--border);
   border-radius: 16px;

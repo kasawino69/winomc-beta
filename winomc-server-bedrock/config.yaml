@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: "[BETA] WinoMC 2.1b.1 Manager-only Rebuild"
-version: 2.1.15.1b
+version: 2.1.16b
 slug: winomc-beta
 init: false
 boot: auto
@@ -37,6 +37,9 @@ options:
   WINOMC_FILE_UPLOAD_MAX_BYTES: 536870912
   WINOMC_FILE_JSON_UPLOAD_MAX_BYTES: 67108864
   WINOMC_ZIP_UNPACK_MAX_BYTES: 1073741824
+  WINOMC_XBOX_RESOLVER_ENABLED: true
+  WINOMC_XBOX_AUTH_MODE: device_code
+  WINOMC_XBOX_CLIENT_ID: ""
   WINOMC_DEBUG_DIAGNOSTICS: false
   TZ: Europe/Berlin
 
@@ -53,6 +56,9 @@ schema:
   WINOMC_FILE_UPLOAD_MAX_BYTES: int?
   WINOMC_FILE_JSON_UPLOAD_MAX_BYTES: int?
   WINOMC_ZIP_UNPACK_MAX_BYTES: int?
+  WINOMC_XBOX_RESOLVER_ENABLED: bool?
+  WINOMC_XBOX_AUTH_MODE: list(device_code)?
+  WINOMC_XBOX_CLIENT_ID: str?
   WINOMC_DEBUG_DIAGNOSTICS: bool?
   TZ: str
 
@@ -74,8 +80,7 @@ map:
 
 environment:
   EULA: "TRUE"
-  WINOMC_VERSION: "2.1.15b"
+  WINOMC_VERSION: "2.1.16b"
   WINOMC_CONSOLE_PORT: "8099"
   WINOMC_MANAGER_UI_DIR: "/usr/local/share/winomc-manager"
   WINOMC_CONSOLE_ALLOWED_PROXIES: "172.30.32.2,127.0.0.1,::1"
-

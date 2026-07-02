@@ -1,3 +1,10 @@
+## 2.1.16b - Microsoft/Xbox XUID Login
+- Adds Microsoft/Xbox authentication support for online Gamertag-to-XUID resolution.
+- Adds Xbox resolver auth status, login and logout controls to the Manager UI.
+- Enables `XUID suchen` to use Xbox Live when authenticated while keeping local files and logs as safe fallbacks.
+- Stores Xbox resolver auth state in the WinoMC state directory without exposing tokens in UI, logs or diagnostics.
+- Keeps the PlayerIdentityResolver provider chain modular and avoids third-party scraping.
+
 ## 2.1.15b - Spieler & Rechte
 - Adds a dedicated per-instance Player & Permissions tab.
 - Adds UI management for allowlisted players, operators, members and visitors.

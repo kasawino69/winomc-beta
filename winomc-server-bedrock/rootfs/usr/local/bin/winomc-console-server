@@ -19,7 +19,55 @@ import time
 import zipfile
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, quote, unquote, urlparse
+from urllib.error import HTTPError
+from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
+from urllib.request import Request, urlopen
+
+ADDON_OPTIONS_FILE = os.environ.get("WINOMC_ADDON_OPTIONS_FILE", "/data/options.json")
+ADDON_OPTION_KEYS = {
+    "WINOMC_XBOX_RESOLVER_ENABLED",
+    "WINOMC_XBOX_AUTH_MODE",
+    "WINOMC_XBOX_CLIENT_ID",
+    "WINOMC_XBOX_AUTH_SCOPE",
+}
+
+
+def load_addon_options(path=ADDON_OPTIONS_FILE):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (FileNotFoundError, PermissionError, OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {key: data.get(key) for key in ADDON_OPTION_KEYS if key in data}
+
+
+ADDON_OPTIONS = load_addon_options()
+
+
+def addon_config_value(key, default=None):
+    if key in os.environ:
+        return os.environ.get(key)
+    value = ADDON_OPTIONS.get(key)
+    if value is None:
+        return default
+    return value
+
+
+def addon_config_text(key, default=""):
+    value = addon_config_value(key, default)
+    return str(value if value is not None else "").strip()
+
+
+def addon_config_bool(key, default=False):
+    value = addon_config_value(key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
 
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("WINOMC_CONSOLE_PORT", "8099"))
@@ -60,6 +108,17 @@ WEB_PROTECTION_FILE = os.environ.get("WINOMC_WEB_PROTECTION_FILE", os.path.join(
 IMPORT_STATUS_FILE = os.environ.get("WINOMC_IMPORT_STATUS_FILE", os.path.join(WINOMC_STATE_DIR, "import-status.json"))
 ADDON_HISTORY_FILE = os.environ.get("WINOMC_ADDON_HISTORY_FILE", os.path.join(WINOMC_STATE_DIR, "addons", "install-history.json"))
 QUARANTINE_DIR = os.environ.get("WINOMC_QUARANTINE_DIR", os.path.join(WINOMC_STATE_DIR, "quarantine"))
+XBOX_AUTH_FILE = os.environ.get("WINOMC_XBOX_AUTH_FILE", os.path.join(WINOMC_STATE_DIR, "xbox_auth.json"))
+XBOX_RESOLVER_ENABLED = addon_config_bool("WINOMC_XBOX_RESOLVER_ENABLED", True)
+XBOX_AUTH_MODE = addon_config_text("WINOMC_XBOX_AUTH_MODE", "device_code").lower()
+XBOX_CLIENT_ID = addon_config_text("WINOMC_XBOX_CLIENT_ID", "")
+XBOX_AUTH_SCOPE = addon_config_text("WINOMC_XBOX_AUTH_SCOPE", "XboxLive.signin offline_access")
+XBOX_DEVICE_CODE_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode"
+XBOX_TOKEN_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
+XBOX_USER_AUTH_URL = "https://user.auth.xboxlive.com/user/authenticate"
+XBOX_XSTS_AUTH_URL = "https://xsts.auth.xboxlive.com/xsts/authorize"
+XBOX_PROFILE_URL = "https://profile.xboxlive.com/users/me/profile/settings"
+XBOX_PEOPLE_SEARCH_URL = "https://peoplehub.xboxlive.com/users/me/people/search/decoration/detail"
 MAX_IMPORT_REDIRECTS = int(os.environ.get("WINOMC_IMPORT_MAX_REDIRECTS", "3"))
 MAX_IMPORT_ARCHIVE_FILES = int(os.environ.get("WINOMC_IMPORT_MAX_ARCHIVE_FILES", "4000"))
 MAX_IMPORT_FILENAME_LENGTH = int(os.environ.get("WINOMC_IMPORT_MAX_FILENAME_LENGTH", "180"))
@@ -92,7 +151,7 @@ INDEX_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WinoMC 2.1.15b Manager Workbench</title>
+  <title>WinoMC 2.1.16b Manager Workbench</title>
   <style>
     :root {
       color-scheme: dark;
@@ -303,7 +362,7 @@ INDEX_HTML = r"""<!doctype html>
     .console-inner { padding-top: 16px; }
     .mobile-quickbar { display: none; }
 
-    /* WinoMC 2.1.15b Manager Workbench */
+    /* WinoMC 2.1.16b Manager Workbench */
     body.desktop-mode {
       padding-bottom: 0;
       overflow: hidden;
@@ -4868,7 +4927,7 @@ body.winomc-mobile .editor-panel.editor-open {
     })();
   </script>
   <header>
-    <h1 id="appTitle">WinoMC 2.1.15b Manager Workbench</h1>
+    <h1 id="appTitle">WinoMC 2.1.16b Manager Workbench</h1>
     <div class="status"><span class="dot" id="statusDot"></span><span id="status">Verbinde...</span></div>
   </header>
 
@@ -8898,6 +8957,13 @@ def list_file_roots():
     return roots
 
 
+def is_sensitive_auth_path(path):
+    try:
+        return os.path.normpath(os.path.realpath(path)) == os.path.normpath(os.path.realpath(XBOX_AUTH_FILE))
+    except Exception:
+        return False
+
+
 def list_directory(root_key, rel_path="/"):
     full_path, rel_path = resolve_safe_path(root_key, rel_path)
     if not path_exists_root(root_key, full_path):
@@ -8913,6 +8979,8 @@ def list_directory(root_key, rel_path="/"):
         if path_is_link_root(root_key, child_path):
             continue
         if not is_inside_base(root_base, child_path):
+            continue
+        if is_sensitive_auth_path(child_path):
             continue
         try:
             stat = stat_root(root_key, child_path)
@@ -8944,6 +9012,8 @@ def read_text_file(root_key, rel_path):
         raise FileNotFoundError("Datei existiert nicht.")
     if not path_is_file_root(root_key, file_path):
         raise ValueError("Nur Dateien kÃ¶nnen im Editor geÃ¶ffnet werden.")
+    if is_sensitive_auth_path(file_path):
+        raise PermissionError("Auth-Token-Dateien sind im Dateimanager gesperrt.")
     if not is_editable_text_file(file_path):
         raise ValueError("Dieser Dateityp ist nicht fÃ¼r den Texteditor freigegeben.")
     size = getsize_root(root_key, file_path)
@@ -8961,6 +9031,8 @@ def write_text_file(root_key, rel_path, content):
     file_path, rel_path = resolve_safe_path(root_key, rel_path)
     if path_is_dir_root(root_key, file_path):
         raise ValueError("Ordner kÃ¶nnen nicht als Datei gespeichert werden.")
+    if is_sensitive_auth_path(file_path):
+        raise PermissionError("Auth-Token-Dateien sind im Dateimanager gesperrt.")
     parent = assert_safe_path(root_key, os.path.dirname(file_path), require_exists=True)
     if not path_is_dir_root(root_key, parent):
         raise FileNotFoundError("Zielordner existiert nicht.")
@@ -9032,6 +9104,8 @@ def create_zip_from_paths(root_key, rel_paths, save_to_export=False):
                 if path_is_file_root(root_key, source_path):
                     source_abs = os.path.abspath(str(source_path or ""))
                     safe_source = os.path.normpath(os.path.realpath(source_abs))
+                    if is_sensitive_auth_path(safe_source):
+                        continue
                     root_prefix = root_base if root_base.endswith(os.sep) else root_base + os.sep
                     if safe_source != root_base and not safe_source.startswith(root_prefix):
                         raise ValueError("Pfad auÃŸerhalb des erlaubten Bereichs blockiert.")
@@ -9051,6 +9125,8 @@ def create_zip_from_paths(root_key, rel_paths, save_to_export=False):
                         file_path = os.path.join(current_root, filename)
                         file_abs = os.path.abspath(str(file_path or ""))
                         safe_file_path = os.path.normpath(os.path.realpath(file_abs))
+                        if is_sensitive_auth_path(safe_file_path):
+                            continue
                         if os.path.islink(file_abs) or (safe_file_path != root_base and not safe_file_path.startswith(root_prefix)):
                             continue
                         archive_name = os.path.relpath(safe_file_path, parent_path)
@@ -9705,6 +9781,331 @@ def scan_packs(base_dir, pack_type):
     return packs
 
 
+def xbox_now():
+    return int(time.time())
+
+
+def xbox_auth_configured():
+    return XBOX_RESOLVER_ENABLED and XBOX_AUTH_MODE == "device_code" and bool(XBOX_CLIENT_ID)
+
+
+def xbox_safe_error(exc):
+    if isinstance(exc, WinoMCRuntimeError):
+        return exc.message
+    return str(exc)[:240]
+
+
+def xbox_http_json(url, payload=None, headers=None, method="POST", form=False, timeout=20):
+    headers = dict(headers or {})
+    if payload is None:
+        body = None
+    elif form:
+        body = urlencode(payload).encode("utf-8")
+        headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
+    else:
+        body = json.dumps(payload).encode("utf-8")
+        headers.setdefault("Content-Type", "application/json")
+        headers.setdefault("Accept", "application/json")
+    req = Request(url, data=body, headers=headers, method=method)
+    try:
+        with urlopen(req, timeout=timeout) as response:
+            raw = response.read()
+    except HTTPError as exc:
+        raw = exc.read()
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except Exception:
+            data = {}
+        if data:
+            return data
+        raise WinoMCRuntimeError("xbox_http_error", "Xbox/Microsoft-Anfrage fehlgeschlagen.", component="xbox-auth", details={"status": exc.code})
+    except Exception as exc:
+        raise WinoMCRuntimeError("xbox_http_error", "Xbox/Microsoft-Anfrage fehlgeschlagen.", component="xbox-auth", details={"reason": xbox_safe_error(exc)})
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except Exception:
+        raise WinoMCRuntimeError("xbox_invalid_response", "Xbox/Microsoft-Antwort war kein gültiges JSON.", component="xbox-auth")
+
+
+class XboxTokenStore:
+    def __init__(self, path=None):
+        self.path = path or XBOX_AUTH_FILE
+
+    def read(self):
+        try:
+            with open(self.path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            return data if isinstance(data, dict) else {}
+        except FileNotFoundError:
+            return {}
+        except Exception:
+            return {"status": "error", "error": "Token-Datei konnte nicht gelesen werden."}
+
+    def write(self, data):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        payload = dict(data or {})
+        fd, tmp = tempfile.mkstemp(prefix=".xbox_auth.", suffix=".tmp", dir=os.path.dirname(self.path))
+        try:
+            try:
+                os.fchmod(fd, 0o600)
+            except Exception:
+                pass
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            os.replace(tmp, self.path)
+            try:
+                os.chmod(self.path, 0o600)
+            except Exception:
+                pass
+        except Exception:
+            try: os.remove(tmp)
+            except OSError: pass
+            raise
+
+    def clear(self):
+        try:
+            os.remove(self.path)
+        except FileNotFoundError:
+            pass
+
+    def public_status(self, data=None):
+        data = self.read() if data is None else dict(data or {})
+        status = data.get("status") or "not_signed_in"
+        expires_at = int(data.get("xsts_expires_at") or data.get("expires_at") or 0)
+        if status == "authenticated" and expires_at and expires_at <= xbox_now():
+            status = "expired"
+        result = {
+            "ok": True,
+            "configured": xbox_auth_configured(),
+            "enabled": XBOX_RESOLVER_ENABLED,
+            "auth_mode": XBOX_AUTH_MODE,
+            "status": status if xbox_auth_configured() else "not_configured",
+            "account_gamertag": data.get("account_gamertag") or "",
+            "account_xuid": data.get("account_xuid") or "",
+            "expires_at": expires_at or None,
+        }
+        if status == "waiting":
+            result.update({
+                "user_code": data.get("user_code") or "",
+                "verification_uri": data.get("verification_uri") or data.get("verification_url") or "",
+                "message": data.get("message") or "",
+                "expires_at": int(data.get("device_expires_at") or 0) or None,
+            })
+        if status == "error":
+            result["message"] = data.get("message") or "Microsoft/Xbox-Anmeldung ist fehlgeschlagen."
+        if not XBOX_RESOLVER_ENABLED:
+            result["message"] = "Xbox-Live-Resolver ist deaktiviert."
+        elif XBOX_AUTH_MODE != "device_code":
+            result["message"] = "Xbox Auth Mode muss device_code sein."
+        elif not XBOX_CLIENT_ID:
+            result["message"] = "WINOMC_XBOX_CLIENT_ID ist nicht konfiguriert."
+        return result
+
+
+class XboxAuthManager:
+    def __init__(self, store=None):
+        self.store = store or XboxTokenStore()
+
+    def status(self):
+        data = self.store.read()
+        if not xbox_auth_configured():
+            return self.store.public_status(data)
+        if data.get("status") == "authenticated" and int(data.get("xsts_expires_at") or 0) <= xbox_now():
+            refreshed = self.refresh_if_possible(data)
+            if refreshed:
+                data = refreshed
+        return self.store.public_status(data)
+
+    def require_configured(self):
+        if not XBOX_RESOLVER_ENABLED:
+            raise WinoMCRuntimeError("xbox_resolver_disabled", "Xbox-Live-Resolver ist deaktiviert.", component="xbox-auth")
+        if XBOX_AUTH_MODE != "device_code":
+            raise WinoMCRuntimeError("xbox_auth_mode_invalid", "Xbox Auth Mode muss device_code sein.", component="xbox-auth")
+        if not XBOX_CLIENT_ID:
+            raise WinoMCRuntimeError("xbox_client_id_missing", "WINOMC_XBOX_CLIENT_ID ist nicht konfiguriert.", component="xbox-auth", suggested_action="Lege eine Microsoft Entra Public-Client-App an und trage die Client-ID in der Add-on-Konfiguration ein.")
+
+    def start_device_login(self):
+        self.require_configured()
+        data = xbox_http_json(XBOX_DEVICE_CODE_URL, {"client_id": XBOX_CLIENT_ID, "scope": XBOX_AUTH_SCOPE}, form=True)
+        expires_in = int(data.get("expires_in") or 900)
+        pending = {
+            "status": "waiting",
+            "created_at": manager_now(),
+            "device_code": data.get("device_code"),
+            "user_code": data.get("user_code"),
+            "verification_uri": data.get("verification_uri") or data.get("verification_url"),
+            "message": data.get("message") or "",
+            "interval": int(data.get("interval") or 5),
+            "device_expires_at": xbox_now() + expires_in,
+        }
+        if not pending["device_code"] or not pending["user_code"]:
+            raise WinoMCRuntimeError("xbox_device_code_failed", "Microsoft Device-Code konnte nicht gestartet werden.", component="xbox-auth")
+        self.store.write(pending)
+        return self.store.public_status(pending)
+
+    def poll_device_login(self):
+        self.require_configured()
+        pending = self.store.read()
+        if pending.get("status") != "waiting" or not pending.get("device_code"):
+            return self.status()
+        if int(pending.get("device_expires_at") or 0) <= xbox_now():
+            pending.update({"status": "expired", "message": "Microsoft-Anmeldecode ist abgelaufen."})
+            self.store.write(pending)
+            return self.store.public_status(pending)
+        data = xbox_http_json(XBOX_TOKEN_URL, {
+            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+            "client_id": XBOX_CLIENT_ID,
+            "device_code": pending.get("device_code"),
+        }, form=True)
+        if data.get("error") == "authorization_pending":
+            return self.store.public_status(pending)
+        if data.get("error") == "slow_down":
+            pending["interval"] = int(pending.get("interval") or 5) + 5
+            self.store.write(pending)
+            return self.store.public_status(pending)
+        if data.get("error"):
+            pending.update({"status": "error", "message": data.get("error_description") or data.get("error")})
+            self.store.write(pending)
+            return self.store.public_status(pending)
+        auth_data = self.complete_login(data)
+        self.store.write(auth_data)
+        return self.store.public_status(auth_data)
+
+    def refresh_if_possible(self, data=None):
+        self.require_configured()
+        data = self.store.read() if data is None else dict(data or {})
+        refresh_token = data.get("refresh_token")
+        if not refresh_token:
+            return None
+        try:
+            token_data = xbox_http_json(XBOX_TOKEN_URL, {
+                "grant_type": "refresh_token",
+                "client_id": XBOX_CLIENT_ID,
+                "refresh_token": refresh_token,
+                "scope": XBOX_AUTH_SCOPE,
+            }, form=True)
+            auth_data = self.complete_login(token_data)
+            self.store.write(auth_data)
+            return auth_data
+        except Exception:
+            data.update({"status": "expired", "message": "Microsoft/Xbox-Anmeldung ist abgelaufen. Bitte erneut anmelden."})
+            self.store.write(data)
+            return None
+
+    def complete_login(self, token_data):
+        access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
+        if not access_token:
+            raise WinoMCRuntimeError("xbox_token_missing", "Microsoft-Anmeldung lieferte kein Access Token.", component="xbox-auth")
+        user = xbox_http_json(XBOX_USER_AUTH_URL, {
+            "Properties": {"AuthMethod": "RPS", "SiteName": "user.auth.xboxlive.com", "RpsTicket": "d=" + access_token},
+            "RelyingParty": "http://auth.xboxlive.com",
+            "TokenType": "JWT",
+        })
+        user_token = user.get("Token")
+        if not user_token:
+            raise WinoMCRuntimeError("xbox_user_token_missing", "Xbox User Token konnte nicht erstellt werden.", component="xbox-auth")
+        xsts = xbox_http_json(XBOX_XSTS_AUTH_URL, {
+            "Properties": {"SandboxId": "RETAIL", "UserTokens": [user_token]},
+            "RelyingParty": "http://xboxlive.com",
+            "TokenType": "JWT",
+        })
+        xsts_token = xsts.get("Token")
+        xui = ((xsts.get("DisplayClaims") or {}).get("xui") or [{}])[0]
+        uhs = xui.get("uhs")
+        if not xsts_token or not uhs:
+            raise WinoMCRuntimeError("xbox_xsts_token_missing", "Xbox XSTS Token konnte nicht erstellt werden.", component="xbox-auth")
+        expires_at = xbox_now() + int(token_data.get("expires_in") or 3600)
+        xsts_expires_at = self.parse_xbox_time(xsts.get("NotAfter")) or (xbox_now() + 3 * 3600)
+        account = self.fetch_account_profile(uhs, xsts_token)
+        return {
+            "status": "authenticated",
+            "updated_at": manager_now(),
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_at": expires_at,
+            "xbox_user_token": user_token,
+            "xsts_token": xsts_token,
+            "uhs": uhs,
+            "xsts_expires_at": xsts_expires_at,
+            "account_gamertag": account.get("gamertag") or xui.get("gtg") or "",
+            "account_xuid": account.get("xuid") or xui.get("xid") or "",
+        }
+
+    def parse_xbox_time(self, value):
+        if not value:
+            return None
+        try:
+            return int(time.mktime(time.strptime(value.split(".")[0], "%Y-%m-%dT%H:%M:%S")))
+        except Exception:
+            return None
+
+    def auth_headers(self, data=None):
+        data = self.store.read() if data is None else dict(data or {})
+        if data.get("status") != "authenticated" or int(data.get("xsts_expires_at") or 0) <= xbox_now():
+            data = self.refresh_if_possible(data) or {}
+        token = data.get("xsts_token")
+        uhs = data.get("uhs")
+        if not token or not uhs:
+            raise WinoMCRuntimeError("xbox_not_authenticated", "Xbox-Live-Auflösung benötigt Microsoft-Anmeldung.", component="xbox-auth")
+        return {"Authorization": "XBL3.0 x=%s;%s" % (uhs, token), "Accept": "application/json"}
+
+    def fetch_account_profile(self, uhs, token):
+        headers = {"Authorization": "XBL3.0 x=%s;%s" % (uhs, token), "x-xbl-contract-version": "2", "Accept": "application/json"}
+        data = xbox_http_json(XBOX_PROFILE_URL + "?settings=Gamertag", headers=headers, method="GET")
+        users = data.get("profileUsers") or []
+        if not users:
+            return {}
+        user = users[0]
+        settings = {item.get("id"): item.get("value") for item in user.get("settings", []) if isinstance(item, dict)}
+        return {"gamertag": settings.get("Gamertag") or "", "xuid": user.get("id") or ""}
+
+    def resolve_gamertag(self, name):
+        self.require_configured()
+        headers = self.auth_headers()
+        headers["x-xbl-contract-version"] = "5"
+        url = XBOX_PEOPLE_SEARCH_URL + "?q=%s&maxItems=20" % quote(name, safe="")
+        data = xbox_http_json(url, headers=headers, method="GET")
+        people = data.get("people") or []
+        for person in people:
+            gamertag = str(person.get("gamertag") or person.get("modernGamertag") or "").strip()
+            xuid = str(person.get("xuid") or "").strip()
+            if gamertag.casefold() == name.casefold() and XUID_RE.match(xuid):
+                return {"name": gamertag, "xuid": xuid, "source": "xbox_live", "confidence": "online"}
+        return None
+
+    def logout(self):
+        self.store.clear()
+        return self.status()
+
+
+def xbox_auth_status_payload():
+    return XboxAuthManager().status()
+
+
+def xbox_auth_start_payload():
+    try:
+        return XboxAuthManager().start_device_login()
+    except Exception as exc:
+        if isinstance(exc, WinoMCRuntimeError):
+            return exc.to_payload()
+        return {"ok": False, "code": "xbox_auth_error", "message": xbox_safe_error(exc), "component": "xbox-auth"}
+
+
+def xbox_auth_poll_payload():
+    try:
+        return XboxAuthManager().poll_device_login()
+    except Exception as exc:
+        if isinstance(exc, WinoMCRuntimeError):
+            return exc.to_payload()
+        return {"ok": False, "code": "xbox_auth_error", "message": xbox_safe_error(exc), "component": "xbox-auth"}
+
+
+def xbox_auth_logout_payload():
+    return XboxAuthManager().logout()
+
+
 PLAYER_ROLES = ("operator", "member", "visitor")
 XUID_RE = re.compile(r"^[0-9]+$")
 PLAYER_NAME_MAX_LENGTH = 64
@@ -10036,19 +10437,18 @@ class XboxLiveResolver:
     source = "xbox_live"
 
     def __init__(self):
-        self.enabled = str(os.environ.get("WINOMC_XBOX_RESOLVER_ENABLED", "")).strip().lower() in ("1", "true", "yes", "on")
+        self.auth = XboxAuthManager()
 
     def resolve(self, instance_id, name):
-        if not self.enabled:
+        if not xbox_auth_configured():
             return None
-        raise WinoMCRuntimeError(
-            "xbox_live_resolver_not_configured",
-            "Xbox-Live-XUID-Aufloesung ist vorbereitet, aber Microsoft/Xbox-Authentifizierung ist noch nicht konfiguriert.",
-            instance_id=instance_id,
-            component="instance-player-identity",
-            suggested_action="XUID manuell eintragen oder bestehende Dateien/Logs synchronisieren.",
-            details={"provider": self.source},
-        )
+        status = self.auth.status()
+        if status.get("status") != "authenticated":
+            return None
+        match = self.auth.resolve_gamertag(name)
+        if match:
+            return player_identity_match(self.source, name, match.get("name"), match.get("xuid"), confidence="online")
+        return None
 
 
 class PlayerIdentityResolver:
@@ -10103,11 +10503,17 @@ class PlayerIdentityResolver:
                 payload["conflicts"] = conflicts
             return payload
 
+        auth_status = xbox_auth_status_payload()
+        fallbacks = list(self.fallbacks)
+        message = "XUID konnte nicht automatisch gefunden werden."
+        if auth_status.get("configured") and auth_status.get("status") != "authenticated":
+            fallbacks.append("xbox_login")
+            message = "Xbox-Live-Auflösung benötigt Microsoft-Anmeldung."
         return {
             "ok": False,
             "name": requested_name,
-            "message": "XUID konnte nicht automatisch gefunden werden.",
-            "fallbacks": self.fallbacks,
+            "message": message,
+            "fallbacks": fallbacks,
             "checked_sources": checked_sources,
         }
 
@@ -12174,7 +12580,7 @@ def safe_content_disposition_attachment(download_name):
     return "attachment; filename=\"%s\"; filename*=UTF-8''%s" % (download_name, quote(download_name, safe=""))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WinoMCManager/2.1.15b"
+    server_version = "WinoMCManager/2.1.16b"
 
     def log_message(self, fmt, *args):
         sys.stdout.write("[WinoMC Console] " + fmt % args + "\n")
@@ -12406,6 +12812,9 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith("/api/manager") or path == "/api/manager":
             self._send_json(200, manager_payload())
             return
+        if path.endswith("/api/xbox/auth/status") or path == "/api/xbox/auth/status":
+            self._send_json(200, xbox_auth_status_payload())
+            return
         if path.endswith("/api/instances") or path == "/api/instances":
             self._send_json(200, {"ok": True, "instances": list_instances(), "profiles": list(BEDROCK_PROFILES.values()), "manager": {"version": MANAGER_VERSION, "winomc_version": WINOMC_VERSION, "log_level": LOG_LEVEL}})
             return
@@ -12586,6 +12995,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(200, {"ok": True, "instance": create_instance(self._read_json_payload())})
             except Exception as exc:
                 self._send_json(400, runtime_error_payload(exc, component="instance-manager"))
+            return
+        m = re.match(r"^/api/xbox/auth/(start|poll|logout)$", path)
+        if m:
+            try:
+                self.require_web_write_allowed("Microsoft/Xbox-Anmeldung")
+                action = m.group(1)
+                if action == "start":
+                    self._send_json(200, xbox_auth_start_payload())
+                elif action == "poll":
+                    self._send_json(200, xbox_auth_poll_payload())
+                else:
+                    self._send_json(200, xbox_auth_logout_payload())
+            except Exception as exc:
+                self._send_json(400, runtime_error_payload(exc, component="xbox-auth"))
             return
         m = re.match(r"^/api/instances/([^/]+)/players/resolve$", path)
         if m:
