@@ -1,6 +1,6 @@
 name: "[BETA] WinoMC Bedrock Server"
 description: "[BETA] WinoMC 2.1b.1 Manager-only Rebuild"
-version: 2.1.15b
+version: 2.1.15.1b
 slug: winomc-beta
 init: false
 boot: auto
