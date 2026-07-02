@@ -84,5 +84,3 @@ environment:
   WINOMC_CONSOLE_PORT: "8099"
   WINOMC_MANAGER_UI_DIR: "/usr/local/share/winomc-manager"
   WINOMC_CONSOLE_ALLOWED_PROXIES: "172.30.32.2,127.0.0.1,::1"
-  WINOMC_XBOX_RESOLVER_ENABLED: "true"
-  WINOMC_XBOX_AUTH_MODE: "device_code"
